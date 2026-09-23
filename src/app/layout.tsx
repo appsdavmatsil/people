@@ -13,7 +13,10 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "People",
+  title: {
+    default: "People",
+    template: "%s · People",
+  },
   description: "Staff management",
 };
 

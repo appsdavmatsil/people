@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { REMEMBER_COOKIE, withRemember } from "@/lib/supabase/cookies";
 import { getSupabaseEnv } from "@/lib/supabase/env";
 
 export async function proxy(request: NextRequest) {
@@ -9,6 +10,7 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next({ request });
   }
 
+  const remember = request.cookies.get(REMEMBER_COOKIE)?.value !== "0";
   let supabaseResponse = NextResponse.next({ request });
 
   const supabase = createServerClient(env.url, env.key, {
@@ -22,7 +24,11 @@ export async function proxy(request: NextRequest) {
         );
         supabaseResponse = NextResponse.next({ request });
         cookiesToSet.forEach(({ name, value, options }) =>
-          supabaseResponse.cookies.set(name, value, options),
+          supabaseResponse.cookies.set(
+            name,
+            value,
+            withRemember(options, remember),
+          ),
         );
         Object.entries(headers).forEach(([key, value]) => {
           supabaseResponse.headers.set(key, value);
@@ -31,9 +37,47 @@ export async function proxy(request: NextRequest) {
     },
   });
 
-  await supabase.auth.getClaims();
+  let userId: string | null = null;
+
+  try {
+    const { data, error } = await supabase.auth.getClaims();
+    if (!error && typeof data?.claims?.sub === "string") {
+      userId = data.claims.sub;
+    }
+  } catch {
+    userId = null;
+  }
+
+  const path = request.nextUrl.pathname;
+  const isPublic = path.startsWith("/login") || path.startsWith("/auth");
+  const settingPassword =
+    path.startsWith("/login") &&
+    request.nextUrl.searchParams.get("setPassword") === "1";
+
+  if (!userId && !isPublic) {
+    return redirectTo(request, supabaseResponse, "/login");
+  }
+
+  if (userId && path.startsWith("/login") && !settingPassword) {
+    return redirectTo(request, supabaseResponse, "/");
+  }
 
   return supabaseResponse;
+}
+
+function redirectTo(
+  request: NextRequest,
+  supabaseResponse: NextResponse,
+  pathname: string,
+) {
+  const url = request.nextUrl.clone();
+  url.pathname = pathname;
+  url.search = "";
+  const redirectResponse = NextResponse.redirect(url);
+  supabaseResponse.cookies.getAll().forEach((cookie) => {
+    redirectResponse.cookies.set(cookie);
+  });
+  return redirectResponse;
 }
 
 export const config = {
