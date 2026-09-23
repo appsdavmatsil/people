@@ -14,5 +14,5 @@ Copy `.env.example` to `.env.local` if needed, then open [http://localhost:3000]
 ## Stack
 
 - Next.js + Tailwind
-- Supabase Auth and Postgres (`shltjobeumubhsrrabov`, eu-central-1)
+- Supabase Auth and Postgres (`nqvudbhodupyfztgraxw`, ap-northeast-1)
 - GitHub: [appsdavmatsil/people](https://github.com/appsdavmatsil/people)
