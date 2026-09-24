@@ -10,11 +10,17 @@ import {
   ShowArchivedButton,
   isArchived,
 } from "@/components/directory-actions";
+import {
+  blankColumnFilters,
+  ColumnSortFilterHeaders,
+} from "@/components/table-column-controls";
 import { useDirectoryLookups } from "@/components/use-directory-lookups";
 import { useLocations } from "@/components/use-locations";
 import { useOutsourced } from "@/components/use-outsourced";
 import { downloadWorkbook } from "@/lib/download-workbook";
+import { venueNickname } from "@/lib/locations";
 import type { OutsourcedPerson } from "@/lib/outsourced";
+import type { SortDirection } from "@/lib/staff";
 import {
   buildOutsourcedWorkbook,
   importOutsourcedWorkbook,
@@ -41,6 +47,15 @@ type Notice = {
   text: string;
 };
 
+const outsourcedColumns = [
+  { key: "name", label: "Name" },
+  { key: "company", label: "Company" },
+  { key: "position", label: "Position" },
+  { key: "venue", label: "Venue" },
+] as const;
+
+type OutsourcedColumnKey = (typeof outsourcedColumns)[number]["key"];
+
 export function OutsourcedDirectory({ editId }: { editId?: string }) {
   const { lookups } = useDirectoryLookups();
   const { locations } = useLocations();
@@ -53,6 +68,9 @@ export function OutsourcedDirectory({ editId }: { editId?: string }) {
   const [notice, setNotice] = useState<Notice | null>(null);
   const [busy, setBusy] = useState<"import" | "export" | null>(null);
   const [showArchived, setShowArchived] = useState(false);
+  const [filters, setFilters] = useState(() => blankColumnFilters(outsourcedColumns));
+  const [sortKey, setSortKey] = useState<OutsourcedColumnKey>("name");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const [pendingDelete, setPendingDelete] = useState<OutsourcedPerson | null>(null);
   const positionGroups = useMemo(
     () =>
@@ -68,8 +86,28 @@ export function OutsourcedDirectory({ editId }: { editId?: string }) {
   );
 
   const archivedCount = people.filter((person) => isArchived(person)).length;
-  const visible = people.filter((person) => showArchived || !isArchived(person));
-  const countLabel = `${visible.length} ${visible.length === 1 ? "person" : "people"}`;
+  const listed = useMemo(
+    () => people.filter((person) => showArchived || !isArchived(person)),
+    [people, showArchived],
+  );
+  const filtersActive = outsourcedColumns.some((column) => filters[column.key].trim());
+  const visible = useMemo(
+    () => sortOutsourced(filterOutsourced(listed, filters, locations), sortKey, sortDirection, locations),
+    [listed, filters, locations, sortKey, sortDirection],
+  );
+  const countLabel = filtersActive
+    ? `${visible.length} of ${listed.length} ${listed.length === 1 ? "person" : "people"}`
+    : `${listed.length} ${listed.length === 1 ? "person" : "people"}`;
+
+  function toggleSort(key: OutsourcedColumnKey) {
+    if (sortKey === key) {
+      setSortDirection((current) => (current === "asc" ? "desc" : "asc"));
+      return;
+    }
+
+    setSortKey(key);
+    setSortDirection("asc");
+  }
 
   function openDialog() {
     setEditingId(null);
@@ -292,24 +330,32 @@ export function OutsourcedDirectory({ editId }: { editId?: string }) {
 
       <div className="mt-4 min-h-0 flex-1 overflow-auto rounded-xl border border-stone-200 bg-white">
         <table className="w-full border-separate border-spacing-0 text-left text-sm">
-          <thead className="sticky top-0 bg-stone-50 text-stone-500">
-            <tr>
-              <th className="border-b border-stone-200 px-3 py-2 font-medium">Name</th>
-              <th className="border-b border-stone-200 px-3 py-2 font-medium">Company</th>
-              <th className="border-b border-stone-200 px-3 py-2 font-medium">Position</th>
-              <th className="border-b border-stone-200 px-3 py-2 font-medium">Venue</th>
-              <th className="border-b border-stone-200 px-3 py-2 text-right font-medium">
-                <span className="sr-only">Actions</span>
-              </th>
-            </tr>
+          <thead className="sticky top-0 z-10">
+            <ColumnSortFilterHeaders
+              columns={outsourcedColumns}
+              sortKey={sortKey}
+              sortDirection={sortDirection}
+              onSort={toggleSort}
+              filters={filters}
+              onFilter={(key, value) =>
+                setFilters((current) => ({
+                  ...current,
+                  [key]: value,
+                }))
+              }
+              filtersActive={filtersActive}
+              onClear={() => setFilters(blankColumnFilters(outsourcedColumns))}
+            />
           </thead>
           <tbody>
             {visible.length === 0 ? (
               <tr>
                 <td colSpan={5} className="px-3 py-8 text-center text-stone-500">
-                  {people.length === 0
-                    ? "No outsourced staff yet. Add someone, or import a spreadsheet."
-                    : "Archived people are hidden."}
+                  {listed.length === 0
+                    ? people.length === 0
+                      ? "No outsourced staff yet. Add someone, or import a spreadsheet."
+                      : "Archived people are hidden."
+                    : "No people match these filters."}
                 </td>
               </tr>
             ) : (
@@ -324,7 +370,9 @@ export function OutsourcedDirectory({ editId }: { editId?: string }) {
                   </td>
                   <td className="border-b border-stone-100 px-3 py-2 text-stone-700">{person.company}</td>
                   <td className="border-b border-stone-100 px-3 py-2 text-stone-700">{person.position}</td>
-                  <td className="border-b border-stone-100 px-3 py-2 text-stone-700">{person.venue}</td>
+                  <td className="border-b border-stone-100 px-3 py-2 text-stone-700">
+                    {venueNickname(person.venue, locations) || "—"}
+                  </td>
                   <td className="border-b border-stone-100 px-2 py-1">
                     <RowActions
                       archived={isArchived(person)}
@@ -485,5 +533,75 @@ export function OutsourcedDirectory({ editId }: { editId?: string }) {
       />
     </div>
   );
+}
+
+function outsourcedCell(
+  person: OutsourcedPerson,
+  key: OutsourcedColumnKey,
+  locations: { nickname: string; venueName: string }[],
+) {
+  if (key === "name") {
+    return person.fullName;
+  }
+
+  if (key === "venue") {
+    return venueNickname(person.venue, locations);
+  }
+
+  return person[key];
+}
+
+function filterOutsourced(
+  people: OutsourcedPerson[],
+  filters: Record<OutsourcedColumnKey, string>,
+  locations: { nickname: string; venueName: string }[],
+) {
+  return people.filter((person) =>
+    outsourcedColumns.every((column) => {
+      const query = filters[column.key].trim().toLowerCase();
+      if (!query) {
+        return true;
+      }
+
+      const display = outsourcedCell(person, column.key, locations).toLowerCase();
+      const raw = column.key === "venue" ? person.venue.toLowerCase() : display;
+      return display.includes(query) || raw.includes(query);
+    }),
+  );
+}
+
+function sortOutsourced(
+  people: OutsourcedPerson[],
+  key: OutsourcedColumnKey,
+  direction: SortDirection,
+  locations: { nickname: string; venueName: string }[],
+) {
+  const factor = direction === "asc" ? 1 : -1;
+
+  return [...people].sort((left, right) => {
+    const leftValue = outsourcedCell(left, key, locations).trim();
+    const rightValue = outsourcedCell(right, key, locations).trim();
+    if (!leftValue || !rightValue) {
+      return blankLast(!leftValue, !rightValue);
+    }
+
+    const compared = leftValue.localeCompare(rightValue, undefined, {
+      numeric: true,
+      sensitivity: "base",
+    });
+    if (compared === 0) {
+      return left.fullName.localeCompare(right.fullName, undefined, { sensitivity: "base" });
+    }
+
+    return compared * factor;
+  });
+}
+
+function blankLast(leftBlank: boolean, rightBlank: boolean) {
+  if (leftBlank && rightBlank) {
+    return 0;
+  }
+
+  return leftBlank ? 1 : -1;
 }
 

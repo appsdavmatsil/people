@@ -366,6 +366,7 @@ function PlacementBoard({
   const labelSlotRef = useRef<LabelSlot | null>(null);
   const labelInsertRef = useRef<LabelSlot | null>(null);
   const [status, setStatus] = useState("");
+  const [boardQuery, setBoardQuery] = useState("");
   const dragging = drag !== null;
 
   useLayoutEffect(() => {
@@ -1848,6 +1849,7 @@ function PlacementBoard({
                       : null
                   }
                   hideSalary={hideSalary(row.person.position ?? "")}
+                  spotlight={searching && searchHits.has(row.person.id)}
                   hidePromotionSalary={hideSalary(
                     (kind === "venue" && showPromotions
                       ? pendingPromotion(promotions, row.person.id, today)?.newPosition
@@ -1877,6 +1879,7 @@ function PlacementBoard({
                 <HiringCard
                   role={row.role}
                   hideSalary={hideSalary(row.role.position)}
+                  spotlight={searching && searchHits.has(row.role.id)}
                   dragging={drag?.staffId === row.role.id || htmlDragId === row.role.id}
                   movable={!arrangementLocked}
                   onPointerDown={startDrag}
@@ -1913,6 +1916,45 @@ function PlacementBoard({
         )
       : [],
   );
+  const boardSearch = boardQuery.trim();
+  const searching = boardSearch.length > 0;
+  const searchHits = new Set<string>();
+  if (searching) {
+    for (const person of placements) {
+      const employee = employees.find((item) => item.id === person.id);
+      const promotion =
+        kind === "venue" && showPromotions ? pendingPromotion(promotions, person.id, today) : null;
+      const fields: Array<string | number | null | undefined> = [
+        person.name,
+        employee?.fullName,
+        employee?.firstName,
+        employee?.lastName,
+        person.position,
+        employee?.position,
+      ];
+      if (!hideSalary(person.position ?? "")) {
+        fields.push(person.salary, salarySearchText(person.salary));
+      }
+      if (promotion) {
+        fields.push(promotion.newPosition);
+        if (!hideSalary(promotion.newPosition)) {
+          fields.push(promotion.newSalary, salarySearchText(promotion.newSalary));
+        }
+      }
+      if (matchesBoardSearch(boardSearch, fields)) {
+        searchHits.add(person.id);
+      }
+    }
+    for (const role of hiringRoles) {
+      const fields: Array<string | number | null | undefined> = [role.position];
+      if (!hideSalary(role.position)) {
+        fields.push(role.salary, salarySearchText(role.salary));
+      }
+      if (matchesBoardSearch(boardSearch, fields)) {
+        searchHits.add(role.id);
+      }
+    }
+  }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 py-5 md:px-6">
@@ -1924,7 +1966,43 @@ function PlacementBoard({
               ? "The board is locked. Unlock it to move staff. Drag a venue heading to change its position."
               : "Drag a venue heading to change its position. Drag a card to reorder it in the column, or onto another venue to move it. Saved in this browser."}
         </p>
-        <div className="flex shrink-0 gap-2">
+        <div className="flex min-w-0 items-center justify-end gap-2">
+          <label className="relative min-w-0 flex-1 sm:w-64 sm:flex-none">
+            <span className="sr-only">Search staff by name, position, or salary</span>
+            <span className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-stone-400">
+              <SearchIcon />
+            </span>
+            <input
+              type="search"
+              value={boardQuery}
+              onChange={(event) => setBoardQuery(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  setBoardQuery("");
+                }
+              }}
+              placeholder="Name, position, salary"
+              className="h-9 w-full rounded-lg border border-stone-300 bg-white pr-8 pl-8 text-sm text-stone-950 outline-none placeholder:text-stone-400 focus:border-stone-950 [&::-webkit-search-cancel-button]:hidden"
+            />
+            {boardQuery ? (
+              <button
+                type="button"
+                aria-label="Clear search"
+                className="absolute top-1/2 right-1.5 flex size-6 -translate-y-1/2 items-center justify-center rounded text-stone-400 hover:text-stone-950"
+                onClick={() => setBoardQuery("")}
+              >
+                <CloseIcon />
+              </button>
+            ) : null}
+          </label>
+          <span className="sr-only" aria-live="polite">
+            {searching
+              ? searchHits.size === 0
+                ? "No matches"
+                : `${searchHits.size} ${searchHits.size === 1 ? "match" : "matches"}`
+              : ""}
+          </span>
+          <div className="flex shrink-0 gap-2">
           {kind === "venue" ? <DashboardVisibilityButton /> : null}
           {kind === "venue" ? (
             <button
@@ -1999,6 +2077,7 @@ function PlacementBoard({
           >
             <AddStaffIcon />
           </button>
+          </div>
         </div>
       </div>
       <p className="sr-only" role="status">
@@ -2063,8 +2142,13 @@ function PlacementBoard({
 
       <div
         ref={scrollerRef}
-        className="mt-4 flex min-h-0 flex-1 items-stretch gap-3 overflow-x-auto overflow-y-hidden pb-1"
+        className={`relative mt-4 flex min-h-0 flex-1 items-stretch gap-3 overflow-x-auto overflow-y-hidden pb-1 ${
+          searching ? "rounded-2xl" : ""
+        }`}
       >
+        {searching ? (
+          <div className="pointer-events-none absolute inset-0 z-0 bg-stone-950/55" aria-hidden="true" />
+        ) : null}
         {locations.map((location) => (
           <LocationColumn
             key={location.id}
@@ -2121,6 +2205,7 @@ function PlacementBoard({
             onAskRemove={() =>
               setPendingRemoveId((current) => (current === location.id ? null : location.id))
             }
+            searching={searching}
             compactHeading={kind === "event"}
             removeLabel={kind === "event" ? "Remove event" : "Remove venue"}
             onRemove={() => removeVenue(location.id)}
@@ -2749,6 +2834,7 @@ function LocationColumn({
   onEditHiring,
   onAskRemove,
   onRemove,
+  searching = false,
   compactHeading = false,
   removeLabel = "Remove venue",
   onColumnDragStart,
@@ -2786,6 +2872,7 @@ function LocationColumn({
   onEditHiring?: (roleId: string | null) => void;
   onAskRemove?: () => void;
   onRemove?: () => void;
+  searching?: boolean;
   compactHeading?: boolean;
   removeLabel?: string;
   onColumnDragStart?: (event: React.DragEvent<HTMLElement>) => void;
@@ -2896,8 +2983,8 @@ function LocationColumn({
       onDrop={onDrop}
       onContextMenu={openMenu}
       className={`relative flex min-w-56 flex-1 basis-0 flex-col overflow-hidden rounded-2xl border ${
-        columnDragging ? "opacity-40" : ""
-      } ${
+        searching ? "z-[1]" : ""
+      } ${columnDragging ? "opacity-40" : ""} ${
         active
           ? "border-stone-950 bg-stone-50 shadow-sm"
           : venue
@@ -2911,6 +2998,12 @@ function LocationColumn({
           className={`pointer-events-none absolute inset-y-0 z-10 w-1 bg-stone-950 ${
             columnShift === "before" ? "left-0" : "right-0"
           }`}
+        />
+      ) : null}
+      {searching ? (
+        <div
+          className="pointer-events-none absolute inset-0 z-[1] rounded-2xl bg-stone-950/55"
+          aria-hidden="true"
         />
       ) : null}
       <header
@@ -3317,6 +3410,7 @@ function LocationColumn({
 function HiringCard({
   role,
   hideSalary = false,
+  spotlight = false,
   dragging,
   movable = true,
   onPointerDown,
@@ -3327,6 +3421,7 @@ function HiringCard({
 }: {
   role: HiringRole;
   hideSalary?: boolean;
+  spotlight?: boolean;
   dragging: boolean;
   movable?: boolean;
   onPointerDown: (event: React.PointerEvent<HTMLElement>, staffId: string) => void;
@@ -3339,10 +3434,11 @@ function HiringCard({
     <li
       data-item-id={role.id}
       data-item-kind="hiring"
+      data-search-hit={spotlight ? "true" : undefined}
       draggable={movable}
       className={`touch-none rounded-xl border border-yellow-200 bg-yellow-100 px-2.5 py-2 shadow-sm select-none ${
         movable ? "cursor-grab active:cursor-grabbing" : ""
-      } ${dragging ? "opacity-40" : ""}`}
+      } ${dragging ? "opacity-40" : ""} ${spotlight ? "relative z-20 shadow-xl ring-2 ring-white" : ""}`}
       onPointerDown={(event) => onPointerDown(event, role.id)}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
@@ -3369,6 +3465,7 @@ function StaffCard({
   promotion = null,
   hideSalary = false,
   hidePromotionSalary = false,
+  spotlight = false,
   dragging,
   movable = true,
   onOpenProfile,
@@ -3386,6 +3483,7 @@ function StaffCard({
   promotion?: StaffPromotion | null;
   hideSalary?: boolean;
   hidePromotionSalary?: boolean;
+  spotlight?: boolean;
   dragging: boolean;
   movable?: boolean;
   onOpenProfile: () => void;
@@ -3401,10 +3499,13 @@ function StaffCard({
     <li
       data-item-id={person.id}
       data-item-kind="staff"
+      data-search-hit={spotlight ? "true" : undefined}
       draggable={movable}
       className={`flex touch-none flex-col overflow-hidden rounded-xl border border-stone-200 shadow-sm select-none ${
         movable ? "cursor-grab active:cursor-grabbing" : ""
-      } ${labeled ? "bg-stone-100" : "bg-white"} ${dragging ? "opacity-40" : ""}`}
+      } ${labeled ? "bg-stone-100" : "bg-white"} ${dragging ? "opacity-40" : ""} ${
+        spotlight ? "relative z-20 shadow-xl ring-2 ring-white" : ""
+      }`}
       onPointerDown={(event) => onPointerDown(event, person.id)}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
@@ -4941,6 +5042,50 @@ function defaultSalaryText(position: { defaultSalary: number | null } | undefine
 
 function formatBoardSalary(value: number) {
   return new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(value);
+}
+
+function salarySearchText(value: number | null | undefined) {
+  if (value == null) {
+    return null;
+  }
+
+  return `${value} ${formatBoardSalary(value)}`;
+}
+
+function matchesBoardSearch(query: string, fields: Array<string | number | null | undefined>) {
+  const needle = query.trim().toLowerCase();
+  if (!needle) {
+    return false;
+  }
+
+  const numeric = needle.replace(/\D/g, "");
+  const queryIsMoney = /^[\d\s,.$]+$/.test(needle) && numeric.length > 0;
+
+  return fields.some((field) => {
+    if (field == null || field === "") {
+      return false;
+    }
+
+    const text = String(field).toLowerCase();
+    if (text.includes(needle)) {
+      return true;
+    }
+
+    if (!queryIsMoney) {
+      return false;
+    }
+
+    return text.replace(/\D/g, "").includes(numeric);
+  });
+}
+
+function SearchIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true" className="shrink-0">
+      <circle cx="6" cy="6" r="4.25" fill="none" stroke="currentColor" strokeWidth="1.4" />
+      <path d="M9.2 9.2 12 12" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    </svg>
+  );
 }
 
 function employeeCardName(employee: StaffEmployee | undefined, fallback: string) {

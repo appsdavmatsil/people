@@ -11,6 +11,10 @@ import {
   isArchived,
 } from "@/components/directory-actions";
 import { DateField, keepDialogForDatePicker } from "@/components/date-field";
+import {
+  blankColumnFilters,
+  ColumnSortFilterHeaders,
+} from "@/components/table-column-controls";
 import { useDirectoryLookups } from "@/components/use-directory-lookups";
 import { usePromotions } from "@/components/use-promotions";
 import { useStaffDirectory } from "@/components/use-staff-directory";
@@ -29,6 +33,7 @@ import {
   parseMoneyInput,
   roundMoney,
   splitSalary,
+  type SortDirection,
 } from "@/lib/staff";
 
 const fieldClass =
@@ -55,6 +60,17 @@ type Notice = {
   text: string;
 };
 
+const promotionColumns = [
+  { key: "staffName", label: "Staff member" },
+  { key: "currentPosition", label: "Current position" },
+  { key: "currentSalary", label: "Current salary" },
+  { key: "newPosition", label: "New position" },
+  { key: "newSalary", label: "New salary package" },
+  { key: "effectiveDate", label: "Effective date" },
+] as const;
+
+type PromotionColumnKey = (typeof promotionColumns)[number]["key"];
+
 export function Promotions() {
   const { lookups } = useDirectoryLookups();
   const { employees, update: updateEmployees } = useStaffDirectory();
@@ -67,6 +83,9 @@ export function Promotions() {
   const [notice, setNotice] = useState<Notice | null>(null);
   const [busy, setBusy] = useState<"import" | "export" | null>(null);
   const [showArchived, setShowArchived] = useState(false);
+  const [filters, setFilters] = useState(() => blankColumnFilters(promotionColumns));
+  const [sortKey, setSortKey] = useState<PromotionColumnKey>("effectiveDate");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [pendingDelete, setPendingDelete] = useState<StaffPromotion | null>(null);
   const staff = useMemo(
     () =>
@@ -90,12 +109,14 @@ export function Promotions() {
     [lookups.departments, lookups.positions],
   );
   const archivedCount = promotions.filter((promotion) => isArchived(promotion)).length;
-  const rows = useMemo(
-    () =>
-      [...promotions]
-        .filter((promotion) => showArchived || !isArchived(promotion))
-        .sort((left, right) => right.effectiveDate.localeCompare(left.effectiveDate)),
+  const listed = useMemo(
+    () => promotions.filter((promotion) => showArchived || !isArchived(promotion)),
     [promotions, showArchived],
+  );
+  const filtersActive = promotionColumns.some((column) => filters[column.key].trim());
+  const rows = useMemo(
+    () => sortPromotions(filterPromotions(listed, filters), sortKey, sortDirection),
+    [listed, filters, sortKey, sortDirection],
   );
 
   useEffect(() => {
@@ -110,7 +131,19 @@ export function Promotions() {
     }
   }, [employees, promotions, update, updateEmployees]);
 
-  const countLabel = `${rows.length} ${rows.length === 1 ? "promotion" : "promotions"}`;
+  const countLabel = filtersActive
+    ? `${rows.length} of ${listed.length} ${listed.length === 1 ? "promotion" : "promotions"}`
+    : `${listed.length} ${listed.length === 1 ? "promotion" : "promotions"}`;
+
+  function toggleSort(key: PromotionColumnKey) {
+    if (sortKey === key) {
+      setSortDirection((current) => (current === "asc" ? "desc" : "asc"));
+      return;
+    }
+
+    setSortKey(key);
+    setSortDirection(key === "effectiveDate" ? "desc" : "asc");
+  }
 
   function openDialog() {
     setEditingId(null);
@@ -445,26 +478,33 @@ export function Promotions() {
 
       <div className="mt-4 min-h-0 flex-1 overflow-auto rounded-xl border border-stone-200 bg-white">
         <table className="w-full border-separate border-spacing-0 text-left text-sm">
-          <thead className="sticky top-0 bg-stone-50 text-stone-500">
-            <tr>
-              <th className="border-b border-stone-200 px-3 py-2 font-medium">Staff member</th>
-              <th className="border-b border-stone-200 px-3 py-2 font-medium">Current position</th>
-              <th className="border-b border-stone-200 px-3 py-2 font-medium">Current salary</th>
-              <th className="border-b border-stone-200 px-3 py-2 font-medium">New position</th>
-              <th className="border-b border-stone-200 px-3 py-2 font-medium">New salary package</th>
-              <th className="border-b border-stone-200 px-3 py-2 font-medium">Effective date</th>
-              <th className="border-b border-stone-200 px-3 py-2 text-right font-medium">
-                <span className="sr-only">Actions</span>
-              </th>
-            </tr>
+          <thead className="sticky top-0 z-10">
+            <ColumnSortFilterHeaders
+              columns={promotionColumns}
+              sortKey={sortKey}
+              sortDirection={sortDirection}
+              onSort={toggleSort}
+              filters={filters}
+              onFilter={(key, value) =>
+                setFilters((current) => ({
+                  ...current,
+                  [key]: value,
+                }))
+              }
+              filtersActive={filtersActive}
+              onClear={() => setFilters(blankColumnFilters(promotionColumns))}
+              endAligned={(key) => key === "currentSalary" || key === "newSalary"}
+            />
           </thead>
           <tbody>
             {rows.length === 0 ? (
               <tr>
                 <td colSpan={7} className="px-3 py-8 text-center text-stone-500">
-                  {promotions.length === 0
-                    ? "No promotions yet. Record one, or import a spreadsheet."
-                    : "Archived promotions are hidden."}
+                  {listed.length === 0
+                    ? promotions.length === 0
+                      ? "No promotions yet. Record one, or import a spreadsheet."
+                      : "Archived promotions are hidden."
+                    : "No promotions match these filters."}
                 </td>
               </tr>
             ) : (
@@ -480,13 +520,13 @@ export function Promotions() {
                   <td className="border-b border-stone-100 px-3 py-2 text-stone-700">
                     {promotion.currentPosition || "—"}
                   </td>
-                  <td className="border-b border-stone-100 px-3 py-2 text-stone-700 tabular-nums">
+                  <td className="border-b border-stone-100 px-3 py-2 text-right text-stone-950 tabular-nums">
                     {promotion.currentSalary == null ? "—" : formatSalary(promotion.currentSalary)}
                   </td>
                   <td className="border-b border-stone-100 px-3 py-2 text-stone-700">
                     {promotion.newPosition}
                   </td>
-                  <td className="border-b border-stone-100 px-3 py-2 text-stone-700 tabular-nums">
+                  <td className="border-b border-stone-100 px-3 py-2 text-right text-stone-950 tabular-nums">
                     {formatSalary(promotion.newSalary)}
                   </td>
                   <td className="border-b border-stone-100 px-3 py-2 text-stone-700">
@@ -682,6 +722,106 @@ export function Promotions() {
       />
     </div>
   );
+}
+
+function promotionCell(promotion: StaffPromotion, key: PromotionColumnKey) {
+  if (key === "currentSalary") {
+    return promotion.currentSalary == null ? "" : formatSalary(promotion.currentSalary);
+  }
+
+  if (key === "newSalary") {
+    return formatSalary(promotion.newSalary);
+  }
+
+  if (key === "effectiveDate") {
+    return formatDate(promotion.effectiveDate);
+  }
+
+  return promotion[key];
+}
+
+function filterPromotions(
+  promotions: StaffPromotion[],
+  filters: Record<PromotionColumnKey, string>,
+) {
+  return promotions.filter((promotion) =>
+    promotionColumns.every((column) => {
+      const query = filters[column.key].trim().toLowerCase();
+      if (!query) {
+        return true;
+      }
+
+      const display = promotionCell(promotion, column.key).toLowerCase();
+      const raw =
+        column.key === "currentSalary"
+          ? promotion.currentSalary == null
+            ? ""
+            : String(promotion.currentSalary)
+          : column.key === "newSalary"
+            ? String(promotion.newSalary)
+            : column.key === "effectiveDate"
+              ? promotion.effectiveDate.toLowerCase()
+              : promotion[column.key].toLowerCase();
+      return display.includes(query) || raw.includes(query);
+    }),
+  );
+}
+
+function sortPromotions(
+  promotions: StaffPromotion[],
+  key: PromotionColumnKey,
+  direction: SortDirection,
+) {
+  const factor = direction === "asc" ? 1 : -1;
+
+  return [...promotions].sort((left, right) => {
+    const compared = comparePromotions(left, right, key);
+    if (compared.blank) {
+      return compared.blank;
+    }
+
+    if (compared.value === 0) {
+      const byDate = right.effectiveDate.localeCompare(left.effectiveDate);
+      if (byDate !== 0) {
+        return byDate;
+      }
+
+      return left.staffName.localeCompare(right.staffName, undefined, { sensitivity: "base" });
+    }
+
+    return compared.value * factor;
+  });
+}
+
+function comparePromotions(left: StaffPromotion, right: StaffPromotion, key: PromotionColumnKey) {
+  if (key === "currentSalary" || key === "newSalary") {
+    const leftValue = left[key];
+    const rightValue = right[key];
+    if (leftValue == null || rightValue == null) {
+      return { blank: blankLast(leftValue == null, rightValue == null), value: 0 };
+    }
+
+    return { blank: 0, value: leftValue - rightValue };
+  }
+
+  const leftValue = (key === "effectiveDate" ? left.effectiveDate : left[key]).trim();
+  const rightValue = (key === "effectiveDate" ? right.effectiveDate : right[key]).trim();
+  if (!leftValue || !rightValue) {
+    return { blank: blankLast(!leftValue, !rightValue), value: 0 };
+  }
+
+  return {
+    blank: 0,
+    value: leftValue.localeCompare(rightValue, undefined, { numeric: true, sensitivity: "base" }),
+  };
+}
+
+function blankLast(leftBlank: boolean, rightBlank: boolean) {
+  if (leftBlank && rightBlank) {
+    return 0;
+  }
+
+  return leftBlank ? 1 : -1;
 }
 
 function latestDuePromotion(promotions: StaffPromotion[], staffId: string) {

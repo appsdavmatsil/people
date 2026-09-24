@@ -17,6 +17,10 @@ import {
   type EmployeeFormRequest,
   type EmployeeFormSeed,
 } from "@/components/employee-form-dialog";
+import {
+  blankColumnFilters,
+  ColumnSortFilterHeaders,
+} from "@/components/table-column-controls";
 import { useDirectoryLookups } from "@/components/use-directory-lookups";
 import { useHiring } from "@/components/use-hiring";
 import { useLocations } from "@/components/use-locations";
@@ -30,9 +34,10 @@ import {
   type HiringRole,
   type HiringStatus,
 } from "@/lib/hiring";
+import { venueNickname } from "@/lib/locations";
 import { buildHiringWorkbook, importHiringWorkbook } from "@/lib/hiring-workbook";
 import { type OutsourcedPerson } from "@/lib/outsourced";
-import { formatSalary, splitSalary, type StaffEmployee } from "@/lib/staff";
+import { formatSalary, splitSalary, type SortDirection, type StaffEmployee } from "@/lib/staff";
 
 const fieldClass =
   "mt-1.5 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-950 outline-none focus:border-stone-950";
@@ -66,6 +71,17 @@ type Notice = {
   text: string;
 };
 
+const hiringColumns = [
+  { key: "position", label: "Position" },
+  { key: "department", label: "Department" },
+  { key: "venue", label: "Venue" },
+  { key: "openings", label: "Openings" },
+  { key: "status", label: "Status" },
+  { key: "salary", label: "Salary" },
+] as const;
+
+type HiringColumnKey = (typeof hiringColumns)[number]["key"];
+
 export function HiringPositions() {
   const { lookups } = useDirectoryLookups();
   const { locations } = useLocations();
@@ -84,6 +100,9 @@ export function HiringPositions() {
   const [notice, setNotice] = useState<Notice | null>(null);
   const [busy, setBusy] = useState<"import" | "export" | null>(null);
   const [showArchived, setShowArchived] = useState(false);
+  const [filters, setFilters] = useState(() => blankColumnFilters(hiringColumns));
+  const [sortKey, setSortKey] = useState<HiringColumnKey>("position");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const [pendingDelete, setPendingDelete] = useState<HiringRole | null>(null);
   const [hireRole, setHireRole] = useState<HiringRole | null>(null);
   const [employeeRequest, setEmployeeRequest] = useState<EmployeeFormRequest | null>(null);
@@ -103,8 +122,28 @@ export function HiringPositions() {
   );
 
   const archivedCount = roles.filter((role) => isArchived(role)).length;
-  const visible = roles.filter((role) => showArchived || !isArchived(role));
-  const countLabel = `${visible.length} ${visible.length === 1 ? "position" : "positions"}`;
+  const listed = useMemo(
+    () => roles.filter((role) => showArchived || !isArchived(role)),
+    [roles, showArchived],
+  );
+  const filtersActive = hiringColumns.some((column) => filters[column.key].trim());
+  const visible = useMemo(
+    () => sortHiring(filterHiring(listed, filters, locations), sortKey, sortDirection, locations),
+    [listed, filters, locations, sortKey, sortDirection],
+  );
+  const countLabel = filtersActive
+    ? `${visible.length} of ${listed.length} ${listed.length === 1 ? "position" : "positions"}`
+    : `${listed.length} ${listed.length === 1 ? "position" : "positions"}`;
+
+  function toggleSort(key: HiringColumnKey) {
+    if (sortKey === key) {
+      setSortDirection((current) => (current === "asc" ? "desc" : "asc"));
+      return;
+    }
+
+    setSortKey(key);
+    setSortDirection("asc");
+  }
 
   function openDialog() {
     setEditingId(null);
@@ -466,26 +505,33 @@ export function HiringPositions() {
 
       <div className="mt-4 min-h-0 flex-1 overflow-auto rounded-xl border border-stone-200 bg-white">
         <table className="w-full border-separate border-spacing-0 text-left text-sm">
-          <thead className="sticky top-0 bg-stone-50 text-stone-500">
-            <tr>
-              <th className="border-b border-stone-200 px-3 py-2 font-medium">Position</th>
-              <th className="border-b border-stone-200 px-3 py-2 font-medium">Department</th>
-              <th className="border-b border-stone-200 px-3 py-2 font-medium">Venue</th>
-              <th className="border-b border-stone-200 px-3 py-2 font-medium">Openings</th>
-              <th className="border-b border-stone-200 px-3 py-2 font-medium">Status</th>
-              <th className="border-b border-stone-200 px-3 py-2 font-medium">Salary</th>
-              <th className="border-b border-stone-200 px-3 py-2 text-right font-medium">
-                <span className="sr-only">Actions</span>
-              </th>
-            </tr>
+          <thead className="sticky top-0 z-10">
+            <ColumnSortFilterHeaders
+              columns={hiringColumns}
+              sortKey={sortKey}
+              sortDirection={sortDirection}
+              onSort={toggleSort}
+              filters={filters}
+              onFilter={(key, value) =>
+                setFilters((current) => ({
+                  ...current,
+                  [key]: value,
+                }))
+              }
+              filtersActive={filtersActive}
+              onClear={() => setFilters(blankColumnFilters(hiringColumns))}
+              endAligned={(key) => key === "salary"}
+            />
           </thead>
           <tbody>
             {visible.length === 0 ? (
               <tr>
                 <td colSpan={7} className="px-3 py-8 text-center text-stone-500">
-                  {roles.length === 0
-                    ? "No hiring positions yet. Add one, or import a spreadsheet."
-                    : "Archived positions are hidden."}
+                  {listed.length === 0
+                    ? roles.length === 0
+                      ? "No hiring positions yet. Add one, or import a spreadsheet."
+                      : "Archived positions are hidden."
+                    : "No positions match these filters."}
                 </td>
               </tr>
             ) : (
@@ -499,12 +545,14 @@ export function HiringPositions() {
                     {role.position}
                   </td>
                   <td className="border-b border-stone-100 px-3 py-2 text-stone-700">{role.department}</td>
-                  <td className="border-b border-stone-100 px-3 py-2 text-stone-700">{role.venue}</td>
+                  <td className="border-b border-stone-100 px-3 py-2 text-stone-700">
+                    {venueNickname(role.venue, locations) || "—"}
+                  </td>
                   <td className="border-b border-stone-100 px-3 py-2 text-stone-700">{role.openings}</td>
                   <td className="border-b border-stone-100 px-3 py-2 text-stone-700">
                     {hiringStatusLabel(role.status)}
                   </td>
-                  <td className="border-b border-stone-100 px-3 py-2 text-stone-700 tabular-nums">
+                  <td className="border-b border-stone-100 px-3 py-2 text-right text-stone-950 tabular-nums">
                     {role.salary == null ? "—" : formatSalary(role.salary)}
                   </td>
                   <td className="border-b border-stone-100 px-2 py-1">
@@ -916,3 +964,125 @@ function placeEmployeeInHiringSlot(roleId: string, employeeId: string, locationI
 function sameText(left: string, right: string) {
   return left.trim().toLowerCase() === right.trim().toLowerCase();
 }
+
+function hiringCell(
+  role: HiringRole,
+  key: HiringColumnKey,
+  locations: { nickname: string; venueName: string }[],
+) {
+  if (key === "openings") {
+    return String(role.openings);
+  }
+
+  if (key === "status") {
+    return hiringStatusLabel(role.status);
+  }
+
+  if (key === "salary") {
+    return role.salary == null ? "" : formatSalary(role.salary);
+  }
+
+  if (key === "venue") {
+    return venueNickname(role.venue, locations);
+  }
+
+  return role[key];
+}
+
+function filterHiring(
+  roles: HiringRole[],
+  filters: Record<HiringColumnKey, string>,
+  locations: { nickname: string; venueName: string }[],
+) {
+  return roles.filter((role) =>
+    hiringColumns.every((column) => {
+      const query = filters[column.key].trim().toLowerCase();
+      if (!query) {
+        return true;
+      }
+
+      const display = hiringCell(role, column.key, locations).toLowerCase();
+      const raw =
+        column.key === "salary"
+          ? role.salary == null
+            ? ""
+            : String(role.salary)
+          : column.key === "status"
+            ? role.status.toLowerCase()
+            : column.key === "venue"
+              ? role.venue.toLowerCase()
+              : hiringCell(role, column.key, locations).toLowerCase();
+      return display.includes(query) || raw.includes(query);
+    }),
+  );
+}
+
+function sortHiring(
+  roles: HiringRole[],
+  key: HiringColumnKey,
+  direction: SortDirection,
+  locations: { nickname: string; venueName: string }[],
+) {
+  const factor = direction === "asc" ? 1 : -1;
+  return [...roles].sort((left, right) => {
+    const compared = compareHiring(left, right, key, locations);
+    if (compared.blank) {
+      return compared.blank;
+    }
+
+    if (compared.value === 0) {
+      return left.position.localeCompare(right.position, undefined, { sensitivity: "base" });
+    }
+
+    return compared.value * factor;
+  });
+}
+
+function compareHiring(
+  left: HiringRole,
+  right: HiringRole,
+  key: HiringColumnKey,
+  locations: { nickname: string; venueName: string }[],
+) {
+  if (key === "openings") {
+    return { blank: 0, value: left.openings - right.openings };
+  }
+
+  if (key === "salary") {
+    if (left.salary == null || right.salary == null) {
+      return { blank: blankLast(left.salary == null, right.salary == null), value: 0 };
+    }
+
+    return { blank: 0, value: left.salary - right.salary };
+  }
+
+  const leftValue =
+    key === "status"
+      ? hiringStatusLabel(left.status)
+      : key === "venue"
+        ? venueNickname(left.venue, locations)
+        : left[key].trim();
+  const rightValue =
+    key === "status"
+      ? hiringStatusLabel(right.status)
+      : key === "venue"
+        ? venueNickname(right.venue, locations)
+        : right[key].trim();
+  if (!leftValue || !rightValue) {
+    return { blank: blankLast(!leftValue, !rightValue), value: 0 };
+  }
+
+  return {
+    blank: 0,
+    value: leftValue.localeCompare(rightValue, undefined, { numeric: true, sensitivity: "base" }),
+  };
+}
+
+function blankLast(leftBlank: boolean, rightBlank: boolean) {
+  if (leftBlank && rightBlank) {
+    return 0;
+  }
+
+  return leftBlank ? 1 : -1;
+}
+

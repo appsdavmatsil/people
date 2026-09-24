@@ -134,6 +134,22 @@ export function sameLocationName(left: string, right: string) {
   return normalizeLocationName(left).toLowerCase() === normalizeLocationName(right).toLowerCase();
 }
 
+export function venueNickname(
+  venue: string,
+  locations: { nickname: string; venueName: string }[],
+) {
+  const cleaned = normalizeLocationName(venue);
+  if (!cleaned) {
+    return "";
+  }
+
+  const match = locations.find(
+    (location) =>
+      sameLocationName(location.venueName, cleaned) || sameLocationName(location.nickname, cleaned),
+  );
+  return match?.nickname || cleaned;
+}
+
 function parseStoredLocations(raw: string | null) {
   if (!raw) {
     return emptyLocations();
