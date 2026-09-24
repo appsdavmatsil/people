@@ -57,7 +57,16 @@ export function AppShell({
   }
 
   return (
-    <div className="flex h-dvh min-h-0 flex-1 overflow-hidden">
+    <div className="fixed inset-0 overflow-hidden bg-white">
+      <div
+        className="flex h-full min-h-0"
+        style={{
+          width: "calc(100% / var(--people-zoom, 1))",
+          height: "calc(100% / var(--people-zoom, 1))",
+          transform: "scale(var(--people-zoom, 1))",
+          transformOrigin: "top left",
+        }}
+      >
       {open ? (
         <button
           type="button"
@@ -68,7 +77,7 @@ export function AppShell({
       ) : null}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-30 flex w-52 flex-col overflow-hidden border-r border-stone-200 bg-stone-50 transition-[width,transform] duration-200 ease-out md:static md:translate-x-0 ${
+        className={`absolute inset-y-0 left-0 z-30 flex h-full w-52 min-w-0 shrink-0 flex-col overflow-hidden border-r border-stone-200 bg-stone-50 transition-[width,transform] duration-200 ease-out md:static md:translate-x-0 ${
           open ? "translate-x-0" : "-translate-x-full"
         } ${collapsed ? "md:w-14" : "md:w-52"}`}
       >
@@ -133,7 +142,7 @@ export function AppShell({
         </nav>
       </aside>
 
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col">
         <header className="flex h-14 shrink-0 items-center gap-3 border-b border-stone-200 px-4">
           <button
             type="button"
@@ -155,6 +164,7 @@ export function AppShell({
             <PrivacyGate>{children}</PrivacyGate>
           </main>
         </PrivacyProvider>
+      </div>
       </div>
     </div>
   );
@@ -334,7 +344,8 @@ function readZoom() {
 }
 
 function applyZoom(value: number) {
-  document.documentElement.style.setProperty("zoom", String(value));
+  document.documentElement.style.removeProperty("zoom");
+  document.documentElement.style.setProperty("--people-zoom", String(value));
 }
 
 function changeZoom(index: number, setZoom: (value: number) => void) {
