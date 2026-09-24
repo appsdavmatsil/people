@@ -18,7 +18,7 @@ function isEmailOtpType(value: string | null): value is EmailOtpType {
 
 function safePath(value: string | null) {
   if (!value || !value.startsWith("/") || value.startsWith("//")) {
-    return "/";
+    return "/dashboard";
   }
 
   return value;

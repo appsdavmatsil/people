@@ -3,8 +3,11 @@
 import { useMemo, useRef, useState } from "react";
 import {
   DeleteConfirmDialog,
+  DialogHeading,
   HireIcon,
   IconButton,
+  PencilIcon,
+  PlusIcon,
   RowActions,
   ShowArchivedButton,
   isArchived,
@@ -535,24 +538,13 @@ export function HiringPositions() {
         }}
       >
         <form onSubmit={addRole} className="flex max-h-[calc(100dvh-2rem)] flex-col">
-          <div className="flex shrink-0 items-start justify-between gap-4 border-b border-stone-200 px-5 py-4">
-            <div>
-              <h2 id="new-hiring-title" className="text-base font-semibold tracking-tight">
-                {editingId ? "Edit position" : "New position"}
-              </h2>
-              <p className="mt-1 text-sm text-stone-500">
-                Saved in this browser with the other hiring positions.
-              </p>
-            </div>
-            <button
-              type="button"
-              className="flex size-8 items-center justify-center rounded-lg text-stone-500 hover:bg-stone-100 hover:text-stone-950"
-              aria-label="Close"
-              onClick={() => dialogRef.current?.close()}
-            >
-              <CloseIcon />
-            </button>
-          </div>
+          <DialogHeading
+            titleId="new-hiring-title"
+            title={editingId ? "Edit position" : "New position"}
+            description="Saved in this browser with the other hiring positions."
+            icon={editingId ? <PencilIcon /> : <PlusIcon />}
+            onClose={() => dialogRef.current?.close()}
+          />
 
           <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
             <label className="block text-sm font-medium text-stone-800">
@@ -725,15 +717,20 @@ export function HiringPositions() {
           setHireRole(null);
         }}
       >
-        <div className="px-5 py-4">
-          <h2 id="hire-kind-title" className="text-base font-semibold tracking-tight">
-            Create employee
-          </h2>
-          <p className="mt-1 text-sm text-stone-500">
-            {hireRole
-              ? `What kind of employee is replacing ${hireRole.position}?`
-              : "What kind of employee is this?"}
-          </p>
+        <div className="flex items-start gap-3 border-b border-stone-200 px-5 py-4">
+          <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-stone-100 text-stone-700">
+            <HireIcon />
+          </span>
+          <div>
+            <h2 id="hire-kind-title" className="text-base font-semibold tracking-tight">
+              Create employee
+            </h2>
+            <p className="mt-1 text-sm text-stone-500">
+              {hireRole
+                ? `What kind of employee is replacing ${hireRole.position}?`
+                : "What kind of employee is this?"}
+            </p>
+          </div>
         </div>
         <div className="flex justify-end gap-2 border-t border-stone-200 px-5 py-4">
           <button type="button" className={secondaryButtonClass} onClick={() => kindRef.current?.close()}>
@@ -761,24 +758,13 @@ export function HiringPositions() {
         }}
       >
         <form onSubmit={saveHiredOutsourced} className="flex max-h-[calc(100dvh-2rem)] flex-col">
-          <div className="flex shrink-0 items-start justify-between gap-4 border-b border-stone-200 px-5 py-4">
-            <div>
-              <h2 id="hire-outsourced-title" className="text-base font-semibold tracking-tight">
-                New person
-              </h2>
-              <p className="mt-1 text-sm text-stone-500">
-                This replaces the hiring card and adds the person to outsourced staff.
-              </p>
-            </div>
-            <button
-              type="button"
-              className="flex size-8 items-center justify-center rounded-lg text-stone-500 hover:bg-stone-100 hover:text-stone-950"
-              aria-label="Close"
-              onClick={() => outsourcedRef.current?.close()}
-            >
-              <CloseIcon />
-            </button>
-          </div>
+          <DialogHeading
+            titleId="hire-outsourced-title"
+            title="New person"
+            description="This replaces the hiring card and adds the person to outsourced staff."
+            icon={<HireIcon />}
+            onClose={() => outsourcedRef.current?.close()}
+          />
           <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
             <label className="block text-sm font-medium text-stone-800">
               Full name
@@ -929,12 +915,4 @@ function placeEmployeeInHiringSlot(roleId: string, employeeId: string, locationI
 
 function sameText(left: string, right: string) {
   return left.trim().toLowerCase() === right.trim().toLowerCase();
-}
-
-function CloseIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
-      <path d="M3 3l8 8M11 3 3 11" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-    </svg>
-  );
 }

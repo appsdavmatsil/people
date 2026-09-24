@@ -8,7 +8,11 @@ export function columnKeyForHeader<Key extends string>(
   text: string,
   aliases: Record<string, Key>,
 ) {
-  const normalized = text.trim().toLowerCase().replace(/\s+/g, " ");
+  const normalized = text
+    .trim()
+    .toLowerCase()
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ");
   return aliases[normalized] ?? null;
 }
 

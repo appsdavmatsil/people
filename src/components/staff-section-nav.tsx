@@ -4,10 +4,10 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const sections = [
-  { href: "/staff", label: "In-house" },
-  { href: "/staff/outsourced", label: "Out Sourced" },
-  { href: "/staff/hiring", label: "Hiring Positions" },
-  { href: "/staff/promotions", label: "Promotions" },
+  { href: "/staffdirectory", label: "In-house" },
+  { href: "/staffdirectory/outsourced", label: "Out Sourced" },
+  { href: "/staffdirectory/hiring", label: "Hiring Positions" },
+  { href: "/staffdirectory/promotions", label: "Promotions" },
 ] as const;
 
 export function StaffSectionNav() {

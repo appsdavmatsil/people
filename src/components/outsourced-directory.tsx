@@ -1,8 +1,11 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   DeleteConfirmDialog,
+  DialogHeading,
+  PencilIcon,
+  PlusIcon,
   RowActions,
   ShowArchivedButton,
   isArchived,
@@ -38,7 +41,7 @@ type Notice = {
   text: string;
 };
 
-export function OutsourcedDirectory() {
+export function OutsourcedDirectory({ editId }: { editId?: string }) {
   const { lookups } = useDirectoryLookups();
   const { locations } = useLocations();
   const { people, update } = useOutsourced();
@@ -94,6 +97,19 @@ export function OutsourcedDirectory() {
     setFormError("");
     dialogRef.current?.showModal();
   }
+
+  const openedEdit = useRef<string | null>(null);
+  useEffect(() => {
+    if (!editId || openedEdit.current === editId) {
+      return;
+    }
+    const person = people.find((item) => item.id === editId);
+    if (!person) {
+      return;
+    }
+    openedEdit.current = editId;
+    openPerson(person);
+  }, [editId, people]);
 
   function selectVenue(venueId: string) {
     const next = locations.find((location) => location.id === venueId);
@@ -336,24 +352,13 @@ export function OutsourcedDirectory() {
         onClose={() => setEditingId(null)}
       >
         <form onSubmit={addPerson} className="flex max-h-[calc(100dvh-2rem)] flex-col">
-          <div className="flex shrink-0 items-start justify-between gap-4 border-b border-stone-200 px-5 py-4">
-            <div>
-              <h2 id="new-outsourced-title" className="text-base font-semibold tracking-tight">
-                {editingId ? "Edit person" : "New person"}
-              </h2>
-              <p className="mt-1 text-sm text-stone-500">
-                This stays on the page until you refresh.
-              </p>
-            </div>
-            <button
-              type="button"
-              className="flex size-8 items-center justify-center rounded-lg text-stone-500 hover:bg-stone-100 hover:text-stone-950"
-              aria-label="Close"
-              onClick={() => dialogRef.current?.close()}
-            >
-              <CloseIcon />
-            </button>
-          </div>
+          <DialogHeading
+            titleId="new-outsourced-title"
+            title={editingId ? "Edit person" : "New person"}
+            description="This stays on the page until you refresh."
+            icon={editingId ? <PencilIcon /> : <PlusIcon />}
+            onClose={() => dialogRef.current?.close()}
+          />
 
           <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
             <label className="block text-sm font-medium text-stone-800">
@@ -482,10 +487,3 @@ export function OutsourcedDirectory() {
   );
 }
 
-function CloseIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
-      <path d="M3 3l8 8M11 3 3 11" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-    </svg>
-  );
-}

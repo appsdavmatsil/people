@@ -82,7 +82,7 @@ export function AppShell({
             <SidebarToggleIcon expanded={!collapsed} />
           </button>
           <Link
-            href="/"
+            href="/dashboard"
             aria-label="People home"
             className={`min-w-0 truncate px-2.5 text-base font-semibold tracking-[0.14em] text-stone-950 uppercase md:px-0 ${
               collapsed ? "md:hidden" : ""
@@ -110,7 +110,11 @@ export function AppShell({
                       : "text-stone-600 hover:bg-white/70 hover:text-stone-950"
                   }`}
                 >
-                  <span className="grid size-10 shrink-0 place-items-center">
+                  <span
+                    className={`grid size-10 shrink-0 place-items-center ${
+                      collapsed ? "md:[&_svg]:size-7" : ""
+                    }`}
+                  >
                     <Icon />
                   </span>
                   <span className="overflow-hidden pr-2.5 whitespace-nowrap">{page.title}</span>
@@ -407,9 +411,9 @@ function accountInitials(name: string, email: string) {
 }
 
 const pageIcons = {
-  "/": HomeIcon,
-  "/staff": DirectoryIcon,
-  "/schedule": LocationIcon,
+  "/dashboard": HomeIcon,
+  "/staffdirectory": DirectoryIcon,
+  "/staffdeployment": DeploymentIcon,
   "/events": EventsIcon,
   "/settings": SettingsIcon,
   "/profile": ProfileIcon,
@@ -464,17 +468,25 @@ function DirectoryIcon() {
   );
 }
 
-function LocationIcon() {
+function DeploymentIcon() {
   return (
     <svg className="size-5 shrink-0" viewBox="0 0 16 16" aria-hidden="true">
+      <circle cx="4.2" cy="5" r="1.55" fill="none" stroke="currentColor" strokeWidth="1.4" />
       <path
-        d="M8 14.2S12.2 11 12.2 7.6a4.2 4.2 0 0 0-8.4 0C3.8 11 8 14.2 8 14.2Z"
+        d="M1.6 11.6c.55-1.7 1.5-2.5 2.6-2.5s2.05.8 2.6 2.5"
         fill="none"
         stroke="currentColor"
         strokeWidth="1.4"
+        strokeLinecap="round"
+      />
+      <path
+        d="M9.2 8h4.6M11.6 5.8 14 8l-2.4 2.2"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
         strokeLinejoin="round"
       />
-      <circle cx="8" cy="7.5" r="1.25" fill="none" stroke="currentColor" strokeWidth="1.4" />
     </svg>
   );
 }

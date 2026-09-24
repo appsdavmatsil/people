@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { DialogHeading, PencilIcon, PlusIcon } from "@/components/directory-actions";
 import { useDirectoryLookups } from "@/components/use-directory-lookups";
 import { useLocations } from "@/components/use-locations";
 import { type LookupPosition } from "@/lib/directory-lookups";
@@ -236,22 +237,13 @@ export function EmployeeFormDialog({
       }}
     >
       <form onSubmit={saveEmployee} className="flex max-h-[calc(100dvh-2rem)] flex-col">
-        <div className="flex shrink-0 items-start justify-between gap-4 border-b border-stone-200 px-5 py-4">
-          <div>
-            <h2 id="employee-form-title" className="text-base font-semibold tracking-tight">
-              {editingId ? form.fullName.trim() || "Edit employee" : "New employee"}
-            </h2>
-            <p className="mt-1 text-sm text-stone-500">{description}</p>
-          </div>
-          <button
-            type="button"
-            className="flex size-8 items-center justify-center rounded-lg text-stone-500 hover:bg-stone-100 hover:text-stone-950"
-            aria-label="Close"
-            onClick={() => dialogRef.current?.close()}
-          >
-            <CloseIcon />
-          </button>
-        </div>
+        <DialogHeading
+          titleId="employee-form-title"
+          title={editingId ? form.fullName.trim() || "Edit employee" : "New employee"}
+          description={description}
+          icon={editingId ? <PencilIcon /> : <PlusIcon />}
+          onClose={() => dialogRef.current?.close()}
+        />
 
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
           <div className="flex items-center gap-4">
@@ -679,14 +671,6 @@ function todayIso() {
   const month = String(now.getMonth() + 1).padStart(2, "0");
   const day = String(now.getDate()).padStart(2, "0");
   return `${now.getFullYear()}-${month}-${day}`;
-}
-
-function CloseIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
-      <path d="M3 3l8 8M11 3 3 11" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-    </svg>
-  );
 }
 
 function UserIcon() {

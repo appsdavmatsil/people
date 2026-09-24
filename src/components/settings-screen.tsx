@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   normalizeName,
@@ -21,6 +22,7 @@ import { PrivacySettings } from "@/components/dashboard-visibility";
 import { usePrivacy } from "@/components/privacy-provider";
 import { TeamAccess } from "@/components/team-access";
 import { useDirectoryLookups } from "@/components/use-directory-lookups";
+import { useOutsourced } from "@/components/use-outsourced";
 import { useStaffDirectory } from "@/components/use-staff-directory";
 import { useEvents } from "@/components/use-events";
 import { useLocations } from "@/components/use-locations";
@@ -974,6 +976,7 @@ function PositionsPanel({
   const [dragId, setDragId] = useState<string | null>(null);
   const [overId, setOverId] = useState<string | null>(null);
   const { employees } = useStaffDirectory();
+  const { people: outsourcedPeople } = useOutsourced();
   const { locations } = useLocations();
   const [staffPosition, setStaffPosition] = useState<LookupPosition | null>(null);
   const [staffRequest, setStaffRequest] = useState(0);
@@ -982,12 +985,9 @@ function PositionsPanel({
   const staffByVenue = useMemo(
     () =>
       staffPosition
-        ? groupStaffByVenue(
-            employees.filter((employee) => sameName(employee.position, staffPosition.name)),
-            locations,
-          )
+        ? groupStaffByVenue(staffForPosition(staffPosition.name, employees, outsourcedPeople), locations)
         : [],
-    [employees, locations, staffPosition],
+    [employees, locations, outsourcedPeople, staffPosition],
   );
   const staffTotal = staffByVenue.reduce((sum, group) => sum + group.people.length, 0);
 
@@ -1229,7 +1229,7 @@ function PositionsPanel({
                       >
                         <PersonIcon />
                         <span className="text-xs tabular-nums">
-                          {employees.filter((employee) => sameName(employee.position, position.name)).length}
+                          {staffForPosition(position.name, employees, outsourcedPeople).length}
                         </span>
                       </button>
                       <button
@@ -1279,7 +1279,7 @@ function PositionsPanel({
       <dialog
         ref={staffDialogRef}
         aria-labelledby="position-staff-title"
-        className="m-auto h-fit max-h-[calc(100dvh-2rem)] w-[min(100%-2rem,32rem)] overflow-hidden rounded-2xl border border-stone-200 bg-white p-0 text-stone-950 shadow-xl backdrop:bg-stone-950/40"
+        className="m-auto h-fit max-h-[calc(100dvh-2rem)] w-[min(100%-2rem,40rem)] overflow-hidden rounded-2xl border border-stone-200 bg-white p-0 text-stone-950 shadow-xl backdrop:bg-stone-950/40"
         onClick={(event) => {
           if (event.target === event.currentTarget) {
             event.currentTarget.close();
@@ -1289,7 +1289,11 @@ function PositionsPanel({
       >
         <div className="flex max-h-[calc(100dvh-2rem)] flex-col">
           <div className="flex shrink-0 items-start justify-between gap-4 border-b border-stone-200 px-5 py-4">
-            <div>
+            <div className="flex min-w-0 items-start gap-3">
+              <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-stone-100 text-stone-700">
+                <PersonIcon />
+              </span>
+              <div className="min-w-0">
               <h2 id="position-staff-title" className="text-base font-semibold tracking-tight">
                 {staffPosition?.name ?? "Position"}
               </h2>
@@ -1298,6 +1302,7 @@ function PositionsPanel({
                   ? "Staff assigned to this position, by venue."
                   : `${staffTotal} ${staffTotal === 1 ? "person" : "people"}, by venue.`}
               </p>
+              </div>
             </div>
             <button
               type="button"
@@ -1321,8 +1326,19 @@ function PositionsPanel({
                   {group.subtitle ? <p className="text-xs text-stone-500">{group.subtitle}</p> : null}
                   <ul className="mt-1.5 divide-y divide-stone-100 rounded-lg border border-stone-200">
                     {group.people.map((person) => (
-                      <li key={person.id} className="px-3 py-2 text-sm text-stone-950">
-                        {person.fullName}
+                      <li key={`${person.kind}-${person.id}`} className="flex items-center gap-3 px-3 py-2 text-sm">
+                        <Link
+                          href={person.href}
+                          className="min-w-0 flex-1 truncate font-medium text-stone-950 underline-offset-4 hover:underline"
+                        >
+                          {person.fullName}
+                        </Link>
+                        <span className="shrink-0 text-xs text-stone-500">
+                          {person.kind === "in-house" ? "In-house" : "Out Sourced"}
+                        </span>
+                        <span className="w-24 shrink-0 text-right text-stone-700 tabular-nums">
+                          {person.salary == null ? "—" : formatSalary(person.salary)}
+                        </span>
                       </li>
                     ))}
                   </ul>
@@ -1533,10 +1549,54 @@ function rowDragProps({
   };
 }
 
-function groupStaffByVenue(people: StaffEmployee[], locations: LocationReference[]) {
+type PositionStaffPerson = {
+  id: string;
+  fullName: string;
+  venue: string;
+  salary: number | null;
+  kind: "in-house" | "outsourced";
+  href: string;
+};
+
+function staffForPosition(
+  positionName: string,
+  employees: StaffEmployee[],
+  outsourced: { id: string; fullName: string; position: string; venue: string; rate: number | null }[],
+) {
+  const people: PositionStaffPerson[] = [];
+  for (const employee of employees) {
+    if (!sameName(employee.position, positionName)) {
+      continue;
+    }
+    people.push({
+      id: employee.id,
+      fullName: employee.fullName,
+      venue: employee.venue,
+      salary: employee.salary,
+      kind: "in-house",
+      href: `/staffdirectory?edit=${encodeURIComponent(employee.id)}`,
+    });
+  }
+  for (const person of outsourced) {
+    if (!sameName(person.position, positionName)) {
+      continue;
+    }
+    people.push({
+      id: person.id,
+      fullName: person.fullName,
+      venue: person.venue,
+      salary: person.rate,
+      kind: "outsourced",
+      href: `/staffdirectory/outsourced?edit=${encodeURIComponent(person.id)}`,
+    });
+  }
+  return people;
+}
+
+function groupStaffByVenue(people: PositionStaffPerson[], locations: LocationReference[]) {
   const buckets = new Map<
     string,
-    { key: string; title: string; subtitle: string; people: StaffEmployee[] }
+    { key: string; title: string; subtitle: string; people: PositionStaffPerson[] }
   >();
 
   for (const person of people) {

@@ -66,7 +66,7 @@ export async function proxy(request: NextRequest) {
   }
 
   if (userId && path.startsWith("/login") && !settingPassword) {
-    return redirectTo(request, supabaseResponse, "/");
+    return redirectTo(request, supabaseResponse, "/dashboard");
   }
 
   return supabaseResponse;
@@ -90,6 +90,6 @@ function redirectTo(
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };

@@ -896,6 +896,9 @@ revoke all on function private.cancel_team_invite(text) from public, anon, authe
 revoke all on function public.prepare_team_invite(text) from public, anon;
 revoke all on function public.cancel_team_invite(text) from public, anon;
 
+-- Needed by RLS policies evaluated as the authenticated invoker.
+grant execute on function private.actor_workspace() to authenticated;
+grant execute on function private.current_user_is_owner() to authenticated;
 grant execute on function private.prepare_team_invite(text) to authenticated;
 grant execute on function private.cancel_team_invite(text) to authenticated;
 grant execute on function public.prepare_team_invite(text) to authenticated;

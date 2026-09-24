@@ -134,11 +134,16 @@ export function DeleteConfirmDialog({
           onConfirm();
         }}
       >
-        <div className="px-5 py-4">
-          <h2 id="delete-confirm-title" className="text-base font-semibold tracking-tight">
-            {title}
-          </h2>
-          <p className="mt-1 text-sm text-stone-500">{message}</p>
+        <div className="flex items-start gap-3 px-5 py-4">
+          <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-red-50 text-red-700">
+            <TrashIcon />
+          </span>
+          <div>
+            <h2 id="delete-confirm-title" className="text-base font-semibold tracking-tight">
+              {title}
+            </h2>
+            <p className="mt-1 text-sm text-stone-500">{message}</p>
+          </div>
         </div>
         <div className="flex justify-end gap-2 border-t border-stone-200 px-5 py-4">
           <button
@@ -160,7 +165,53 @@ export function DeleteConfirmDialog({
   );
 }
 
-function PencilIcon() {
+export function DialogHeading({
+  titleId,
+  title,
+  description,
+  icon,
+  onClose,
+}: {
+  titleId: string;
+  title: string;
+  description: string;
+  icon: React.ReactNode;
+  onClose: () => void;
+}) {
+  return (
+    <div className="flex shrink-0 items-start justify-between gap-4 border-b border-stone-200 px-5 py-4">
+      <div className="flex min-w-0 items-start gap-3">
+        <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-stone-100 text-stone-700">
+          {icon}
+        </span>
+        <div className="min-w-0">
+          <h2 id={titleId} className="text-base font-semibold tracking-tight">
+            {title}
+          </h2>
+          <p className="mt-1 text-sm text-stone-500">{description}</p>
+        </div>
+      </div>
+      <button
+        type="button"
+        className="flex size-8 items-center justify-center rounded-lg text-stone-500 hover:bg-stone-100 hover:text-stone-950"
+        aria-label="Close"
+        onClick={onClose}
+      >
+        <CloseIcon />
+      </button>
+    </div>
+  );
+}
+
+function CloseIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+      <path d="M3 3l8 8M11 3 3 11" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function PencilIcon() {
   return (
     <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true">
       <path
@@ -174,7 +225,7 @@ function PencilIcon() {
   );
 }
 
-function ArchiveIcon() {
+export function ArchiveIcon() {
   return (
     <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true">
       <path
@@ -204,7 +255,21 @@ function RestoreIcon() {
   );
 }
 
-function TrashIcon() {
+export function PlusIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true">
+      <path
+        d="M7.5 2.8v9.4M2.8 7.5h9.4"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+export function TrashIcon() {
   return (
     <svg width="15" height="15" viewBox="0 0 15 15" aria-hidden="true">
       <path

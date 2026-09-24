@@ -9,7 +9,7 @@ import { usePromotions } from "@/components/use-promotions";
 import { useStaffDirectory } from "@/components/use-staff-directory";
 import {
   chartVenues,
-  positionsByVenue,
+  positionsCombined,
   promotionsByVenue,
   staffSalaryByVenue,
   workforceByVenue,
@@ -43,7 +43,7 @@ export function HomeInsights() {
     lookups,
     promotionDepartment,
   );
-  const positions = positionsByVenue(employees, venues, lookups, positionDepartment);
+  const positions = positionsCombined(employees, lookups, positionDepartment);
   const workforce = workforceByVenue(
     employees,
     outsourced,
@@ -55,7 +55,7 @@ export function HomeInsights() {
   const staffTotal = salary.reduce((sum, point) => sum + point.staff, 0);
   const salaryTotal = salary.reduce((sum, point) => sum + point.salary, 0);
   const promotionTotal = promotionPoints.reduce((sum, point) => sum + point.count, 0);
-  const positionTotal = positions.reduce((sum, share) => sum + share.total, 0);
+  const positionTotal = positions.total;
   const workforceTotal = workforce.reduce((sum, share) => sum + share.total, 0);
 
   return (
@@ -88,7 +88,7 @@ export function HomeInsights() {
         departments={lookups.departments}
         onDepartment={setPositionDepartment}
       >
-        <PositionRings shares={positions} />
+        <PositionChart share={positions} hasVenues={venues.length > 0} />
       </InsightCard>
       <InsightCard
         title="Promotions"
@@ -406,26 +406,50 @@ function WorkforceRow({ share }: { share: VenueShare }) {
   );
 }
 
-function PositionRings({ shares }: { shares: VenueShare[] }) {
-  if (shares.length === 0) {
+function PositionChart({ share, hasVenues }: { share: VenueShare; hasVenues: boolean }) {
+  const slices = share.slices;
+  const total = share.total;
+  const percents = percentShares(slices, total);
+
+  if (!hasVenues) {
     return <EmptyChart label="Add a venue to see positions." />;
   }
 
   return (
-    <div className="grid h-full grid-cols-2 items-center gap-2 sm:grid-cols-3 lg:grid-cols-5">
-      {shares.map((share) => (
-        <figure key={share.venue.id} className="flex min-w-0 flex-col items-center justify-center gap-2">
-          <Ring
-            slices={share.slices}
-            total={share.total}
-            venue={share.venue.name}
-            className="size-24 sm:size-28"
-          />
-          <figcaption className="max-w-full truncate text-center text-xs font-medium text-stone-800">
-            {share.venue.label}
-          </figcaption>
-        </figure>
-      ))}
+    <div className="flex h-full min-h-0 items-center gap-4 overflow-hidden sm:gap-6">
+      <Ring
+        slices={slices}
+        total={total}
+        venue="All venues"
+        className="aspect-square h-full max-h-full min-h-0 w-auto max-w-[46%]"
+        strokeWidth={24}
+      />
+      {slices.length === 0 ? (
+        <p className="min-w-0 flex-1 text-sm text-stone-400">No staff in this view yet.</p>
+      ) : (
+        <div className="h-full min-h-0 min-w-0 flex-1 overflow-y-auto pr-1">
+          <ul className="flex min-h-full flex-col justify-center gap-1.5">
+          {slices.map((slice, index) => (
+            <li key={slice.key} className="flex min-w-0 items-center gap-2.5">
+              <span className="flex min-w-0 max-w-[42%] items-center gap-2">
+                <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: slice.color }} />
+                <span className="truncate text-[13px] font-medium text-stone-800">{slice.label}</span>
+              </span>
+              <span className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-stone-100">
+                <span
+                  className="block h-full rounded-full"
+                  style={{ width: `${percents[index]}%`, backgroundColor: slice.color }}
+                />
+              </span>
+              <span className="shrink-0 text-xs text-stone-500 tabular-nums">
+                {slice.value}
+                <span className="ml-1.5 text-stone-400">{percents[index]}%</span>
+              </span>
+            </li>
+          ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }
@@ -475,16 +499,19 @@ function Ring({
   venue,
   className,
   compact = false,
+  strokeWidth = 13,
 }: {
   slices: Array<ShareSlice & { detail?: string }>;
   total: number;
   venue: string;
   className?: string;
   compact?: boolean;
+  strokeWidth?: number;
 }) {
   const [hover, setHover] = useState<{ index: number; x: number; y: number } | null>(null);
-  const radius = 34;
-  const gap = slices.length > 1 ? 0.045 : 0;
+  const radius = Math.min(34, 46 - strokeWidth / 2);
+  const gap = slices.length > 1 ? 0.05 : 0;
+  const activeWidth = strokeWidth + 3;
   let angle = -Math.PI / 2;
   const active = hover == null ? null : slices[hover.index];
   const percents = percentShares(slices, total);
@@ -499,7 +526,7 @@ function Ring({
         onMouseLeave={() => setHover(null)}
       >
         {total === 0 || slices.length === 0 ? (
-          <circle cx="50" cy="50" r={radius} fill="none" stroke="#e7e5e4" strokeWidth="13" />
+          <circle cx="50" cy="50" r={radius} fill="none" stroke="#e7e5e4" strokeWidth={strokeWidth} />
         ) : slices.length === 1 ? (
           <circle
             cx="50"
@@ -507,7 +534,7 @@ function Ring({
             r={radius}
             fill="none"
             stroke={slices[0].color}
-            strokeWidth={hover?.index === 0 ? 16 : 13}
+            strokeWidth={hover?.index === 0 ? activeWidth : strokeWidth}
             onMouseMove={(event) => setHover({ index: 0, x: event.clientX, y: event.clientY })}
           />
         ) : (
@@ -522,7 +549,7 @@ function Ring({
                 d={arc(50, 50, radius, start, Math.max(end, start + 0.02))}
                 fill="none"
                 stroke={slice.color}
-                strokeWidth={hover?.index === index ? 16 : 13}
+                strokeWidth={hover?.index === index ? activeWidth : strokeWidth}
                 strokeLinecap="butt"
                 opacity={hover != null && hover.index !== index ? 0.35 : 1}
                 onMouseMove={(event) => setHover({ index, x: event.clientX, y: event.clientY })}

@@ -1,7 +1,7 @@
 export const pages = [
-  { href: "/", title: "Home" },
-  { href: "/staff", title: "Staff Directory" },
-  { href: "/schedule", title: "Staff Location" },
+  { href: "/dashboard", title: "Home" },
+  { href: "/staffdirectory", title: "Staff Directory" },
+  { href: "/staffdeployment", title: "Staff Deployment" },
   { href: "/events", title: "Events Manning" },
   { href: "/settings", title: "Settings" },
 ] as const;
@@ -14,10 +14,6 @@ export const profilePage = {
 } as const;
 
 export function isAppPage(pathname: string, href: string) {
-  if (href === "/") {
-    return pathname === "/";
-  }
-
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 

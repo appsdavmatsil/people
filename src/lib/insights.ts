@@ -43,28 +43,13 @@ const otherVenue: ChartVenue = {
   color: "#a8a29e",
 };
 
-const positionColors = [
-  "#1c1917",
-  "#c2410c",
-  "#0f766e",
-  "#1d4ed8",
-  "#7c3aed",
-  "#be123c",
-  "#a16207",
-  "#0369a1",
-  "#4d7c0f",
-  "#9f1239",
-  "#57534e",
-  "#0e7490",
-];
+const positionColors = ["#1c1917", "#c2410c", "#a8a29e"];
 
 export const workforceColors = {
   inhouse: "#1c1917",
   outsourced: "#c2410c",
   hiring: "#a8a29e",
 } as const;
-
-const maxPositionSlices = 8;
 
 export function chartVenues(locations: LocationReference[], boardIds: string[] | null) {
   return orderLocations(locations, boardIds).map((location) => ({
@@ -131,53 +116,69 @@ export function promotionsByVenue(
   return finish(rows, other, other.count > 0);
 }
 
-export function positionsByVenue(
+export function positionsCombined(
   employees: StaffEmployee[],
-  venues: ChartVenue[],
   lookups: DirectoryLookups,
   departmentId: string,
-): VenueShare[] {
-  const counts = new Map<string, Map<string, number>>();
-  for (const venue of venues) {
-    counts.set(venue.id, new Map());
-  }
-
-  const otherCounts = new Map<string, number>();
-  let otherUsed = false;
+): VenueShare {
+  const totals = new Map<string, { label: string; value: number }>();
 
   for (const employee of employees) {
     if (!matchesDepartment(positionDepartmentId(employee.position, lookups), departmentId)) {
       continue;
     }
 
-    const venue = findVenue(employee.venue, venues);
-    const bucket = venue ? counts.get(venue.id)! : otherCounts;
-    if (!venue) {
-      otherUsed = true;
+    const raw = employee.position.trim() || "Unassigned";
+    const known = lookups.positions.find((position) => sameName(position.name, raw));
+    const key = known?.id ?? `name:${raw.toLowerCase()}`;
+    const current = totals.get(key);
+    if (current) {
+      current.value += 1;
+    } else {
+      totals.set(key, { label: known?.name ?? raw, value: 1 });
     }
-
-    const label = employee.position.trim() || "Unassigned";
-    bucket.set(label, (bucket.get(label) ?? 0) + 1);
   }
 
-  const totals = new Map<string, number>();
-  for (const bucket of counts.values()) {
-    addTotals(totals, bucket);
+  const departments = departmentId
+    ? lookups.departments.filter((department) => department.id === departmentId)
+    : lookups.departments;
+  const ordered: Array<{ key: string; label: string; value: number }> = [];
+  const used = new Set<string>();
+
+  for (const department of departments) {
+    for (const position of lookups.positions) {
+      if (position.departmentId !== department.id) {
+        continue;
+      }
+
+      const row = totals.get(position.id);
+      if (!row || row.value <= 0) {
+        continue;
+      }
+
+      ordered.push({ key: position.id, label: position.name, value: row.value });
+      used.add(position.id);
+    }
   }
-  addTotals(totals, otherCounts);
 
-  const colorFor = new Map(
-    [...totals.keys()]
-      .sort((left, right) => (totals.get(right) ?? 0) - (totals.get(left) ?? 0) || left.localeCompare(right))
-      .map((label, index) => [label, positionColors[index % positionColors.length]]),
-  );
+  const extras = [...totals.entries()]
+    .filter(([key, row]) => !used.has(key) && row.value > 0)
+    .sort((left, right) => left[1].label.localeCompare(right[1].label));
 
-  const shares = venues.map((venue) => shareFor(venue, counts.get(venue.id) ?? new Map(), colorFor));
-  if (otherUsed) {
-    shares.push(shareFor(otherVenue, otherCounts, colorFor));
+  for (const [key, row] of extras) {
+    ordered.push({ key, label: row.label, value: row.value });
   }
 
-  return shares;
+  return {
+    venue: { id: "all", label: "All", name: "All venues", color: "#1c1917" },
+    total: ordered.reduce((sum, row) => sum + row.value, 0),
+    slices: ordered.map((row, index) => ({
+      key: row.key,
+      label: row.label,
+      value: row.value,
+      color: positionColors[index % positionColors.length],
+    })),
+  };
 }
 
 export function workforceByVenue(
@@ -260,42 +261,6 @@ function workforceShare(
     total: counts.inhouse + counts.outsourced + counts.hiring,
     slices,
   };
-}
-
-function shareFor(venue: ChartVenue, counts: Map<string, number>, colorFor: Map<string, string>): VenueShare {
-  const ranked = [...counts.entries()].sort(
-    (left, right) => right[1] - left[1] || left[0].localeCompare(right[0]),
-  );
-  const visible = ranked.slice(0, maxPositionSlices);
-  const hidden = ranked.slice(maxPositionSlices);
-  const slices: ShareSlice[] = visible.map(([label, value]) => ({
-    key: label,
-    label,
-    value,
-    color: colorFor.get(label) ?? positionColors[0],
-  }));
-
-  const hiddenTotal = hidden.reduce((sum, [, value]) => sum + value, 0);
-  if (hiddenTotal > 0) {
-    slices.push({
-      key: `${venue.id}-other`,
-      label: "Other",
-      value: hiddenTotal,
-      color: "#d6d3d1",
-    });
-  }
-
-  return {
-    venue,
-    total: ranked.reduce((sum, [, value]) => sum + value, 0),
-    slices,
-  };
-}
-
-function addTotals(totals: Map<string, number>, bucket: Map<string, number>) {
-  for (const [label, value] of bucket) {
-    totals.set(label, (totals.get(label) ?? 0) + value);
-  }
 }
 
 function bucketFor<T>(

@@ -191,22 +191,38 @@ function PasswordField({
   rules?: boolean;
 }) {
   const [password, setPassword] = useState("");
+  const [visible, setVisible] = useState(false);
+  const inputId = `${name}-input`;
 
   return (
-    <label className="block text-sm font-medium text-stone-800">
-      {label}
-      <input
-        name={name}
-        type="password"
-        autoComplete={autoComplete}
-        required
-        value={rules ? password : undefined}
-        onChange={rules ? (event) => setPassword(event.target.value) : undefined}
-        aria-describedby={rules && password.length > 0 ? "password-rules" : undefined}
-        className={fieldClass}
-      />
+    <div>
+      <label htmlFor={inputId} className="block text-sm font-medium text-stone-800">
+        {label}
+      </label>
+      <div className="relative mt-1.5">
+        <input
+          id={inputId}
+          name={name}
+          type={visible ? "text" : "password"}
+          autoComplete={autoComplete}
+          required
+          value={rules ? password : undefined}
+          onChange={rules ? (event) => setPassword(event.target.value) : undefined}
+          aria-describedby={rules && password.length > 0 ? "password-rules" : undefined}
+          className="w-full rounded-lg border border-stone-300 bg-white py-2 pr-10 pl-3 text-sm text-stone-950 outline-none focus:border-stone-950"
+        />
+        <button
+          type="button"
+          onClick={() => setVisible((current) => !current)}
+          aria-label={visible ? "Hide password" : "Show password"}
+          aria-pressed={visible}
+          className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-stone-500 hover:text-stone-950"
+        >
+          {visible ? <EyeOffIcon /> : <EyeIcon />}
+        </button>
+      </div>
       {rules && password.length > 0 ? <PasswordRules password={password} /> : null}
-    </label>
+    </div>
   );
 }
 
@@ -229,6 +245,40 @@ function PasswordRules({ password }: { password: string }) {
         );
       })}
     </ul>
+  );
+}
+
+function EyeIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path
+        d="M1.5 8s2.2-4 6.5-4 6.5 4 6.5 4-2.2 4-6.5 4S1.5 8 1.5 8Z"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinejoin="round"
+      />
+      <circle cx="8" cy="8" r="1.75" stroke="currentColor" strokeWidth="1.4" />
+    </svg>
+  );
+}
+
+function EyeOffIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+      <path
+        d="M2.5 2.5 13.5 13.5"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+      />
+      <path
+        d="M6.3 6.5a1.8 1.8 0 0 0 2.5 2.6M3.1 4.7C2.1 5.6 1.5 6.7 1.5 8s2.2 4 6.5 4c1 0 2-.3 2.8-.7M6.7 4.1A8 8 0 0 1 8 4c4.3 0 6.5 4 6.5 4-.4.8-1.1 1.6-1.9 2.2"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }
 

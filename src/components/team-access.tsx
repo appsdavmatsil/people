@@ -347,7 +347,11 @@ function InviteDialog({
       }}
     >
       <div className="flex items-start justify-between gap-4 border-b border-stone-200 px-5 py-4">
-        <div>
+        <div className="flex min-w-0 items-start gap-3">
+          <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-stone-100 text-stone-700">
+            <PlusIcon />
+          </span>
+          <div className="min-w-0">
           <h2 id="add-team-member-title" className="text-base font-semibold tracking-tight">
             {created ? "Access created" : "Add Team member"}
           </h2>
@@ -356,6 +360,7 @@ function InviteDialog({
               ? "Share these details. They sign in, then choose a new password."
               : "Creates their Supabase sign-in. They change this password after they sign in."}
           </p>
+          </div>
         </div>
         <button
           type="button"
@@ -634,7 +639,11 @@ function EditDialog({
   return (
     <form onSubmit={save}>
       <div className="flex items-start justify-between gap-4 border-b border-stone-200 px-5 py-4">
-        <div>
+        <div className="flex min-w-0 items-start gap-3">
+          <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-stone-100 text-stone-700">
+            <PencilIcon />
+          </span>
+          <div className="min-w-0">
           <h2 id="edit-team-member-title" className="text-base font-semibold tracking-tight">
             {issued ? "Temporary password ready" : `Edit ${member.name}`}
           </h2>
@@ -643,6 +652,7 @@ function EditDialog({
               ? "Share these details. They sign in, then choose a new password."
               : "Update their details. A password here replaces the current one until they change it."}
           </p>
+          </div>
         </div>
         <button
           type="button"
@@ -784,7 +794,11 @@ function AccessLogDialog({ member, onClose }: { member: TeamMember; onClose: () 
   return (
     <div className="flex max-h-[calc(100dvh-2rem)] flex-col">
       <div className="flex shrink-0 items-start justify-between gap-4 border-b border-stone-200 px-5 py-4">
-        <div>
+        <div className="flex min-w-0 items-start gap-3">
+          <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-stone-100 text-stone-700">
+            <LogIcon />
+          </span>
+          <div className="min-w-0">
           <h2 id="team-access-log-title" className="text-base font-semibold tracking-tight">
             Access log
           </h2>
@@ -792,6 +806,7 @@ function AccessLogDialog({ member, onClose }: { member: TeamMember; onClose: () 
             {member.name}
             {member.email ? ` · ${member.email}` : ""}
           </p>
+          </div>
         </div>
         <button
           type="button"
@@ -872,13 +887,18 @@ function RemoveDialog({
   return (
     <div>
       <div className="flex items-start justify-between gap-4 border-b border-stone-200 px-5 py-4">
-        <div>
+        <div className="flex min-w-0 items-start gap-3">
+          <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-red-50 text-red-700">
+            <TrashIcon />
+          </span>
+          <div className="min-w-0">
           <h2 id="remove-team-member-title" className="text-base font-semibold tracking-tight">
             Remove {member.name}
           </h2>
           <p className="mt-1 text-sm text-stone-500">
             Their sign-in is deleted. This cannot be undone.
           </p>
+          </div>
         </div>
         <button
           type="button"
@@ -917,6 +937,14 @@ function formatWhen(value: string) {
   }
 
   return date.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+}
+
+function PlusIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M8 3.2v9.6M3.2 8h9.6" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    </svg>
+  );
 }
 
 function BlockIcon() {

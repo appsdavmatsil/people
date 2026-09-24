@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import {
+  canonicalPrivacyPath,
   defaultPrivacySnapshot,
   defaultProtectedFeatures,
   positionKey,
@@ -40,7 +41,7 @@ function parsePrivacySnapshot(value: unknown): PrivacySnapshot | null {
     showHiring: row.showHiring !== false,
     showPromotions: row.showPromotions !== false,
     hiddenSalaryPositions: textList(row.hiddenSalaryPositions),
-    protectedPages: textList(row.protectedPages),
+    protectedPages: textList(row.protectedPages).map(canonicalPrivacyPath),
     protectedFeatures:
       row.protectedFeatures === undefined ? [...defaultProtectedFeatures] : textList(row.protectedFeatures),
   };

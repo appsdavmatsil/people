@@ -84,7 +84,7 @@ export function DateField({
           ref={panelRef}
           role="dialog"
           aria-label={monthLabel}
-          className="mt-2 w-full max-w-[17.5rem] rounded-xl border border-stone-200 bg-stone-50 p-3"
+          className="mt-2 w-full rounded-xl border border-stone-200 bg-stone-50 p-3"
         >
           <div className="flex items-center justify-between gap-2">
             <button
@@ -105,14 +105,14 @@ export function DateField({
               <Chevron direction="right" />
             </button>
           </div>
-          <div className="mt-2 grid grid-cols-7 text-center text-[11px] font-medium tracking-wide text-stone-400">
+          <div className="mt-2 grid grid-cols-7 gap-1 text-center text-[11px] font-medium tracking-wide text-stone-400">
             {weekdays.map((day) => (
               <span key={day} className="flex h-8 items-center justify-center">
                 {day}
               </span>
             ))}
           </div>
-          <div className="grid grid-cols-7">
+          <div className="grid grid-cols-7 gap-1">
             {cells.map((cell) => {
               const isSelected =
                 selected != null &&
@@ -128,7 +128,7 @@ export function DateField({
                   aria-pressed={isSelected}
                   aria-current={isToday ? "date" : undefined}
                   onClick={() => choose(cell.year, cell.month, cell.day)}
-                  className={`mx-auto flex size-8 items-center justify-center rounded-full text-sm ${
+                  className={`flex aspect-square w-full items-center justify-center rounded-full text-sm ${
                     isSelected
                       ? "bg-stone-950 font-medium text-white"
                       : isToday

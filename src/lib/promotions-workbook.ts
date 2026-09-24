@@ -10,6 +10,7 @@ import { readXlsx, writeXlsx, type SheetCell } from "@/lib/xlsx-lite";
 const MAX_ROWS = 5000;
 
 const columns = [
+  { key: "staffId", label: "Employee ID" },
   { key: "staffName", label: "Staff member" },
   { key: "currentPosition", label: "Current position" },
   { key: "currentSalary", label: "Current salary" },
@@ -21,6 +22,8 @@ const columns = [
 type ColumnKey = (typeof columns)[number]["key"];
 
 const aliases: Record<string, ColumnKey> = {
+  "employee id": "staffId",
+  "staff id": "staffId",
   "staff member": "staffName",
   staff: "staffName",
   name: "staffName",
@@ -52,6 +55,7 @@ export async function buildPromotionsWorkbook(promotions: StaffPromotion[]) {
   const rows: SheetCell[][] = [
     columns.map((column) => ({ text: column.label, number: null })),
     ...promotions.map((promotion) => [
+      { text: promotion.staffId, number: null },
       { text: promotion.staffName, number: null },
       { text: promotion.currentPosition, number: null },
       {
@@ -87,7 +91,10 @@ export async function importPromotionsWorkbook(data: ArrayBuffer): Promise<Promo
   }
 
   const headerIndex = rows.findIndex((row) =>
-    row.some((cell) => columnKeyForHeader(cell.text, aliases) === "staffName"),
+    row.some((cell) => {
+      const key = columnKeyForHeader(cell.text, aliases);
+      return key === "staffName" || key === "staffId";
+    }),
   );
 
   if (headerIndex === -1) {
@@ -95,14 +102,16 @@ export async function importPromotionsWorkbook(data: ArrayBuffer): Promise<Promo
       promotions: [],
       skipped: 0,
       error:
-        "Export a sheet from this page first. It needs columns for staff member, positions, salary package, and effective date.",
+        "Export a sheet from this page first. It needs an employee ID, a staff member, positions, a salary package, and an effective date.",
     };
   }
 
   const mapped = new Map<number, ColumnKey>();
+  const used = new Set<ColumnKey>();
   rows[headerIndex].forEach((cell, index) => {
     const key = columnKeyForHeader(cell.text, aliases);
-    if (key && !mapped.has(index)) {
+    if (key && !used.has(key)) {
+      used.add(key);
       mapped.set(index, key);
     }
   });
@@ -120,18 +129,19 @@ export async function importPromotionsWorkbook(data: ArrayBuffer): Promise<Promo
       record[key] = row[index] ?? { text: "", number: null };
     }
 
+    const staffId = cellId(record.staffId);
     const staffName = cellText(record.staffName).replace(/\s+/g, " ");
     const newPosition = cellText(record.newPosition).replace(/\s+/g, " ");
     const newSalary = salaryFromCell(record.newSalary);
     const effectiveDate = parseDate(record.effectiveDate);
-    if (!staffName || !newPosition || newSalary == null || !effectiveDate) {
+    if ((!staffName && !staffId) || !newPosition || newSalary == null || !effectiveDate) {
       skipped += 1;
       continue;
     }
 
     promotions.push({
       id: crypto.randomUUID(),
-      staffId: "",
+      staffId,
       staffName,
       currentPosition: cellText(record.currentPosition).replace(/\s+/g, " "),
       currentSalary: salaryFromCell(record.currentSalary),
@@ -143,6 +153,19 @@ export async function importPromotionsWorkbook(data: ArrayBuffer): Promise<Promo
   }
 
   return { promotions, skipped };
+}
+
+function cellId(cell: SheetCell | undefined) {
+  if (!cell) {
+    return "";
+  }
+
+  const text = cell.text.trim();
+  if (text) {
+    return text;
+  }
+
+  return cell.number == null ? "" : String(cell.number);
 }
 
 function salaryFromCell(cell: SheetCell | undefined) {

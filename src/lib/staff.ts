@@ -33,8 +33,6 @@ export type StaffColumnKey = (typeof staffColumns)[number]["key"];
 export type SortDirection = "asc" | "desc";
 export type StaffFilters = Record<StaffColumnKey, string>;
 
-export const excelHeaders = staffColumns.map((column) => column.label);
-
 const headerAliases: Record<string, StaffColumnKey> = {
   "full name": "fullName",
   fullname: "fullName",

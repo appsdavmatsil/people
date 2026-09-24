@@ -31,12 +31,13 @@ export default async function LoginPage({
   return (
     <main className="flex flex-1 items-center justify-center bg-stone-100 px-6 py-16">
       <div className="w-full max-w-sm">
-        <p className="text-xs font-medium tracking-[0.18em] text-stone-500 uppercase">
-          Staff management
-        </p>
-        <h1 className="mt-2 text-4xl font-semibold tracking-tight text-stone-950">
-          People
-        </h1>
+        <img
+          src="/people-logo.png"
+          alt="People staff management"
+          width={1024}
+          height={285}
+          className="block h-auto w-full"
+        />
         <LoginForm
           mode={notice ? "recover" : mode}
           canSetPassword={canSetPassword}

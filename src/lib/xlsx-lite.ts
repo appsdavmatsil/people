@@ -59,6 +59,8 @@ function normalizeZipName(name: string) {
 }
 
 function sheetXml(rows: SheetCell[][], lastRow: number) {
+  const columnCount = Math.max(1, ...rows.map((row) => row.length));
+  const lastColumn = columnName(columnCount - 1);
   const body = rows
     .map((row, rowIndex) => {
       const cells = row
@@ -70,13 +72,10 @@ function sheetXml(rows: SheetCell[][], lastRow: number) {
 
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-  <dimension ref="A1:H${lastRow}"/>
+  <dimension ref="A1:${lastColumn}${lastRow}"/>
   <cols>
-    <col min="1" max="1" width="24" customWidth="1"/>
-    <col min="2" max="4" width="18" customWidth="1"/>
-    <col min="5" max="6" width="16" customWidth="1"/>
-    <col min="7" max="7" width="24" customWidth="1"/>
-    <col min="8" max="8" width="16" customWidth="1"/>
+    <col min="1" max="1" width="38" customWidth="1"/>
+    <col min="2" max="${columnCount}" width="18" customWidth="1"/>
   </cols>
   <sheetData>${body}</sheetData>
 </worksheet>`;

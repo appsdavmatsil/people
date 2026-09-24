@@ -3,6 +3,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   DeleteConfirmDialog,
+  DialogHeading,
+  PencilIcon,
+  PlusIcon,
   RowActions,
   ShowArchivedButton,
   isArchived,
@@ -14,6 +17,8 @@ import { useStaffDirectory } from "@/components/use-staff-directory";
 import { downloadWorkbook } from "@/lib/download-workbook";
 import { buildPromotionsWorkbook, importPromotionsWorkbook } from "@/lib/promotions-workbook";
 import {
+  linkPromotionToStaff,
+  mergeImportedPromotions,
   settleDuePromotions,
   todayIso,
   type StaffPromotion,
@@ -335,27 +340,48 @@ export function Promotions() {
         setNotice({
           tone: "error",
           text: result.skipped
-            ? "No promotions were imported. Each row needs a staff member, a new position, a salary package, and an effective date."
+            ? "No promotions were imported. Each row needs an employee ID or staff member, a new position, a salary package, and an effective date."
             : "That sheet has the right columns, but no rows yet.",
         });
         return;
       }
 
-      const linked = result.promotions.map((promotion) => {
-        const employee = staff.find(
-          (item) => item.fullName.trim().toLowerCase() === promotion.staffName.toLowerCase(),
-        );
-        return employee ? { ...promotion, staffId: employee.id } : promotion;
-      });
-      update((current) => [...linked, ...current]);
+      const linked: StaffPromotion[] = [];
+      let unresolved = 0;
+      for (const promotion of result.promotions) {
+        const next = linkPromotionToStaff(promotion, employees);
+        if (!next.staffName.trim()) {
+          unresolved += 1;
+          continue;
+        }
 
-      const skipped = result.skipped
-        ? ` ${result.skipped} ${result.skipped === 1 ? "row was" : "rows were"} skipped.`
-        : "";
-      setNotice({
-        tone: "ok",
-        text: `Imported ${linked.length} ${linked.length === 1 ? "promotion" : "promotions"}.${skipped}`,
-      });
+        linked.push(next);
+      }
+
+      if (linked.length === 0) {
+        setNotice({
+          tone: "error",
+          text: "No promotions were imported. Each row needs an employee ID or staff member, a new position, a salary package, and an effective date.",
+        });
+        return;
+      }
+
+      const merged = mergeImportedPromotions(promotions, linked);
+      update(merged.promotions);
+
+      const skipped = result.skipped + unresolved;
+      const addedLabel = `${merged.added} ${merged.added === 1 ? "promotion" : "promotions"}`;
+      const updatedLabel = `${merged.updated} existing ${merged.updated === 1 ? "promotion" : "promotions"}`;
+      let text = `Imported ${addedLabel}.`;
+      if (merged.added && merged.updated) {
+        text = `Added ${addedLabel} and updated ${updatedLabel}.`;
+      } else if (merged.updated) {
+        text = `Updated ${updatedLabel}.`;
+      }
+      if (skipped) {
+        text += ` ${skipped} ${skipped === 1 ? "row was" : "rows were"} skipped.`;
+      }
+      setNotice({ tone: "ok", text });
     } catch {
       setNotice({ tone: "error", text: "That spreadsheet could not be imported." });
     } finally {
@@ -373,7 +399,8 @@ export function Promotions() {
           <p className="text-sm text-stone-500">{countLabel}</p>
           <p className="mt-1 max-w-xl text-sm text-stone-500">
             Saved in this browser, so they stay after a refresh. A future date stays on the
-            location card until that day, then the in-house salary updates.
+            location card until that day, then the in-house salary updates. The spreadsheet
+            includes each employee ID so a promotion stays attached to the right person.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -491,26 +518,17 @@ export function Promotions() {
         }}
       >
         <form onSubmit={recordPromotion} className="flex max-h-[calc(100dvh-2rem)] flex-col">
-          <div className="flex shrink-0 items-start justify-between gap-4 border-b border-stone-200 px-5 py-4">
-            <div>
-              <h2 id="new-promotion-title" className="text-base font-semibold tracking-tight">
-                {editingId ? "Edit promotion" : "New promotion"}
-              </h2>
-              <p className="mt-1 text-sm text-stone-500">
-                {editingId
-                  ? "Change any of the details. The directory updates on the effective date."
-                  : "A promotion or an increment. It updates the directory on the effective date."}
-              </p>
-            </div>
-            <button
-              type="button"
-              className="flex size-8 items-center justify-center rounded-lg text-stone-500 hover:bg-stone-100 hover:text-stone-950"
-              aria-label="Close"
-              onClick={() => dialogRef.current?.close()}
-            >
-              <CloseIcon />
-            </button>
-          </div>
+          <DialogHeading
+            titleId="new-promotion-title"
+            title={editingId ? "Edit promotion" : "New promotion"}
+            description={
+              editingId
+                ? "Change any of the details. The directory updates on the effective date."
+                : "A promotion or an increment. It updates the directory on the effective date."
+            }
+            icon={editingId ? <PencilIcon /> : <PlusIcon />}
+            onClose={() => dialogRef.current?.close()}
+          />
 
           <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
             <label className="block text-sm font-medium text-stone-800">
@@ -675,10 +693,3 @@ function latestDuePromotion(promotions: StaffPromotion[], staffId: string) {
   }, null);
 }
 
-function CloseIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
-      <path d="M3 3l8 8M11 3 3 11" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
-    </svg>
-  );
-}

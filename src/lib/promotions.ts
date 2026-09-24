@@ -133,6 +133,79 @@ function normalizePromotion(value: unknown): StaffPromotion | null {
   };
 }
 
+export function linkPromotionToStaff(promotion: StaffPromotion, employees: StaffEmployee[]) {
+  const staffId = promotion.staffId.trim();
+  if (staffId) {
+    const employee = employees.find((item) => item.id === staffId);
+    if (!employee) {
+      return promotion;
+    }
+
+    return { ...promotion, staffId: employee.id, staffName: employee.fullName };
+  }
+
+  const name = promotion.staffName.trim().toLowerCase();
+  const matches = employees.filter((item) => item.fullName.trim().toLowerCase() === name);
+  if (matches.length !== 1) {
+    return promotion;
+  }
+
+  return { ...promotion, staffId: matches[0].id, staffName: matches[0].fullName };
+}
+
+export function mergeImportedPromotions(current: StaffPromotion[], imported: StaffPromotion[]) {
+  const next = [...current];
+  const created: StaffPromotion[] = [];
+  const updatedIds = new Set<string>();
+
+  for (const promotion of imported) {
+    const existingIndex = next.findIndex((item) => samePromotion(item, promotion));
+    if (existingIndex !== -1) {
+      next[existingIndex] = keepPromotionIdentity(next[existingIndex], promotion);
+      updatedIds.add(next[existingIndex].id);
+      continue;
+    }
+
+    const createdIndex = created.findIndex((item) => samePromotion(item, promotion));
+    if (createdIndex !== -1) {
+      created[createdIndex] = keepPromotionIdentity(created[createdIndex], promotion);
+      continue;
+    }
+
+    created.push(promotion);
+  }
+
+  return { promotions: [...created, ...next], added: created.length, updated: updatedIds.size };
+}
+
+function keepPromotionIdentity(previous: StaffPromotion, incoming: StaffPromotion): StaffPromotion {
+  return {
+    ...incoming,
+    id: previous.id,
+    staffId: incoming.staffId || previous.staffId,
+    staffName: incoming.staffName || previous.staffName,
+    applied: previous.applied,
+    archived: previous.archived,
+  };
+}
+
+function samePromotion(existing: StaffPromotion, incoming: StaffPromotion) {
+  const sameChange =
+    existing.effectiveDate === incoming.effectiveDate &&
+    existing.newPosition.trim().toLowerCase() === incoming.newPosition.trim().toLowerCase();
+  if (!sameChange) {
+    return false;
+  }
+
+  if (incoming.staffId && existing.staffId) {
+    return existing.staffId === incoming.staffId;
+  }
+
+  const incomingName = incoming.staffName.trim().toLowerCase();
+  const existingName = existing.staffName.trim().toLowerCase();
+  return incomingName.length > 0 && incomingName === existingName;
+}
+
 export function todayIso(now = new Date()) {
   const month = String(now.getMonth() + 1).padStart(2, "0");
   const day = String(now.getDate()).padStart(2, "0");

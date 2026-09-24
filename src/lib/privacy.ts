@@ -1,12 +1,12 @@
 import { normalizeName } from "@/lib/directory-lookups";
 
 export const privacyPages = [
-  { href: "/", title: "Home" },
-  { href: "/staff", title: "In-house" },
-  { href: "/staff/outsourced", title: "Out Sourced" },
-  { href: "/staff/hiring", title: "Hiring Positions" },
-  { href: "/staff/promotions", title: "Promotions" },
-  { href: "/schedule", title: "Staff Location" },
+  { href: "/dashboard", title: "Home" },
+  { href: "/staffdirectory", title: "In-house" },
+  { href: "/staffdirectory/outsourced", title: "Out Sourced" },
+  { href: "/staffdirectory/hiring", title: "Hiring Positions" },
+  { href: "/staffdirectory/promotions", title: "Promotions" },
+  { href: "/staffdeployment", title: "Staff Deployment" },
   { href: "/events", title: "Events Manning" },
   { href: "/settings", title: "Settings" },
   { href: "/profile", title: "Profile settings" },
@@ -60,16 +60,23 @@ export function salaryHidden(hiddenSalaryPositions: string[], position: string) 
   return hiddenSalaryPositions.some((item) => item === key);
 }
 
+const legacyPrivacyPaths: Record<string, PrivacyPageHref> = {
+  "/": "/dashboard",
+  "/staff": "/staffdirectory",
+  "/staff/outsourced": "/staffdirectory/outsourced",
+  "/staff/hiring": "/staffdirectory/hiring",
+  "/staff/promotions": "/staffdirectory/promotions",
+  "/schedule": "/staffdeployment",
+};
+
+export function canonicalPrivacyPath(path: string) {
+  return legacyPrivacyPaths[path] ?? path;
+}
+
 export function privacyPageForPath(pathname: string) {
   const ranked = [...privacyPages].sort((left, right) => right.href.length - left.href.length);
 
-  return (
-    ranked.find((page) =>
-      page.href === "/"
-        ? pathname === "/"
-        : pathname === page.href || pathname.startsWith(`${page.href}/`),
-    ) ?? null
-  );
+  return ranked.find((page) => pathname === page.href || pathname.startsWith(`${page.href}/`)) ?? null;
 }
 
 export function pageIsProtected(pathname: string, protectedPages: string[]) {

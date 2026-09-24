@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   DeleteConfirmDialog,
   RowActions,
@@ -15,6 +15,7 @@ import { useStaffDirectory } from "@/components/use-staff-directory";
 import {
   buildStaffWorkbook,
   importStaffWorkbook,
+  mergeImportedStaff,
 } from "@/lib/staff-workbook";
 import { useLocations } from "@/components/use-locations";
 import {
@@ -57,7 +58,7 @@ function emptyDirectoryFilters(): DirectoryFilters {
   };
 }
 
-export function StaffDirectory() {
+export function StaffDirectory({ editId }: { editId?: string }) {
   const { locations } = useLocations();
   const importRef = useRef<HTMLInputElement>(null);
   const formToken = useRef(0);
@@ -86,6 +87,19 @@ export function StaffDirectory() {
     formToken.current += 1;
     setFormRequest({ token: formToken.current, employee });
   }
+
+  const openedEdit = useRef<string | null>(null);
+  useEffect(() => {
+    if (!editId || openedEdit.current === editId) {
+      return;
+    }
+    const employee = employees.find((item) => item.id === editId);
+    if (!employee) {
+      return;
+    }
+    openedEdit.current = editId;
+    openEmployee(employee);
+  }, [editId, employees]);
 
   function saveEmployee(employee: StaffEmployee, previousId: string | null) {
     if (previousId) {
@@ -170,13 +184,20 @@ export function StaffDirectory() {
         return;
       }
 
-      setEmployees((current) => [...current, ...result.employees]);
-      const skipped = result.skipped
-        ? ` ${result.skipped} ${result.skipped === 1 ? "row was" : "rows were"} skipped because a name was missing.`
-        : "";
+      const merged = mergeImportedStaff(
+        employees,
+        result.employees,
+        !result.hasEmployeeIdColumn,
+      );
+      setEmployees(merged.employees);
       setNotice({
         tone: "ok",
-        text: `Imported ${result.employees.length} ${result.employees.length === 1 ? "employee" : "employees"}.${skipped}`,
+        text: staffImportNotice(
+          merged.added,
+          merged.updated,
+          result.skipped,
+          !result.hasEmployeeIdColumn,
+        ),
       });
     } catch {
       setNotice({ tone: "error", text: "That spreadsheet could not be imported." });
@@ -198,7 +219,7 @@ export function StaffDirectory() {
         <div>
           <p className="text-sm text-stone-500">{countLabel}</p>
           <p className="mt-1 max-w-xl text-sm text-stone-500">
-            Kept on this page until you refresh. Nothing is written to the database yet. Export leaves out the profile picture so the same sheet can be filled in and imported.
+            Kept on this page until you refresh. Nothing is written to the database yet. The spreadsheet includes an employee ID so importing it updates that person instead of adding a duplicate. The ID is not shown in this list. Photos stay out of the sheet.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -397,6 +418,33 @@ export function StaffDirectory() {
       />
     </div>
   );
+}
+
+function staffImportNotice(
+  added: number,
+  updated: number,
+  skipped: number,
+  matchedByName: boolean,
+) {
+  const updatedLabel = `${updated} ${updated === 1 ? "employee" : "employees"}`;
+  const addedLabel = `${added} new ${added === 1 ? "employee" : "employees"}`;
+  let text = "Added " + addedLabel + ".";
+  if (updated && added) {
+    text = `Updated ${updatedLabel} and added ${addedLabel}.`;
+  } else if (updated) {
+    text = `Updated ${updatedLabel}.`;
+  }
+
+  if (matchedByName) {
+    text +=
+      " This sheet had no employee ID column, so a row updates someone only when that name belongs to one employee. Export again so each row keeps its employee ID.";
+  }
+
+  if (skipped) {
+    text += ` ${skipped} ${skipped === 1 ? "row was" : "rows were"} skipped because a name was missing.`;
+  }
+
+  return text;
 }
 
 function employeeName(employee: StaffEmployee) {

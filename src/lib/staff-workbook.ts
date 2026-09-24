@@ -1,7 +1,7 @@
 import {
   columnKeyForHeader,
   createEmployeeId,
-  excelHeaders,
+  normalizeHeader,
   resolvePay,
   roundMoney,
   splitFullName,
@@ -12,15 +12,34 @@ import { readXlsx, writeXlsx, type SheetCell } from "@/lib/xlsx-lite";
 
 const MAX_ROWS = 5000;
 
+const employeeIdHeader = "Employee ID";
+const employeeIdAliases = new Set(["employee id", "staff id"]);
+
+const sheetHeaders = [
+  employeeIdHeader,
+  "Full name",
+  "First name",
+  "Last name",
+  "Country",
+  "Date of birth",
+  "Joining date",
+  "Current position",
+  "Current venue",
+  "Basic salary",
+  "Allowances",
+  "Current salary",
+];
+
 export type StaffImport = {
   employees: StaffEmployee[];
   skipped: number;
+  hasEmployeeIdColumn: boolean;
   error?: string;
 };
 
 export async function buildStaffWorkbook(employees: StaffEmployee[]) {
   const rows: SheetCell[][] = [
-    excelHeaders.map((header) => ({ text: header, number: null })),
+    sheetHeaders.map((header) => ({ text: header, number: null })),
     ...employees.map(employeeRow),
   ];
   return writeXlsx(rows);
@@ -34,6 +53,7 @@ export async function importStaffWorkbook(data: ArrayBuffer): Promise<StaffImpor
     return {
       employees: [],
       skipped: 0,
+      hasEmployeeIdColumn: false,
       error: error instanceof Error ? error.message : "That spreadsheet could not be read.",
     };
   }
@@ -46,6 +66,7 @@ export function employeesFromSheet(rows: SheetCell[][]): StaffImport {
     return {
       employees: [],
       skipped: 0,
+      hasEmployeeIdColumn: false,
       error: "That sheet has too many rows to import at once.",
     };
   }
@@ -61,15 +82,24 @@ export function employeesFromSheet(rows: SheetCell[][]): StaffImport {
     return {
       employees: [],
       skipped: 0,
+      hasEmployeeIdColumn: false,
       error:
-        "Export a sheet from this page first. It needs columns for full name, first name, last name, country, date of birth, joining date, current position, current venue, basic salary, allowances, and current salary.",
+        "Export a sheet from this page first. It needs an employee ID, plus columns for full name, first name, last name, country, date of birth, joining date, current position, current venue, basic salary, allowances, and current salary.",
     };
   }
 
+  let employeeIdColumn = -1;
   const columns = new Map<number, StaffColumnKey>();
+  const usedKeys = new Set<StaffColumnKey>();
   rows[headerIndex].forEach((cell, index) => {
+    if (employeeIdColumn === -1 && isEmployeeIdHeader(cell.text)) {
+      employeeIdColumn = index;
+      return;
+    }
+
     const key = columnKeyForHeader(cell.text);
-    if (key) {
+    if (key && !usedKeys.has(key)) {
+      usedKeys.add(key);
       columns.set(index, key);
     }
   });
@@ -87,7 +117,10 @@ export function employeesFromSheet(rows: SheetCell[][]): StaffImport {
       record[key] = row[index] ?? { text: "", number: null };
     }
 
-    const employee = employeeFromRecord(record);
+    const employee = employeeFromRecord(
+      record,
+      employeeIdColumn === -1 ? "" : cellId(row[employeeIdColumn]),
+    );
     if (employee) {
       employees.push(employee);
     } else {
@@ -95,11 +128,111 @@ export function employeesFromSheet(rows: SheetCell[][]): StaffImport {
     }
   }
 
-  return { employees, skipped };
+  return { employees, skipped, hasEmployeeIdColumn: employeeIdColumn !== -1 };
+}
+
+export function mergeImportedStaff(
+  current: StaffEmployee[],
+  imported: StaffEmployee[],
+  matchByName: boolean,
+) {
+  const next = current.map((employee) => ({ ...employee }));
+  const indexById = new Map(next.map((employee, index) => [employee.id, index]));
+  const nameIndex = matchByName ? uniqueNameIndex(next) : null;
+  const touched = new Set<string>();
+  let added = 0;
+  let updated = 0;
+
+  for (const row of imported) {
+    const importedId = row.id.trim();
+    let matchIndex = importedId ? indexById.get(importedId) : undefined;
+    if (matchIndex == null && nameIndex) {
+      const existingId = nameIndex.get(normalizeName(row.fullName));
+      matchIndex = existingId == null ? undefined : indexById.get(existingId);
+    }
+
+    if (matchIndex == null) {
+      const id = importedId || createEmployeeId();
+      const existingIndex = indexById.get(id);
+      if (existingIndex == null) {
+        next.push({ ...row, id });
+        indexById.set(id, next.length - 1);
+        touched.add(id);
+        added += 1;
+        continue;
+      }
+
+      const previous = next[existingIndex];
+      next[existingIndex] = keptIdentity(row, previous);
+      if (!touched.has(previous.id)) {
+        touched.add(previous.id);
+        updated += 1;
+      }
+      continue;
+    }
+
+    const previous = next[matchIndex];
+    next[matchIndex] = keptIdentity(row, previous);
+    if (!touched.has(previous.id)) {
+      touched.add(previous.id);
+      updated += 1;
+    }
+  }
+
+  return { employees: next, added, updated };
+}
+
+function uniqueNameIndex(employees: StaffEmployee[]) {
+  const counts = new Map<string, number>();
+  for (const employee of employees) {
+    const name = normalizeName(employee.fullName);
+    counts.set(name, (counts.get(name) ?? 0) + 1);
+  }
+
+  const index = new Map<string, string>();
+  for (const employee of employees) {
+    const name = normalizeName(employee.fullName);
+    if (name && counts.get(name) === 1) {
+      index.set(name, employee.id);
+    }
+  }
+
+  return index;
+}
+
+function keptIdentity(row: StaffEmployee, previous: StaffEmployee): StaffEmployee {
+  return {
+    ...row,
+    id: previous.id,
+    photo: previous.photo,
+    archived: previous.archived,
+  };
+}
+
+function normalizeName(value: string) {
+  return value.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function isEmployeeIdHeader(value: string) {
+  return employeeIdAliases.has(normalizeHeader(value));
+}
+
+function cellId(cell: SheetCell | undefined) {
+  if (!cell) {
+    return "";
+  }
+
+  const text = cell.text.trim();
+  if (text) {
+    return text;
+  }
+
+  return cell.number == null ? "" : String(cell.number);
 }
 
 function employeeRow(employee: StaffEmployee): SheetCell[] {
   return [
+    { text: employee.id, number: null },
     { text: employee.fullName, number: null },
     { text: employee.firstName, number: null },
     { text: employee.lastName, number: null },
@@ -120,6 +253,7 @@ function moneyCell(value: number | null): SheetCell {
 
 function employeeFromRecord(
   record: Partial<Record<StaffColumnKey, SheetCell>>,
+  employeeId: string,
 ): StaffEmployee | null {
   const text = (key: StaffColumnKey) => record[key]?.text.trim() ?? "";
   let fullName = text("fullName");
@@ -147,7 +281,7 @@ function employeeFromRecord(
   );
 
   return {
-    id: createEmployeeId(),
+    id: employeeId.trim(),
     fullName,
     firstName,
     lastName,

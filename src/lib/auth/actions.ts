@@ -62,7 +62,7 @@ export async function signInAction(
     redirect("/login?setPassword=1");
   }
 
-  redirect("/");
+  redirect("/dashboard");
 }
 
 export async function signUpAction(
@@ -110,7 +110,7 @@ export async function signUpAction(
 
   const cookieStore = await cookies();
   cookieStore.set(REMEMBER_COOKIE, "1", rememberCookieOptions(true));
-  redirect("/");
+  redirect("/dashboard");
 }
 
 export async function recoverPasswordAction(
@@ -173,7 +173,7 @@ export async function setPasswordAction(
   const cookieStore = await cookies();
   cookieStore.set(REMEMBER_COOKIE, "1", rememberCookieOptions(true));
   await recordActivityAction("edit", "Chose a new password", crypto.randomUUID());
-  redirect("/");
+  redirect("/dashboard");
 }
 
 export async function signOutAction() {
