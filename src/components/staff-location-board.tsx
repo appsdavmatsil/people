@@ -304,6 +304,7 @@ function PlacementBoard({
   updateEmployee?: (employee: StaffEmployee) => void;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const profileOpenedAt = useRef(0);
   const arrangeDialogRef = useRef<HTMLDialogElement>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<DragState | null>(null);
@@ -412,12 +413,13 @@ function PlacementBoard({
       return;
     }
 
-    if (dialog && !node.open) {
+    const openBoardDialog = dialog !== null && dialog !== "profile";
+    if (openBoardDialog && !node.open) {
       node.showModal();
       node.querySelector<HTMLInputElement>("input")?.focus();
     }
 
-    if (!dialog && node.open) {
+    if (!openBoardDialog && node.open) {
       node.close();
     }
   }, [dialog]);
@@ -436,6 +438,24 @@ function PlacementBoard({
       node.close();
     }
   }, [arrangePrompt]);
+
+  useEffect(() => {
+    if (dialog !== "profile") {
+      return;
+    }
+
+    function onKey(event: KeyboardEvent) {
+      if (event.key !== "Escape") {
+        return;
+      }
+
+      event.preventDefault();
+      dismissDialog();
+    }
+
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [dialog]);
 
   function dismissDialog() {
     setEditingLabelId(null);
@@ -1554,6 +1574,7 @@ function PlacementBoard({
   }
 
   function openProfile(staffId: string) {
+    profileOpenedAt.current = Date.now();
     setProfileStaffId(staffId);
     setFormError("");
     setPendingRemoveId(null);
@@ -2184,7 +2205,7 @@ function PlacementBoard({
         ref={dialogRef}
         aria-labelledby={titleId}
         className={`m-auto rounded-2xl border border-stone-200 bg-white p-0 text-stone-950 shadow-xl backdrop:bg-stone-950/40 ${
-          dialog === "editStaff" || dialog === "promotion" || dialog === "profile"
+          dialog === "editStaff" || dialog === "promotion"
             ? "flex h-fit max-h-[min(100%-2rem,40rem)] w-[min(100%-2rem,28rem)] flex-col"
             : "h-fit w-[min(100%-2rem,24rem)]"
         }`}
@@ -2463,28 +2484,48 @@ function PlacementBoard({
           </form>
         ) : null}
 
-        {dialog === "profile" && profileStaffId ? (
-          <ProfileDialog
-            titleId={titleId}
-            employee={employees.find((employee) => employee.id === profileStaffId) ?? null}
-            person={placements.find((person) => person.id === profileStaffId) ?? null}
-            venue={profileVenue(
-              employees.find((employee) => employee.id === profileStaffId) ?? null,
-              placements.find((person) => person.id === profileStaffId) ?? null,
-              locations,
-            )}
-            promotions={promotions
-              .filter((promotion) => promotion.staffId === profileStaffId)
-              .sort((left, right) =>
-                textValue(right.effectiveDate).localeCompare(textValue(left.effectiveDate)),
-              )}
-            showPromotions={showPromotions}
-            salaryIsHidden={hideSalary}
-            onClose={dismissDialog}
-          />
-        ) : null}
       </dialog>
       </ModalPortal>
+      {dialog === "profile" && profileStaffId ? (
+        <ModalPortal>
+          <div
+            className="fixed inset-0 z-[80] flex items-center justify-center bg-stone-950/40 p-4"
+            onClick={() => {
+              if (Date.now() - profileOpenedAt.current < 400) {
+                return;
+              }
+              dismissDialog();
+            }}
+          >
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby={titleId}
+              className="flex max-h-[min(100%,40rem)] w-[min(100%,28rem)] flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white text-stone-950 shadow-xl"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <ProfileDialog
+                titleId={titleId}
+                employee={employees.find((employee) => employee.id === profileStaffId) ?? null}
+                person={placements.find((person) => person.id === profileStaffId) ?? null}
+                venue={profileVenue(
+                  employees.find((employee) => employee.id === profileStaffId) ?? null,
+                  placements.find((person) => person.id === profileStaffId) ?? null,
+                  locations,
+                )}
+                promotions={promotions
+                  .filter((promotion) => promotion.staffId === profileStaffId)
+                  .sort((left, right) =>
+                    textValue(right.effectiveDate).localeCompare(textValue(left.effectiveDate)),
+                  )}
+                showPromotions={showPromotions}
+                salaryIsHidden={hideSalary}
+                onClose={dismissDialog}
+              />
+            </div>
+          </div>
+        </ModalPortal>
+      ) : null}
     </div>
   );
 }
@@ -3488,9 +3529,12 @@ function Initials({
       className={`${className} cursor-pointer`}
       aria-label={`View profile for ${name}`}
       onPointerDown={(event) => event.stopPropagation()}
-      onMouseDown={(event) => {
-        event.preventDefault();
+      onPointerUp={(event) => {
+        if (event.button !== 0) {
+          return;
+        }
         event.stopPropagation();
+        onOpen();
       }}
       onClick={(event) => {
         event.stopPropagation();
