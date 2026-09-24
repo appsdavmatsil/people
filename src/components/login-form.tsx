@@ -20,10 +20,12 @@ export function LoginForm({
   mode,
   canSetPassword,
   notice,
+  initialEmail = "",
 }: {
   mode: "sign-in" | "create" | "recover";
   canSetPassword: boolean;
   notice?: string;
+  initialEmail?: string;
 }) {
   return (
     <div className="mt-8 rounded-2xl border border-stone-200 bg-white p-6 shadow-sm">
@@ -34,13 +36,13 @@ export function LoginForm({
       ) : mode === "recover" ? (
         <RecoverForm notice={notice} />
       ) : (
-        <SignInForm notice={notice} />
+        <SignInForm notice={notice} initialEmail={initialEmail} />
       )}
     </div>
   );
 }
 
-function SignInForm({ notice }: { notice?: string }) {
+function SignInForm({ notice, initialEmail }: { notice?: string; initialEmail: string }) {
   const [state, action, pending] = useActionState<AuthState, FormData>(
     signInAction,
     null,
@@ -48,7 +50,7 @@ function SignInForm({ notice }: { notice?: string }) {
 
   return (
     <form action={action} className="space-y-4">
-      <EmailField />
+      <EmailField defaultValue={initialEmail} />
       <PasswordField autoComplete="current-password" />
       <label className="flex items-center gap-2 text-sm text-stone-700">
         <input
@@ -161,7 +163,7 @@ function NameField() {
   );
 }
 
-function EmailField() {
+function EmailField({ defaultValue = "" }: { defaultValue?: string }) {
   return (
     <label className="block text-sm font-medium text-stone-800">
       Email
@@ -170,6 +172,7 @@ function EmailField() {
         type="email"
         autoComplete="email"
         required
+        defaultValue={defaultValue}
         className={fieldClass}
       />
     </label>

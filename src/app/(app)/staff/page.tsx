@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
+import { StaffDirectory } from "@/components/staff-directory";
 
 export const metadata: Metadata = {
-  title: "Staff",
+  title: "Staff Directory",
 };
 
 export default function StaffPage() {
-  return null;
+  return <StaffDirectory />;
 }

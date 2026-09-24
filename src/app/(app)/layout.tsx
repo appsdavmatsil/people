@@ -22,5 +22,9 @@ export default async function AppLayout({
     name = account?.name ?? "";
   }
 
-  return <AppShell name={name} email={email}>{children}</AppShell>;
+  return (
+    <AppShell userId={userId} name={name} email={email}>
+      {children}
+    </AppShell>
+  );
 }

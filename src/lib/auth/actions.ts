@@ -6,7 +6,9 @@ import {
   REMEMBER_COOKIE,
   rememberCookieOptions,
 } from "@/lib/supabase/cookies";
+import { mustChangePassword } from "@/lib/auth/claims";
 import { passwordError } from "@/lib/auth/password";
+import { recordActivityAction } from "@/lib/auth/team";
 import { createClient } from "@/lib/supabase/server";
 
 export type AuthState = {
@@ -53,6 +55,13 @@ export async function signInAction(
 
   const cookieStore = await cookies();
   cookieStore.set(REMEMBER_COOKIE, remember ? "1" : "0", rememberCookieOptions(remember));
+  await recordActivityAction("access", "Signed in", crypto.randomUUID());
+
+  const { data: userData } = await supabase.auth.getUser();
+  if (mustChangePassword(userData.user)) {
+    redirect("/login?setPassword=1");
+  }
+
   redirect("/");
 }
 
@@ -152,7 +161,10 @@ export async function setPasswordAction(
     };
   }
 
-  const { error } = await supabase.auth.updateUser({ password });
+  const { error } = await supabase.auth.updateUser({
+    password,
+    data: { must_change_password: false },
+  });
 
   if (error) {
     return { error: error.message };
@@ -160,6 +172,7 @@ export async function setPasswordAction(
 
   const cookieStore = await cookies();
   cookieStore.set(REMEMBER_COOKIE, "1", rememberCookieOptions(true));
+  await recordActivityAction("edit", "Chose a new password", crypto.randomUUID());
   redirect("/");
 }
 
@@ -180,6 +193,10 @@ function signInMessage(message: string) {
 
   if (normalized.includes("email not confirmed")) {
     return "Confirm your email before signing in.";
+  }
+
+  if (normalized.includes("banned") || normalized.includes("blocked")) {
+    return "This account is blocked.";
   }
 
   return message;

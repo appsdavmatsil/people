@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
+import { StaffLocationBoard } from "@/components/staff-location-board";
 
 export const metadata: Metadata = {
-  title: "Schedule",
+  title: "Staff Location",
 };
 
-export default function SchedulePage() {
-  return null;
+export default function StaffLocationPage() {
+  return <StaffLocationBoard />;
 }

@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { mustChangePassword } from "@/lib/auth/claims";
 import { REMEMBER_COOKIE, withRemember } from "@/lib/supabase/cookies";
 import { getSupabaseEnv } from "@/lib/supabase/env";
 
@@ -38,11 +39,13 @@ export async function proxy(request: NextRequest) {
   });
 
   let userId: string | null = null;
+  let mustChange = false;
 
   try {
     const { data, error } = await supabase.auth.getClaims();
     if (!error && typeof data?.claims?.sub === "string") {
       userId = data.claims.sub;
+      mustChange = mustChangePassword(data.claims);
     }
   } catch {
     userId = null;
@@ -58,6 +61,10 @@ export async function proxy(request: NextRequest) {
     return redirectTo(request, supabaseResponse, "/login");
   }
 
+  if (userId && mustChange && !settingPassword) {
+    return redirectTo(request, supabaseResponse, "/login", "?setPassword=1");
+  }
+
   if (userId && path.startsWith("/login") && !settingPassword) {
     return redirectTo(request, supabaseResponse, "/");
   }
@@ -69,10 +76,11 @@ function redirectTo(
   request: NextRequest,
   supabaseResponse: NextResponse,
   pathname: string,
+  search = "",
 ) {
   const url = request.nextUrl.clone();
   url.pathname = pathname;
-  url.search = "";
+  url.search = search;
   const redirectResponse = NextResponse.redirect(url);
   supabaseResponse.cookies.getAll().forEach((cookie) => {
     redirectResponse.cookies.set(cookie);

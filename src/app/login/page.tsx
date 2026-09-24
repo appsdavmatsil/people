@@ -9,7 +9,7 @@ export const metadata: Metadata = {
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ mode?: string; setPassword?: string; error?: string }>;
+  searchParams: Promise<{ mode?: string; setPassword?: string; error?: string; email?: string }>;
 }) {
   const params = await searchParams;
   const mode =
@@ -41,6 +41,7 @@ export default async function LoginPage({
           mode={notice ? "recover" : mode}
           canSetPassword={canSetPassword}
           notice={notice}
+          initialEmail={params.email ?? ""}
         />
       </div>
     </main>
