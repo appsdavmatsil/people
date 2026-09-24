@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { columnRows, reanchorLabels, type BoardLabel, type ColumnRow } from "@/lib/board-labels";
 import { columnOrderKey, type ColumnOrders } from "@/lib/board-order";
@@ -405,9 +406,9 @@ function PlacementBoard({
     }
   }, [employees, kind, promotions, today, updateEmployees, updatePromotions]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const node = dialogRef.current;
-    if (!node) {
+    if (!node?.isConnected) {
       return;
     }
 
@@ -421,9 +422,9 @@ function PlacementBoard({
     }
   }, [dialog]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const node = arrangeDialogRef.current;
-    if (!node) {
+    if (!node?.isConnected) {
       return;
     }
 
@@ -435,6 +436,14 @@ function PlacementBoard({
       node.close();
     }
   }, [arrangePrompt]);
+
+  function dismissDialog() {
+    setEditingLabelId(null);
+    setCardLabelStaffId(null);
+    setEditForm(null);
+    setProfileStaffId(null);
+    setDialog(null);
+  }
 
   function requestArrangeToggle() {
     if (!arrangementLocked) {
@@ -1661,7 +1670,6 @@ function PlacementBoard({
     }
 
     if ((event.target as HTMLElement).closest("[data-profile]")) {
-      event.preventDefault();
       return;
     }
 
@@ -1976,6 +1984,7 @@ function PlacementBoard({
         {status}
       </p>
       {arrangePrompt ? (
+        <ModalPortal>
         <dialog
           ref={arrangeDialogRef}
           className="m-auto h-fit w-[min(100%-2rem,28rem)] rounded-2xl border border-stone-200 bg-white p-0 text-stone-950 shadow-xl backdrop:bg-stone-950/40"
@@ -2028,6 +2037,7 @@ function PlacementBoard({
             </div>
           </form>
         </dialog>
+        </ModalPortal>
       ) : null}
 
       <div
@@ -2169,6 +2179,7 @@ function PlacementBoard({
         </div>
       ) : null}
 
+      <ModalPortal>
       <dialog
         ref={dialogRef}
         aria-labelledby={titleId}
@@ -2177,19 +2188,14 @@ function PlacementBoard({
             ? "flex h-fit max-h-[min(100%-2rem,40rem)] w-[min(100%-2rem,28rem)] flex-col"
             : "h-fit w-[min(100%-2rem,24rem)]"
         }`}
-        onClose={(event) => {
-          if (event.target !== event.currentTarget) {
-            return;
-          }
-          setEditingLabelId(null);
-          setCardLabelStaffId(null);
-          setEditForm(null);
-          setProfileStaffId(null);
-          setDialog(null);
+        onCancel={(event) => {
+          event.preventDefault();
+          dismissDialog();
         }}
+        onClose={dismissDialog}
         onClick={(event) => {
           if (event.target === event.currentTarget) {
-            event.currentTarget.close();
+            dismissDialog();
           }
         }}
       >
@@ -2203,7 +2209,7 @@ function PlacementBoard({
               formError={formError}
               onSelect={setSelectedEventId}
               onSubmit={addVenue}
-              onClose={() => dialogRef.current?.close()}
+              onClose={dismissDialog}
             />
           ) : (
             <VenuePicker
@@ -2214,7 +2220,7 @@ function PlacementBoard({
               formError={formError}
               onSelect={setSelectedVenueId}
               onSubmit={addVenue}
-              onClose={() => dialogRef.current?.close()}
+              onClose={dismissDialog}
             />
           )
         ) : null}
@@ -2226,7 +2232,7 @@ function PlacementBoard({
               title="Unassigned staff"
               description="People in the staff directory who are not linked to a venue."
               icon={<UnassignedIcon />}
-              onClose={() => dialogRef.current?.close()}
+              onClose={dismissDialog}
             />
             <ul className="max-h-[min(24rem,calc(100dvh-12rem))] overflow-y-auto px-5 py-2">
               {unassignedPeople.length === 0 ? (
@@ -2253,7 +2259,7 @@ function PlacementBoard({
               <button
                 type="button"
                 className={secondaryButtonClass}
-                onClick={() => dialogRef.current?.close()}
+                onClick={dismissDialog}
               >
                 Close
               </button>
@@ -2272,7 +2278,7 @@ function PlacementBoard({
                   : "They land in the location you pick. Drag the card to move them."
               }
               icon={<AddStaffIcon />}
-              onClose={() => dialogRef.current?.close()}
+              onClose={dismissDialog}
             />
             <div className="space-y-4 px-5 py-4">
               <StaffCombobox
@@ -2302,7 +2308,7 @@ function PlacementBoard({
               </label>
               {formError ? <p className="text-sm text-red-700">{formError}</p> : null}
             </div>
-            <DialogFooter onClose={() => dialogRef.current?.close()} submitLabel="Add staff" />
+            <DialogFooter onClose={dismissDialog} submitLabel="Add staff" />
           </form>
         ) : null}
 
@@ -2317,7 +2323,7 @@ function PlacementBoard({
                   : "It is placed above the card you right-clicked."
               }
               icon={editingLabelId ? <PencilIcon /> : <PlusIcon />}
-              onClose={() => dialogRef.current?.close()}
+              onClose={dismissDialog}
             />
             <div className="space-y-4 px-5 py-4">
               <label className="block text-sm font-medium text-stone-800">
@@ -2332,7 +2338,7 @@ function PlacementBoard({
               {formError ? <p className="text-sm text-red-700">{formError}</p> : null}
             </div>
             <DialogFooter
-              onClose={() => dialogRef.current?.close()}
+              onClose={dismissDialog}
               submitLabel={editingLabelId ? "Save separation" : "Add separation"}
             />
           </form>
@@ -2345,7 +2351,7 @@ function PlacementBoard({
               title="Edit staff"
               description="Changes save on this person."
               icon={<PencilIcon />}
-              onClose={() => dialogRef.current?.close()}
+              onClose={dismissDialog}
             />
             <StaffEditFields
               form={editForm}
@@ -2355,7 +2361,7 @@ function PlacementBoard({
               onChange={setEditForm}
             />
             {formError ? <p className="px-5 pb-4 text-sm text-red-700">{formError}</p> : null}
-            <DialogFooter onClose={() => dialogRef.current?.close()} submitLabel="Save staff" />
+            <DialogFooter onClose={dismissDialog} submitLabel="Save staff" />
           </form>
         ) : null}
 
@@ -2376,10 +2382,10 @@ function PlacementBoard({
             onPosition={selectHiringPosition}
             onSalary={setHiringSalary}
             onSubmit={saveHiringRole}
-            onClose={() => dialogRef.current?.close()}
+            onClose={dismissDialog}
             onFinished={(message) => {
               setStatus(message);
-              dialogRef.current?.close();
+              dismissDialog();
             }}
           />
         ) : null}
@@ -2395,7 +2401,7 @@ function PlacementBoard({
                 "Choose the new position, salary package, and effective date."
               }
               icon={<UpArrowIcon />}
-              onClose={() => dialogRef.current?.close()}
+              onClose={dismissDialog}
             />
             <PromotionFields
               positionId={promotionPositionId}
@@ -2413,7 +2419,7 @@ function PlacementBoard({
             />
             {formError ? <p className="px-5 pb-4 text-sm text-red-700">{formError}</p> : null}
             <DialogFooter
-              onClose={() => dialogRef.current?.close()}
+              onClose={dismissDialog}
               submitLabel={promotionId ? "Save promotion" : "Apply promotion"}
             />
           </form>
@@ -2434,7 +2440,7 @@ function PlacementBoard({
                   <PlusIcon />
                 )
               }
-              onClose={() => dialogRef.current?.close()}
+              onClose={dismissDialog}
             />
             <div className="space-y-4 px-5 py-4">
               <label className="block text-sm font-medium text-stone-800">
@@ -2449,7 +2455,7 @@ function PlacementBoard({
               {formError ? <p className="text-sm text-red-700">{formError}</p> : null}
             </div>
             <DialogFooter
-              onClose={() => dialogRef.current?.close()}
+              onClose={dismissDialog}
               submitLabel={
                 cardLabelStaffId && cardLabelByStaff.has(cardLabelStaffId) ? "Save label" : "Add label"
               }
@@ -2469,15 +2475,32 @@ function PlacementBoard({
             )}
             promotions={promotions
               .filter((promotion) => promotion.staffId === profileStaffId)
-              .sort((left, right) => right.effectiveDate.localeCompare(left.effectiveDate))}
+              .sort((left, right) =>
+                textValue(right.effectiveDate).localeCompare(textValue(left.effectiveDate)),
+              )}
             showPromotions={showPromotions}
             salaryIsHidden={hideSalary}
-            onClose={() => dialogRef.current?.close()}
+            onClose={dismissDialog}
           />
         ) : null}
       </dialog>
+      </ModalPortal>
     </div>
   );
+}
+
+function ModalPortal({ children }: { children: React.ReactNode }) {
+  const [ready, setReady] = useState(false);
+
+  useLayoutEffect(() => {
+    setReady(true);
+  }, []);
+
+  if (!ready) {
+    return null;
+  }
+
+  return createPortal(children, document.body);
 }
 
 type VenueCosts = {
@@ -3465,6 +3488,10 @@ function Initials({
       className={`${className} cursor-pointer`}
       aria-label={`View profile for ${name}`}
       onPointerDown={(event) => event.stopPropagation()}
+      onMouseDown={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+      }}
       onClick={(event) => {
         event.stopPropagation();
         onOpen();
@@ -3494,12 +3521,12 @@ function ProfileDialog({
   salaryIsHidden: (position: string) => boolean;
   onClose: () => void;
 }) {
-  const name = employee?.fullName || person?.name || "Staff";
-  const position = employee?.position || person?.position || "";
+  const name = textValue(employee?.fullName) || textValue(person?.name) || "Staff";
+  const position = textValue(employee?.position) || textValue(person?.position);
   const salary = employee?.salary ?? person?.salary ?? null;
-  const country = employee?.nationality.trim() ?? "";
+  const country = textValue(employee?.nationality);
   const flag = country ? countryFlag(country) : "";
-  const dob = employee?.dateOfBirth ?? "";
+  const dob = textValue(employee?.dateOfBirth);
   const age = ageFromIso(dob);
   const photo = employee?.photo ?? null;
   const records = showPromotions ? promotions : [];
@@ -3582,12 +3609,16 @@ function ProfileRow({ label, value }: { label: string; value: string }) {
   );
 }
 
+function textValue(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
 function profileVenue(
   employee: StaffEmployee | null,
   person: StaffPlacement | null,
   locations: LocationReference[],
 ) {
-  const saved = employee?.venue.trim() ?? "";
+  const saved = textValue(employee?.venue);
   if (saved) {
     return saved;
   }
