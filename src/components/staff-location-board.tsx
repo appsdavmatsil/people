@@ -14,7 +14,7 @@ import { useCardLabels, useEventCardLabels } from "@/components/use-card-labels"
 import { DashboardVisibilityButton } from "@/components/dashboard-visibility";
 import { usePrivacy } from "@/components/privacy-provider";
 import { privacyUnlockAction } from "@/lib/privacy-actions";
-import { DateField } from "@/components/date-field";
+import { DateField, keepDialogForDatePicker } from "@/components/date-field";
 import { HireIcon, PencilIcon, PlusIcon, TrashIcon } from "@/components/directory-actions";
 import { HiringOpeningActions } from "@/components/hiring-opening-actions";
 import { useDirectoryLookups } from "@/components/use-directory-lookups";
@@ -2211,13 +2211,17 @@ function PlacementBoard({
         }`}
         onCancel={(event) => {
           event.preventDefault();
+          if (keepDialogForDatePicker(event.currentTarget)) {
+            return;
+          }
           dismissDialog();
         }}
         onClose={dismissDialog}
         onClick={(event) => {
-          if (event.target === event.currentTarget) {
-            dismissDialog();
+          if (event.target !== event.currentTarget || keepDialogForDatePicker(event.currentTarget)) {
+            return;
           }
+          dismissDialog();
         }}
       >
         {dialog === "venue" ? (

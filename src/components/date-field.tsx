@@ -1,9 +1,17 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { formatDate } from "@/lib/staff";
 
 const weekdays = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
+
+export function keepDialogForDatePicker(dialog: EventTarget) {
+  return (
+    dialog instanceof HTMLDialogElement &&
+    (dialog.hasAttribute("data-date-just-picked") || dialog.querySelector("[data-date-popover]") != null)
+  );
+}
 
 export function DateField({
   value,
@@ -13,20 +21,65 @@ export function DateField({
   onChange: (value: string) => void;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
+  const [host, setHost] = useState<HTMLElement | null>(null);
   const [view, setView] = useState(() => monthOf(value));
+  const [coords, setCoords] = useState<{ top: number; left: number } | null>(null);
+
+  useLayoutEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    const panel = panelRef.current;
+    const button = buttonRef.current;
+    if (!panel || !button) {
+      return;
+    }
+
+    if (!panel.matches(":popover-open")) {
+      panel.showPopover();
+    }
+
+    function place() {
+      const currentPanel = panelRef.current;
+      const currentButton = buttonRef.current;
+      if (!currentPanel || !currentButton) {
+        return;
+      }
+
+      const rect = currentButton.getBoundingClientRect();
+      const width = currentPanel.offsetWidth;
+      const height = currentPanel.offsetHeight;
+      const margin = 8;
+      const below = window.innerHeight - rect.bottom - margin;
+      const top =
+        below >= height || below >= rect.top - margin
+          ? Math.min(rect.bottom + margin, Math.max(margin, window.innerHeight - height - margin))
+          : Math.max(margin, rect.top - height - margin);
+      const left = Math.min(Math.max(margin, rect.left), Math.max(margin, window.innerWidth - width - margin));
+      setCoords({ top, left });
+    }
+
+    place();
+    window.addEventListener("resize", place);
+    return () => window.removeEventListener("resize", place);
+  }, [open, view]);
 
   useEffect(() => {
     if (!open) {
       return;
     }
 
-    setView(monthOf(value));
-    panelRef.current?.scrollIntoView({ block: "nearest" });
-
     function onPointer(event: PointerEvent) {
-      if (event.target instanceof Node && rootRef.current?.contains(event.target)) {
+      const target = event.target;
+      if (!(target instanceof Node)) {
+        return;
+      }
+
+      if (rootRef.current?.contains(target) || panelRef.current?.contains(target)) {
         return;
       }
 
@@ -34,18 +87,22 @@ export function DateField({
     }
 
     function onKey(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        setOpen(false);
+      if (event.key !== "Escape") {
+        return;
       }
+
+      event.preventDefault();
+      event.stopPropagation();
+      setOpen(false);
     }
 
-    window.addEventListener("pointerdown", onPointer);
-    window.addEventListener("keydown", onKey);
+    window.addEventListener("pointerdown", onPointer, true);
+    window.addEventListener("keydown", onKey, true);
     return () => {
-      window.removeEventListener("pointerdown", onPointer);
-      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("pointerdown", onPointer, true);
+      window.removeEventListener("keydown", onKey, true);
     };
-  }, [open, value]);
+  }, [open]);
 
   const selected = parseIso(value);
   const today = todayParts();
@@ -56,6 +113,11 @@ export function DateField({
   }).format(new Date(view.year, view.month, 1));
 
   function choose(year: number, month: number, day: number) {
+    const dialog = buttonRef.current?.closest("dialog");
+    if (dialog) {
+      dialog.setAttribute("data-date-just-picked", "");
+      window.setTimeout(() => dialog.removeAttribute("data-date-just-picked"), 400);
+    }
     onChange(toIso(year, month, day));
     setOpen(false);
   }
@@ -67,24 +129,43 @@ export function DateField({
     });
   }
 
+  function toggle() {
+    setHost(buttonRef.current?.closest("dialog") ?? document.body);
+    setView(monthOf(value));
+    setOpen((current) => !current);
+  }
+
   return (
     <div ref={rootRef} className="relative mt-1.5">
       <button
+        ref={buttonRef}
         type="button"
         aria-haspopup="dialog"
         aria-expanded={open}
-        onClick={() => setOpen((current) => !current)}
+        onClick={toggle}
         className="flex h-9 w-full items-center justify-between gap-3 rounded-lg border border-stone-300 bg-white px-3 text-left text-sm text-stone-950 outline-none hover:border-stone-400 focus:border-stone-950"
       >
         <span className={value ? "" : "text-stone-400"}>{value ? formatDate(value) : "Choose a date"}</span>
         <CalendarIcon />
       </button>
-      {open ? (
+      {open && host
+        ? createPortal(
         <div
           ref={panelRef}
+          popover="manual"
+          data-date-popover=""
           role="dialog"
           aria-label={monthLabel}
-          className="mt-2 w-full rounded-xl border border-stone-200 bg-stone-50 p-3"
+          style={{
+            position: "fixed",
+            margin: 0,
+            inset: "auto",
+            top: coords?.top ?? 0,
+            left: coords?.left ?? 0,
+          }}
+          className="z-[90] w-72 rounded-xl border border-stone-200 bg-white p-3 text-stone-950 shadow-xl"
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={(event) => event.stopPropagation()}
         >
           <div className="flex items-center justify-between gap-2">
             <button
@@ -163,8 +244,10 @@ export function DateField({
               Close
             </button>
           </div>
-        </div>
-      ) : null}
+        </div>,
+          host,
+        )
+        : null}
     </div>
   );
 }

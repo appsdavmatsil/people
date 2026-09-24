@@ -10,7 +10,7 @@ import {
   ShowArchivedButton,
   isArchived,
 } from "@/components/directory-actions";
-import { DateField } from "@/components/date-field";
+import { DateField, keepDialogForDatePicker } from "@/components/date-field";
 import { useDirectoryLookups } from "@/components/use-directory-lookups";
 import { usePromotions } from "@/components/use-promotions";
 import { useStaffDirectory } from "@/components/use-staff-directory";
@@ -511,10 +511,16 @@ export function Promotions() {
         ref={dialogRef}
         aria-labelledby="new-promotion-title"
         className="m-auto h-fit max-h-[calc(100dvh-2rem)] w-[min(100%-2rem,40rem)] overflow-hidden rounded-2xl border border-stone-200 bg-white p-0 text-stone-950 shadow-xl backdrop:bg-stone-950/40"
-        onClick={(event) => {
-          if (event.target === event.currentTarget) {
-            event.currentTarget.close();
+        onCancel={(event) => {
+          if (keepDialogForDatePicker(event.currentTarget)) {
+            event.preventDefault();
           }
+        }}
+        onClick={(event) => {
+          if (event.target !== event.currentTarget || keepDialogForDatePicker(event.currentTarget)) {
+            return;
+          }
+          event.currentTarget.close();
         }}
       >
         <form onSubmit={recordPromotion} className="flex max-h-[calc(100dvh-2rem)] flex-col">
