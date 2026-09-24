@@ -10,29 +10,88 @@ export type OutsourcedPerson = {
   archived?: boolean;
 };
 
+export const outsourcedKey = "people.outsourced";
+export const outsourcedEvent = "people-outsourced";
+
 const empty: OutsourcedPerson[] = [];
-let snapshot: OutsourcedPerson[] = empty;
-const listeners = new Set<() => void>();
+let clientRaw: string | null = null;
+let clientSnapshot: OutsourcedPerson[] | null = null;
+let serverSnapshot: OutsourcedPerson[] | null = null;
 
 export function getServerOutsourced() {
-  return empty;
+  serverSnapshot ??= empty;
+  return serverSnapshot;
 }
 
 export function getOutsourcedSnapshot() {
-  return snapshot;
+  if (typeof window === "undefined") {
+    return getServerOutsourced();
+  }
+
+  let raw: string | null = null;
+  try {
+    raw = window.localStorage.getItem(outsourcedKey);
+  } catch {
+    raw = null;
+  }
+
+  if (clientSnapshot && raw === clientRaw) {
+    return clientSnapshot;
+  }
+
+  clientRaw = raw;
+  clientSnapshot = parseStoredOutsourced(raw);
+  return clientSnapshot;
 }
 
 export function saveOutsourced(people: OutsourcedPerson[]) {
-  snapshot = people;
-  for (const listener of listeners) {
-    listener();
+  const raw = JSON.stringify(people);
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem(outsourcedKey, raw);
+    window.dispatchEvent(new Event(outsourcedEvent));
   }
-  return snapshot;
+  clientRaw = raw;
+  clientSnapshot = people;
+  return people;
 }
 
 export function subscribeOutsourced(onStoreChange: () => void) {
-  listeners.add(onStoreChange);
+  function onStorage(event: StorageEvent) {
+    if (event.key !== outsourcedKey) {
+      return;
+    }
+
+    onStoreChange();
+  }
+
+  window.addEventListener("storage", onStorage);
+  window.addEventListener(outsourcedEvent, onStoreChange);
   return () => {
-    listeners.delete(onStoreChange);
+    window.removeEventListener("storage", onStorage);
+    window.removeEventListener(outsourcedEvent, onStoreChange);
   };
+}
+
+function parseStoredOutsourced(raw: string | null) {
+  if (!raw) {
+    return empty;
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) {
+      return empty;
+    }
+
+    return parsed.filter((item): item is OutsourcedPerson => {
+      if (!item || typeof item !== "object") {
+        return false;
+      }
+
+      const person = item as OutsourcedPerson;
+      return typeof person.id === "string" && typeof person.fullName === "string";
+    });
+  } catch {
+    return empty;
+  }
 }

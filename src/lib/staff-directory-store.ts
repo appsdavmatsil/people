@@ -10,25 +10,50 @@ import {
 } from "@/lib/staff-placements";
 import type { StaffEmployee } from "@/lib/staff";
 
-let snapshot: StaffEmployee[] = staffRoster;
-const listeners = new Set<() => void>();
+export const staffDirectoryKey = "people.staff-directory";
+export const staffDirectoryEvent = "people-staff-directory";
+
+let clientRaw: string | null = null;
+let clientSnapshot: StaffEmployee[] | null = null;
 
 export function getServerStaffDirectory() {
   return staffRoster;
 }
 
 export function getStaffDirectorySnapshot() {
-  return snapshot;
+  if (typeof window === "undefined") {
+    return getServerStaffDirectory();
+  }
+
+  let raw: string | null = null;
+  try {
+    raw = window.localStorage.getItem(staffDirectoryKey);
+  } catch {
+    raw = null;
+  }
+
+  if (clientSnapshot && raw === clientRaw) {
+    return clientSnapshot;
+  }
+
+  clientRaw = raw;
+  clientSnapshot = parseStoredStaff(raw);
+  return clientSnapshot;
 }
 
 export function saveStaffDirectory(employees: StaffEmployee[]) {
-  snapshot = employees;
+  const raw = JSON.stringify(employees);
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem(staffDirectoryKey, raw);
+  }
+  clientRaw = raw;
+  clientSnapshot = employees;
   noteEdit("Updated the staff directory");
   syncLinkedNames(employees);
-  for (const listener of listeners) {
-    listener();
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event(staffDirectoryEvent));
   }
-  return snapshot;
+  return employees;
 }
 
 function syncLinkedNames(employees: StaffEmployee[]) {
@@ -77,8 +102,56 @@ function syncPlacementNames(
 }
 
 export function subscribeStaffDirectory(onStoreChange: () => void) {
-  listeners.add(onStoreChange);
+  function onStorage(event: StorageEvent) {
+    if (event.key !== staffDirectoryKey) {
+      return;
+    }
+
+    onStoreChange();
+  }
+
+  window.addEventListener("storage", onStorage);
+  window.addEventListener(staffDirectoryEvent, onStoreChange);
   return () => {
-    listeners.delete(onStoreChange);
+    window.removeEventListener("storage", onStorage);
+    window.removeEventListener(staffDirectoryEvent, onStoreChange);
   };
+}
+
+function parseStoredStaff(raw: string | null) {
+  if (!raw) {
+    return staffRoster;
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!Array.isArray(parsed)) {
+      return staffRoster;
+    }
+
+    const employees: StaffEmployee[] = [];
+    for (const item of parsed) {
+      if (!isStaffEmployee(item)) {
+        continue;
+      }
+      employees.push(item);
+    }
+
+    if (parsed.length > 0 && employees.length === 0) {
+      return staffRoster;
+    }
+
+    return employees;
+  } catch {
+    return staffRoster;
+  }
+}
+
+function isStaffEmployee(value: unknown): value is StaffEmployee {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const employee = value as StaffEmployee;
+  return typeof employee.id === "string" && typeof employee.fullName === "string";
 }

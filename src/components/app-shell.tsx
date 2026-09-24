@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { PrivacyGate } from "@/components/privacy-gate";
 import { PrivacyProvider } from "@/components/privacy-provider";
+import { WorkspaceSync } from "@/components/workspace-sync";
 import { noteAccess, setActivityActor } from "@/lib/activity";
 import { signOutAction } from "@/lib/auth/actions";
 import { isAppPage, pageForPath, pages, profilePage } from "@/lib/nav";
@@ -148,6 +149,7 @@ export function AppShell({
           </h1>
           <AccountMenu userId={userId} name={name} email={email} />
         </header>
+        <WorkspaceSync userId={userId} />
         <PrivacyProvider>
           <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
             <PrivacyGate>{children}</PrivacyGate>
