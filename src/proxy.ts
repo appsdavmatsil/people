@@ -52,7 +52,12 @@ export async function proxy(request: NextRequest) {
   }
 
   const path = request.nextUrl.pathname;
-  const isPublic = path.startsWith("/login") || path.startsWith("/auth");
+  const isPublic =
+    path.startsWith("/login") ||
+    path.startsWith("/auth") ||
+    path === "/install" ||
+    path === "/manifest.webmanifest" ||
+    path === "/sw.js";
   const settingPassword =
     path.startsWith("/login") &&
     request.nextUrl.searchParams.get("setPassword") === "1";

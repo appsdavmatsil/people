@@ -14,6 +14,8 @@ import { profileAvatarEvent, profileAvatarKey } from "@/lib/profile-avatar";
 const sidebarCollapsedKey = "people-sidebar-collapsed";
 const zoomKey = "people.zoom";
 const zoomLevels = [0.8, 0.9, 1, 1.1, 1.25, 1.5];
+const mobileNavCompactRange = 80;
+const mobileNavMinimumScale = 0.76;
 
 export function AppShell({
   children,
@@ -28,8 +30,11 @@ export function AppShell({
 }) {
   const pathname = usePathname();
   const current = pageForPath(pathname);
-  const [open, setOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
+  const [mobileNavCompact, setMobileNavCompact] = useState(0);
+  const mobileNavCompactRef = useRef(0);
+  const lastScrollTopRef = useRef(0);
+  const scrollTargetRef = useRef<EventTarget | null>(null);
 
   useEffect(() => {
     setCollapsed(window.localStorage.getItem(sidebarCollapsedKey) === "1");
@@ -45,8 +50,35 @@ export function AppShell({
   }, [userId]);
 
   useEffect(() => {
-    setOpen(false);
-  }, [pathname]);
+    function onScroll(event: Event) {
+      const target = event.target === document ? document.scrollingElement : event.target;
+      if (!(target instanceof HTMLElement)) return;
+
+      if (scrollTargetRef.current !== target) {
+        scrollTargetRef.current = target;
+        lastScrollTopRef.current = 0;
+      }
+
+      const top = target.scrollTop;
+      const delta = top - lastScrollTopRef.current;
+      lastScrollTopRef.current = top;
+
+      const next =
+        top <= 0
+          ? 0
+          : Math.min(
+              1,
+              Math.max(0, mobileNavCompactRef.current + delta / mobileNavCompactRange),
+            );
+
+      if (Math.abs(next - mobileNavCompactRef.current) < 0.002) return;
+      mobileNavCompactRef.current = next;
+      setMobileNavCompact(next);
+    }
+
+    document.addEventListener("scroll", onScroll, true);
+    return () => document.removeEventListener("scroll", onScroll, true);
+  }, []);
 
   function toggleCollapsed() {
     setCollapsed((current) => {
@@ -56,21 +88,14 @@ export function AppShell({
     });
   }
 
+  const mobileNavScale = 1 - mobileNavCompact * (1 - mobileNavMinimumScale);
+
   return (
     <div className="flex h-dvh min-h-0 flex-1 overflow-hidden">
-      {open ? (
-        <button
-          type="button"
-          aria-label="Close menu"
-          className="fixed inset-0 z-20 bg-stone-950/30 md:hidden"
-          onClick={() => setOpen(false)}
-        />
-      ) : null}
-
       <aside
-        className={`fixed inset-y-0 left-0 z-30 flex h-dvh w-52 flex-col overflow-hidden border-r border-stone-200 bg-stone-50 transition-[width,transform] duration-200 ease-out md:translate-x-0 ${
-          open ? "translate-x-0" : "-translate-x-full"
-        } ${collapsed ? "md:w-14" : "md:w-52"}`}
+        className={`fixed inset-y-0 left-0 z-30 hidden h-dvh w-52 flex-col overflow-hidden border-r border-stone-200 bg-stone-50 transition-[width] duration-200 ease-out md:flex ${
+          collapsed ? "md:w-14" : "md:w-52"
+        }`}
       >
         <div className="flex h-14 shrink-0 items-center border-b border-stone-200 px-2">
           <button
@@ -133,16 +158,12 @@ export function AppShell({
         </nav>
       </aside>
 
-      <div className={`flex min-h-0 min-w-0 flex-1 flex-col ${collapsed ? "md:pl-14" : "md:pl-52"}`}>
+      <div
+        className={`flex min-h-0 min-w-0 flex-1 flex-col pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-0 ${
+          collapsed ? "md:pl-14" : "md:pl-52"
+        }`}
+      >
         <header className="flex h-14 shrink-0 items-center gap-3 border-b border-stone-200 px-4">
-          <button
-            type="button"
-            className="flex size-8 items-center justify-center rounded-lg text-stone-700 md:hidden"
-            aria-label="Open menu"
-            onClick={() => setOpen(true)}
-          >
-            <MenuIcon />
-          </button>
           <h1 className="flex min-w-0 items-center gap-2 text-base font-semibold tracking-tight text-stone-950">
             {current ? <PageIcon href={current.href} /> : null}
             <span className="truncate">{current?.title ?? "People"}</span>
@@ -155,6 +176,47 @@ export function AppShell({
             <PrivacyGate>{children}</PrivacyGate>
           </main>
         </PrivacyProvider>
+      </div>
+      <div className="pointer-events-none fixed inset-x-0 bottom-[max(10px,env(safe-area-inset-bottom))] z-30 flex justify-center px-4 md:hidden">
+        <nav
+          aria-label="Mobile pages"
+          className="pointer-events-auto w-full max-w-md rounded-full border border-black/[0.06] bg-white/[0.94] p-1.5 shadow-[0_8px_28px_rgb(0_0_0/0.10),0_1px_3px_rgb(0_0_0/0.05)] backdrop-blur-[20px] backdrop-saturate-[160%]"
+          style={{
+            transform: `scale(${mobileNavScale})`,
+            transformOrigin: "50% 100%",
+            transition:
+              mobileNavCompact === 0 || mobileNavCompact === 1
+                ? "transform 180ms ease-out"
+                : undefined,
+          }}
+        >
+          <div className="grid grid-cols-5 gap-0.5">
+            {pages.map((page) => {
+              const active = isAppPage(pathname, page.href);
+              const Icon = pageIcons[page.href];
+
+              return (
+                <Link
+                  key={page.href}
+                  href={page.href}
+                  aria-current={active ? "page" : undefined}
+                  aria-label={page.title}
+                  title={page.title}
+                  className={`flex min-h-[3.25rem] min-w-0 items-center justify-center rounded-full px-1 py-1 transition-[background-color,color,transform] duration-200 active:scale-95 ${
+                    active
+                      ? "bg-black/[0.10] text-black [&_svg]:stroke-[2.25]"
+                      : "text-black/75 [&_svg]:stroke-[1.85]"
+                  }`}
+                >
+                  <span className="grid size-8 place-items-center [&_svg]:size-6">
+                    <Icon />
+                  </span>
+                  <span className="sr-only">{page.title}</span>
+                </Link>
+              );
+            })}
+          </div>
+        </nav>
       </div>
     </div>
   );
@@ -553,19 +615,6 @@ function ProfileIcon({ className = "size-5 shrink-0" }: { className?: string }) 
       <path
         d="M3.2 13.2c.9-2.1 2.6-3.2 4.8-3.2s3.9 1.1 4.8 3.2"
         fill="none"
-        stroke="currentColor"
-        strokeWidth="1.4"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
-
-function MenuIcon() {
-  return (
-    <svg className="size-5 shrink-0" viewBox="0 0 16 16" aria-hidden="true">
-      <path
-        d="M2 4.5h12M2 8h12M2 11.5h12"
         stroke="currentColor"
         strokeWidth="1.4"
         strokeLinecap="round"

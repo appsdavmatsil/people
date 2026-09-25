@@ -1126,11 +1126,13 @@ function PlacementBoard({
       : person?.locationId && knownIds.has(person.locationId)
         ? person.locationId
         : "";
+    const fullName = employee?.fullName ?? person?.name ?? "";
+    const nameParts = splitFullName(fullName);
     setEditForm({
       id: staffId,
-      fullName: employee?.fullName ?? person?.name ?? "",
-      firstName: employee?.firstName ?? "",
-      lastName: employee?.lastName ?? "",
+      fullName,
+      firstName: employee?.firstName || nameParts.firstName,
+      lastName: employee?.lastName || nameParts.lastName,
       nationality: employee?.nationality ?? "",
       dateOfBirth: employee?.dateOfBirth ?? "",
       joiningDate: employee?.joiningDate ?? "",
@@ -2991,6 +2993,15 @@ function LocationColumn({
   const empty = itemCount === 0;
   const ink = headerInk(color);
   const menuRef = useRef<HTMLDivElement>(null);
+  const longPressRef = useRef<{
+    timer: ReturnType<typeof setTimeout>;
+    pointerId: number;
+    x: number;
+    y: number;
+    target: Element;
+    currentTarget: HTMLElement;
+  } | null>(null);
+  const suppressContextMenuRef = useRef(false);
   const [menu, setMenu] = useState<{
     x: number;
     y: number;
@@ -3000,7 +3011,17 @@ function LocationColumn({
     labelId: string | null;
     hiringId: string | null;
     onList: boolean;
+    mobile: boolean;
   } | null>(null);
+
+  useEffect(
+    () => () => {
+      if (longPressRef.current) {
+        clearTimeout(longPressRef.current.timer);
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!menu) {
@@ -3037,9 +3058,13 @@ function LocationColumn({
     };
   }, [menu, onAskRemove, pendingRemove]);
 
-  function openMenu(event: React.MouseEvent<HTMLElement>) {
-    event.preventDefault();
-    const target = event.target instanceof Element ? event.target : null;
+  function showMenu(
+    target: Element | null,
+    currentTarget: HTMLElement,
+    clientX: number,
+    clientY: number,
+    mobile: boolean,
+  ) {
     const labelRow = target?.closest("li[data-item-kind='label']");
     const labelId = labelRow?.getAttribute("data-item-id") ?? null;
     const hiringRow = labelId ? null : target?.closest("li[data-item-kind='hiring']");
@@ -3048,7 +3073,7 @@ function LocationColumn({
     const staffId = staffRow?.getAttribute("data-item-id") ?? null;
     const list = target?.closest("[data-column-list]");
     const onList = Boolean(
-      list && event.currentTarget.contains(list) && !staffId && !labelId && !hiringId,
+      list && currentTarget.contains(list) && !staffId && !labelId && !hiringId,
     );
     const removeItem = Boolean(staffId || (onAskRemove && onRemove));
     const cardItems = staffId ? (labeledStaff.has(staffId) ? 2 : 1) : 0;
@@ -3069,15 +3094,90 @@ function LocationColumn({
     const height = 16 + itemCount * 32;
     const pad = 8;
     setMenu({
-      x: Math.min(Math.max(pad, event.clientX), window.innerWidth - width - pad),
-      y: Math.min(Math.max(pad, event.clientY), window.innerHeight - height - pad),
-      originX: event.clientX,
-      originY: event.clientY,
+      x: Math.min(Math.max(pad, clientX), window.innerWidth - width - pad),
+      y: Math.min(Math.max(pad, clientY), window.innerHeight - height - pad),
+      originX: clientX,
+      originY: clientY,
       staffId,
       labelId,
       hiringId,
       onList,
+      mobile,
     });
+  }
+
+  function openMenu(event: React.MouseEvent<HTMLElement>) {
+    event.preventDefault();
+    if (suppressContextMenuRef.current) {
+      suppressContextMenuRef.current = false;
+      return;
+    }
+
+    showMenu(
+      event.target instanceof Element ? event.target : null,
+      event.currentTarget,
+      event.clientX,
+      event.clientY,
+      window.matchMedia("(max-width: 767px)").matches,
+    );
+  }
+
+  function cancelLongPress(pointerId?: number) {
+    const press = longPressRef.current;
+    if (!press || (pointerId != null && press.pointerId !== pointerId)) {
+      return;
+    }
+
+    clearTimeout(press.timer);
+    longPressRef.current = null;
+  }
+
+  function startLongPress(event: React.PointerEvent<HTMLElement>) {
+    if (event.pointerType !== "touch" || event.button !== 0) {
+      return;
+    }
+
+    cancelLongPress();
+    const target = event.target instanceof Element ? event.target : null;
+    if (!target) {
+      return;
+    }
+
+    const press = {
+      pointerId: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+      target,
+      currentTarget: event.currentTarget,
+      timer: setTimeout(() => {}, 0),
+    };
+    press.timer = setTimeout(() => {
+      if (longPressRef.current !== press) {
+        return;
+      }
+
+      longPressRef.current = null;
+      suppressContextMenuRef.current = true;
+      window.setTimeout(() => {
+        suppressContextMenuRef.current = false;
+      }, 900);
+      navigator.vibrate?.(10);
+      showMenu(press.target, press.currentTarget, press.x, press.y, true);
+    }, 500);
+    longPressRef.current = press;
+  }
+
+  function moveLongPress(event: React.PointerEvent<HTMLElement>) {
+    const press = longPressRef.current;
+    if (!press || press.pointerId !== event.pointerId) {
+      return;
+    }
+
+    const dx = event.clientX - press.x;
+    const dy = event.clientY - press.y;
+    if (dx * dx + dy * dy > 36) {
+      cancelLongPress(event.pointerId);
+    }
   }
 
   return (
@@ -3087,6 +3187,10 @@ function LocationColumn({
       onDragOver={onDragOver}
       onDrop={onDrop}
       onContextMenu={openMenu}
+      onPointerDownCapture={startLongPress}
+      onPointerMoveCapture={moveLongPress}
+      onPointerUpCapture={(event) => cancelLongPress(event.pointerId)}
+      onPointerCancelCapture={(event) => cancelLongPress(event.pointerId)}
       className={`relative flex min-w-56 flex-1 basis-0 flex-col overflow-hidden rounded-2xl border ${
         searching ? "z-[1]" : ""
       } ${columnDragging ? "opacity-40" : ""} ${
@@ -3224,14 +3328,41 @@ function LocationColumn({
         )}
       </ul>
       {menu ? (
-        <div
-          ref={menuRef}
-          role="menu"
-          aria-label={`${title} actions`}
-          onContextMenu={(event) => event.preventDefault()}
-          className="fixed z-50 flex w-48 flex-col rounded-lg border border-stone-200 bg-white p-1 shadow-lg"
-          style={{ left: menu.x, top: menu.y }}
-        >
+        <>
+          {menu.mobile ? (
+            <button
+              type="button"
+              aria-label="Close actions"
+              className="fixed inset-0 z-40 bg-stone-950/25 backdrop-blur-[2px]"
+              onClick={() => setMenu(null)}
+            />
+          ) : null}
+          <div
+            ref={menuRef}
+            role="menu"
+            aria-label={`${title} actions`}
+            onContextMenu={(event) => event.preventDefault()}
+            className={
+              menu.mobile
+                ? "fixed inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-50 flex max-h-[min(70dvh,36rem)] flex-col overflow-y-auto rounded-3xl border border-white/60 bg-white/90 p-2 pb-3 shadow-[0_24px_80px_rgba(28,25,23,0.28)] backdrop-blur-2xl backdrop-saturate-150 [&_[role=menuitem]]:h-12 [&_[role=menuitem]]:rounded-xl [&_[role=menuitem]]:px-3"
+                : "fixed z-50 flex w-48 flex-col rounded-lg border border-stone-200 bg-white p-1 shadow-lg"
+            }
+            style={menu.mobile ? undefined : { left: menu.x, top: menu.y }}
+          >
+            {menu.mobile ? (
+              <div className="shrink-0 pb-1">
+                <span className="mx-auto block h-1 w-10 rounded-full bg-stone-300" />
+                <p className="px-3 pt-3 pb-2 text-sm font-semibold text-stone-950">
+                  {menu.staffId
+                    ? "Staff actions"
+                    : menu.hiringId
+                      ? "Hiring actions"
+                      : menu.labelId
+                        ? "Separation actions"
+                        : `${title} actions`}
+                </p>
+              </div>
+            ) : null}
           <button
             type="button"
             role="menuitem"
@@ -3562,7 +3693,8 @@ function LocationColumn({
               Restart positions
             </button>
           ) : null}
-        </div>
+          </div>
+        </>
       ) : null}
     </section>
   );
@@ -4176,6 +4308,38 @@ function StaffEditFields({
           autoFocus
         />
       </label>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <label className="block text-sm font-medium text-stone-800">
+          First name
+          <input
+            value={form.firstName}
+            onChange={(event) => {
+              const firstName = event.target.value;
+              onChange({
+                ...form,
+                firstName,
+                fullName: [firstName.trim(), form.lastName.trim()].filter(Boolean).join(" "),
+              });
+            }}
+            className={fieldClass}
+          />
+        </label>
+        <label className="block text-sm font-medium text-stone-800">
+          Last name
+          <input
+            value={form.lastName}
+            onChange={(event) => {
+              const lastName = event.target.value;
+              onChange({
+                ...form,
+                lastName,
+                fullName: [form.firstName.trim(), lastName.trim()].filter(Boolean).join(" "),
+              });
+            }}
+            className={fieldClass}
+          />
+        </label>
+      </div>
       <label className="block text-sm font-medium text-stone-800">
         Position
         {positionGroups.length > 0 ? (
