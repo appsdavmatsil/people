@@ -6,11 +6,13 @@ import Link from "next/link";
 import { columnRows, reanchorLabels, type BoardLabel, type ColumnRow } from "@/lib/board-labels";
 import { columnOrderKey, type ColumnOrders } from "@/lib/board-order";
 import { type CardLabel } from "@/lib/card-labels";
+import { type CardTag } from "@/lib/card-tags";
 import { useEventBoard, useEvents } from "@/components/use-events";
 import { useLocationBoard, useLocations } from "@/components/use-locations";
 import { useBoardLabels, useEventBoardLabels } from "@/components/use-board-labels";
 import { useBoardOrder, useEventBoardOrder } from "@/components/use-board-order";
 import { useCardLabels, useEventCardLabels } from "@/components/use-card-labels";
+import { useCardTags, useEventCardTags } from "@/components/use-card-tags";
 import { DashboardVisibilityButton } from "@/components/dashboard-visibility";
 import { usePrivacy } from "@/components/privacy-provider";
 import { privacyUnlockAction } from "@/lib/privacy-actions";
@@ -72,6 +74,7 @@ type DialogMode =
   | "unassigned"
   | "label"
   | "cardLabel"
+  | "cardTag"
   | "editStaff"
   | "hiring"
   | "editHiring"
@@ -146,6 +149,7 @@ export function StaffLocationBoard() {
   }
   const { labels, update: updateLabels } = useBoardLabels();
   const { labels: cardLabels, update: updateCardLabels } = useCardLabels();
+  const { tags: cardTags, update: updateCardTags } = useCardTags();
   const { orders, update: updateOrders } = useBoardOrder();
   const { employees, update: updateEmployees } = useStaffDirectory();
   const activeEmployees = employees.filter((employee) => !employee.archived);
@@ -197,6 +201,8 @@ export function StaffLocationBoard() {
       updateLabels={updateLabels}
       cardLabels={cardLabels}
       updateCardLabels={updateCardLabels}
+      cardTags={cardTags}
+      updateCardTags={updateCardTags}
       orders={orders}
       updateOrders={updateOrders}
       unassignedPeople={unassignedPeople}
@@ -218,6 +224,7 @@ export function EventsManningBoard() {
   const { placements, update: updatePlacements } = useEventPlacements();
   const { labels, update: updateLabels } = useEventBoardLabels();
   const { labels: cardLabels, update: updateCardLabels } = useEventCardLabels();
+  const { tags: cardTags, update: updateCardTags } = useEventCardTags();
   const { orders, update: updateOrders } = useEventBoardOrder();
   const locations = ids.flatMap((id) => {
     const event = events.find((item) => item.id === id);
@@ -256,6 +263,8 @@ export function EventsManningBoard() {
       updateLabels={updateLabels}
       cardLabels={cardLabels}
       updateCardLabels={updateCardLabels}
+      cardTags={cardTags}
+      updateCardTags={updateCardTags}
       orders={orders}
       updateOrders={updateOrders}
     />
@@ -275,6 +284,8 @@ function PlacementBoard({
   updateLabels,
   cardLabels,
   updateCardLabels,
+  cardTags,
+  updateCardTags,
   orders,
   updateOrders,
   unassignedPeople,
@@ -295,6 +306,8 @@ function PlacementBoard({
   updateLabels: (next: BoardLabel[]) => void;
   cardLabels: CardLabel[];
   updateCardLabels: (next: CardLabel[]) => void;
+  cardTags: CardTag[];
+  updateCardTags: (next: CardTag[]) => void;
   orders: ColumnOrders;
   updateOrders: (next: ColumnOrders) => void;
   unassignedPeople?: UnassignedPerson[];
@@ -340,6 +353,8 @@ function PlacementBoard({
   const [editingLabelId, setEditingLabelId] = useState<string | null>(null);
   const [cardLabelStaffId, setCardLabelStaffId] = useState<string | null>(null);
   const [cardLabelText, setCardLabelText] = useState("");
+  const [cardTagStaffId, setCardTagStaffId] = useState<string | null>(null);
+  const [cardTagText, setCardTagText] = useState("");
   const [editForm, setEditForm] = useState<StaffEditForm | null>(null);
   const [hiringLocationId, setHiringLocationId] = useState("");
   const [hiringRoleId, setHiringRoleId] = useState("");
@@ -461,6 +476,7 @@ function PlacementBoard({
   function dismissDialog() {
     setEditingLabelId(null);
     setCardLabelStaffId(null);
+    setCardTagStaffId(null);
     setEditForm(null);
     setProfileStaffId(null);
     setDialog(null);
@@ -1361,6 +1377,46 @@ function PlacementBoard({
     setStatus(`${existing ? "Updated" : "Added"} the label on ${name}.`);
   }
 
+  function openCardTagDialog(staffId: string) {
+    const current = cardTags.find((item) => item.staffId === staffId);
+    setCardTagStaffId(staffId);
+    setCardTagText(current?.text ?? "");
+    setFormError("");
+    setPendingRemoveId(null);
+    setDialog("cardTag");
+  }
+
+  function removeCardTag(staffId: string) {
+    const current = cardTags.find((item) => item.staffId === staffId);
+    updateCardTags(cardTags.filter((item) => item.staffId !== staffId));
+    if (current) {
+      setStatus(`Removed the tag from ${placements.find((item) => item.id === staffId)?.name ?? "this card"}.`);
+    }
+  }
+
+  function saveCardTag(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const text = normalizePlacementName(cardTagText);
+    if (!text) {
+      setFormError("Enter a tag.");
+      return;
+    }
+
+    if (!cardTagStaffId) {
+      return;
+    }
+
+    const existing = cardTags.some((item) => item.staffId === cardTagStaffId);
+    updateCardTags([
+      ...cardTags.filter((item) => item.staffId !== cardTagStaffId),
+      { staffId: cardTagStaffId, text },
+    ]);
+    const name = placements.find((item) => item.id === cardTagStaffId)?.name ?? "this card";
+    setCardTagStaffId(null);
+    setDialog(null);
+    setStatus(`${existing ? "Updated" : "Added"} the tag on ${name}.`);
+  }
+
   function restartPositions(locationId: string | null) {
     const people = peopleAt(locationId);
     const rank = positionRanks(lookups);
@@ -1477,6 +1533,7 @@ function PlacementBoard({
       ),
     );
     updateCardLabels(cardLabels.filter((item) => item.staffId !== id));
+    updateCardTags(cardTags.filter((item) => item.staffId !== id));
     const nextOrders = { ...orders };
     for (const key of Object.keys(nextOrders)) {
       const remaining = nextOrders[key].filter((item) => item !== id);
@@ -1842,6 +1899,7 @@ function PlacementBoard({
                   photo={employee?.photo ?? null}
                   color={color}
                   cardLabel={cardLabels.find((item) => item.staffId === row.person.id)?.text ?? ""}
+                  cardTag={cardTags.find((item) => item.staffId === row.person.id)?.text ?? ""}
                   onOpenProfile={() => openProfile(row.person.id)}
                   promotion={
                     kind === "venue" && showPromotions
@@ -1909,6 +1967,7 @@ function PlacementBoard({
       ? hiringRoles.find((role) => role.id === drag.staffId)
       : null;
   const cardLabelByStaff = new Map(cardLabels.map((item) => [item.staffId, item.text]));
+  const cardTagByStaff = new Map(cardTags.map((item) => [item.staffId, item.text]));
   const promotedStaff = new Set(
     kind === "venue"
       ? placements.flatMap((person) =>
@@ -2199,6 +2258,9 @@ function PlacementBoard({
             labeledStaff={cardLabelByStaff}
             onAddCardLabel={openCardLabelDialog}
             onRemoveCardLabel={removeCardLabel}
+            taggedStaff={cardTagByStaff}
+            onAddCardTag={openCardTagDialog}
+            onRemoveCardTag={removeCardTag}
             onRestartPositions={() => restartPositions(location.id)}
             onAddHiring={() => openAddHiring(location.id)}
             onEditHiring={(roleId) => openEditHiring(location.id, roleId)}
@@ -2251,9 +2313,11 @@ function PlacementBoard({
 
       {dragged ? (
         <div
-          className="pointer-events-none fixed z-50 w-64 overflow-hidden rounded-xl border border-stone-300 bg-white shadow-lg"
+          className="pointer-events-none fixed z-50 w-64 overflow-visible rounded-xl"
           style={{ left: drag?.x, top: drag?.y, transform: "translate(-50%, -60%)" }}
         >
+          {cardTagByStaff.get(dragged.id) ? <CardStamp text={cardTagByStaff.get(dragged.id) ?? ""} /> : null}
+          <div className="overflow-hidden rounded-xl border border-stone-300 bg-white shadow-lg">
           {cardLabelByStaff.get(dragged.id) ? (
             <span
               className="block truncate border-b px-2.5 py-1 text-center text-sm font-medium text-stone-950"
@@ -2282,6 +2346,7 @@ function PlacementBoard({
               />
             </span>
           </span>
+          </div>
         </div>
       ) : null}
 
@@ -2573,6 +2638,38 @@ function PlacementBoard({
           </form>
         ) : null}
 
+        {dialog === "cardTag" ? (
+          <form onSubmit={saveCardTag}>
+            <DialogHeader
+              titleId={titleId}
+              title={cardTagStaffId && cardTagByStaff.has(cardTagStaffId) ? "Edit tag" : "Add tag"}
+              description="The stamp sits on the top-right corner of this person's card."
+              icon={
+                cardTagStaffId && cardTagByStaff.has(cardTagStaffId) ? <PencilIcon /> : <PlusIcon />
+              }
+              onClose={dismissDialog}
+            />
+            <div className="space-y-4 px-5 py-4">
+              <label className="block text-sm font-medium text-stone-800">
+                Tag
+                <input
+                  value={cardTagText}
+                  onChange={(event) => setCardTagText(event.target.value)}
+                  placeholder="New"
+                  className={fieldClass}
+                />
+              </label>
+              {formError ? <p className="text-sm text-red-700">{formError}</p> : null}
+            </div>
+            <DialogFooter
+              onClose={dismissDialog}
+              submitLabel={
+                cardTagStaffId && cardTagByStaff.has(cardTagStaffId) ? "Save tag" : "Add tag"
+              }
+            />
+          </form>
+        ) : null}
+
       </dialog>
       </ModalPortal>
       {dialog === "profile" && profileStaffId ? (
@@ -2829,6 +2926,9 @@ function LocationColumn({
   labeledStaff,
   onAddCardLabel,
   onRemoveCardLabel,
+  taggedStaff,
+  onAddCardTag,
+  onRemoveCardTag,
   onRestartPositions,
   onAddHiring,
   onEditHiring,
@@ -2867,6 +2967,9 @@ function LocationColumn({
   labeledStaff: Map<string, string>;
   onAddCardLabel: (staffId: string) => void;
   onRemoveCardLabel: (staffId: string) => void;
+  taggedStaff: Map<string, string>;
+  onAddCardTag: (staffId: string) => void;
+  onRemoveCardTag: (staffId: string) => void;
   onRestartPositions: () => void;
   onAddHiring?: () => void;
   onEditHiring?: (roleId: string | null) => void;
@@ -2949,6 +3052,7 @@ function LocationColumn({
     );
     const removeItem = Boolean(staffId || (onAskRemove && onRemove));
     const cardItems = staffId ? (labeledStaff.has(staffId) ? 2 : 1) : 0;
+    const tagItems = staffId ? (taggedStaff.has(staffId) ? 2 : 1) : 0;
     const hiringItems = (onAddHiring && onList ? 1 : 0) + (hiringId && onEditHiring ? 1 : 0);
     const itemCount =
       2 +
@@ -2957,6 +3061,7 @@ function LocationColumn({
       (staffId && onApplyPromotion ? 1 : 0) +
       (staffId && onEditPromotion && promotedStaff.has(staffId) ? 1 : 0) +
       cardItems +
+      tagItems +
       (labelId ? 2 : 0) +
       (onList ? 1 : 0) +
       hiringItems;
@@ -3108,9 +3213,7 @@ function LocationColumn({
       </header>
       <ul
         data-column-list=""
-        className={`flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-3 pb-3 ${
-          costs == null ? "" : "pt-3"
-        }`}
+        className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-3 pt-3 pb-3"
       >
         {empty ? (
           <li className="flex flex-1 items-center justify-center rounded-xl border border-dashed border-stone-200 px-3 py-8 text-center text-sm text-stone-400">
@@ -3299,6 +3402,64 @@ function LocationColumn({
               </button>
             )
           ) : null}
+          {menu.staffId ? (
+            taggedStaff.has(menu.staffId) ? (
+              <>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="flex h-8 items-center gap-2 rounded-md px-2 text-left text-sm text-stone-700 hover:bg-stone-100 hover:text-stone-950"
+                  onClick={() => {
+                    const staffId = menu.staffId;
+                    setMenu(null);
+                    if (staffId) {
+                      onAddCardTag(staffId);
+                    }
+                  }}
+                >
+                  <MenuGlyph>
+                    <PencilIcon />
+                  </MenuGlyph>
+                  Edit tag
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="flex h-8 items-center gap-2 rounded-md px-2 text-left text-sm text-stone-700 hover:bg-stone-100 hover:text-stone-950"
+                  onClick={() => {
+                    const staffId = menu.staffId;
+                    setMenu(null);
+                    if (staffId) {
+                      onRemoveCardTag(staffId);
+                    }
+                  }}
+                >
+                  <MenuGlyph>
+                    <TrashIcon />
+                  </MenuGlyph>
+                  Remove tag
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                role="menuitem"
+                className="flex h-8 items-center gap-2 rounded-md bg-rose-50 px-2 text-left text-sm text-stone-700 hover:bg-rose-100 hover:text-stone-950"
+                onClick={() => {
+                  const staffId = menu.staffId;
+                  setMenu(null);
+                  if (staffId) {
+                    onAddCardTag(staffId);
+                  }
+                }}
+              >
+                <MenuGlyph className="text-rose-700">
+                  <PlusIcon />
+                </MenuGlyph>
+                Add tag
+              </button>
+            )
+          ) : null}
           <button
             type="button"
             role="menuitem"
@@ -3462,6 +3623,7 @@ function StaffCard({
   photo = null,
   color = "",
   cardLabel = "",
+  cardTag = "",
   promotion = null,
   hideSalary = false,
   hidePromotionSalary = false,
@@ -3480,6 +3642,7 @@ function StaffCard({
   photo?: string | null;
   color?: string;
   cardLabel?: string;
+  cardTag?: string;
   promotion?: StaffPromotion | null;
   hideSalary?: boolean;
   hidePromotionSalary?: boolean;
@@ -3494,6 +3657,7 @@ function StaffCard({
   onHtmlDragEnd: () => void;
 }) {
   const labeled = cardLabel.trim().length > 0;
+  const tagged = cardTag.trim().length > 0;
   const shownName = displayName.trim() || person.name;
   return (
     <li
@@ -3501,17 +3665,21 @@ function StaffCard({
       data-item-kind="staff"
       data-search-hit={spotlight ? "true" : undefined}
       draggable={movable}
-      className={`flex touch-none flex-col overflow-hidden rounded-xl border border-stone-200 shadow-sm select-none ${
+      className={`relative flex touch-none overflow-visible select-none ${
         movable ? "cursor-grab active:cursor-grabbing" : ""
-      } ${labeled ? "bg-stone-100" : "bg-white"} ${dragging ? "opacity-40" : ""} ${
-        spotlight ? "relative z-20 shadow-xl ring-2 ring-white" : ""
-      }`}
+      } ${dragging ? "opacity-40" : ""} ${spotlight ? "z-20" : ""}`}
       onPointerDown={(event) => onPointerDown(event, person.id)}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onDragStart={(event) => onHtmlDragStart(event, person.id)}
       onDragEnd={onHtmlDragEnd}
     >
+      {tagged ? <CardStamp text={cardTag} /> : null}
+      <span
+        className={`flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-stone-200 shadow-sm ${
+          labeled ? "bg-stone-100" : "bg-white"
+        } ${spotlight ? "shadow-xl ring-2 ring-white" : ""}`}
+      >
       {labeled ? (
         <span
           className="block truncate border-b px-2.5 py-1 text-center text-sm font-medium text-stone-950"
@@ -3549,7 +3717,19 @@ function StaffCard({
           <PromotionTag promotion={promotion} hideSalary={hidePromotionSalary} />
         </span>
       </span>
+      </span>
     </li>
+  );
+}
+
+function CardStamp({ text }: { text: string }) {
+  return (
+    <span
+      title={text}
+      className="pointer-events-none absolute top-0 right-1.5 z-10 max-w-[calc(100%-1.75rem)] -translate-y-1/2 rotate-[-8deg] truncate rounded-sm border-2 border-rose-800 bg-rose-50 px-1.5 py-px text-[10px] leading-4 font-bold tracking-wide text-rose-900 uppercase shadow-[1px_1px_0_0_rgb(159_18_57)]"
+    >
+      {text}
+    </span>
   );
 }
 

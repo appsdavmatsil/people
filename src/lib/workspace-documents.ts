@@ -1,6 +1,7 @@
 import { boardLabelsEvent, boardLabelsKey, eventBoardLabelsEvent, eventBoardLabelsKey } from "@/lib/board-labels";
 import { boardOrderEvent, boardOrderKey, eventBoardOrderEvent, eventBoardOrderKey } from "@/lib/board-order";
 import { cardLabelsEvent, cardLabelsKey, eventCardLabelsEvent, eventCardLabelsKey } from "@/lib/card-labels";
+import { cardTagsEvent, cardTagsKey, eventCardTagsEvent, eventCardTagsKey } from "@/lib/card-tags";
 import { directoryLookupsEvent, directoryLookupsKey } from "@/lib/directory-lookups";
 import { eventBoardEvent, eventBoardKey, eventsEvent, eventsKey } from "@/lib/events";
 import { hiringEvent, hiringKey } from "@/lib/hiring";
@@ -20,6 +21,8 @@ export const workspaceDocuments = [
   { key: eventBoardLabelsKey, event: eventBoardLabelsEvent },
   { key: cardLabelsKey, event: cardLabelsEvent },
   { key: eventCardLabelsKey, event: eventCardLabelsEvent },
+  { key: cardTagsKey, event: cardTagsEvent },
+  { key: eventCardTagsKey, event: eventCardTagsEvent },
   { key: boardOrderKey, event: boardOrderEvent },
   { key: eventBoardOrderKey, event: eventBoardOrderEvent },
   { key: placementsKey, event: placementsEvent },
