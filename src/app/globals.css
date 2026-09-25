@@ -36,7 +36,7 @@ dialog[open] {
 
   dialog[open] {
     inset: auto;
-    top: calc(var(--visual-viewport-offset-top, 0px) + var(--visual-viewport-height, 100dvh) / 2);
+    top: var(--visual-viewport-center-y, 50dvh);
     left: 50%;
     margin: 0;
     transform: translate(-50%, -50%);

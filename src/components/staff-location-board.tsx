@@ -2207,7 +2207,7 @@ function PlacementBoard({
 
       <div
         ref={scrollerRef}
-        className={`relative mt-4 flex min-h-0 flex-1 items-stretch gap-3 overflow-x-auto overflow-y-hidden pb-1 ${
+        className={`relative mt-4 flex min-h-0 flex-1 touch-auto items-stretch gap-3 overflow-x-auto overflow-y-hidden overscroll-contain pb-1 ${
           searching ? "rounded-2xl" : ""
         }`}
       >
@@ -3738,7 +3738,7 @@ function HiringCard({
       data-item-kind="hiring"
       data-search-hit={spotlight ? "true" : undefined}
       draggable={movable}
-      className={`touch-pan-y rounded-xl border border-yellow-200 bg-yellow-100 px-2.5 py-2 shadow-sm select-none ${
+      className={`touch-auto rounded-xl border border-yellow-200 bg-yellow-100 px-2.5 py-2 shadow-sm select-none ${
         movable ? "cursor-grab active:cursor-grabbing" : ""
       } ${dragging ? "opacity-40" : ""} ${spotlight ? "relative z-20 shadow-xl ring-2 ring-white" : ""}`}
       onPointerDown={(event) => onPointerDown(event, role.id)}
@@ -3806,7 +3806,7 @@ function StaffCard({
       data-item-kind="staff"
       data-search-hit={spotlight ? "true" : undefined}
       draggable={movable}
-      className={`relative flex touch-pan-y overflow-visible select-none ${
+      className={`relative flex touch-auto overflow-visible select-none ${
         movable ? "cursor-grab active:cursor-grabbing" : ""
       } ${dragging ? "opacity-40" : ""} ${spotlight ? "z-20" : ""}`}
       onPointerDown={(event) => onPointerDown(event, person.id)}
@@ -3900,7 +3900,7 @@ function LabelCard({
       data-item-id={label.id}
       data-item-kind="label"
       draggable={movable}
-      className={`flex touch-pan-y items-center rounded-xl border border-stone-200 bg-white px-2.5 py-2 shadow-sm select-none ${
+      className={`flex touch-auto items-center rounded-xl border border-stone-200 bg-white px-2.5 py-2 shadow-sm select-none ${
         movable ? "cursor-grab active:cursor-grabbing" : ""
       } ${dragging ? "opacity-40" : ""}`}
       style={labelSurface(color)}

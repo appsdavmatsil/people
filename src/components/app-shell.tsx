@@ -16,7 +16,6 @@ const zoomKey = "people.zoom";
 const zoomLevels = [0.8, 0.9, 1, 1.1, 1.25, 1.5];
 const mobileNavCompactRange = 80;
 const mobileNavMinimumScale = 0.76;
-const refreshThreshold = 58;
 
 export function AppShell({
   children,
@@ -33,12 +32,7 @@ export function AppShell({
   const current = pageForPath(pathname);
   const [collapsed, setCollapsed] = useState(false);
   const [mobileNavCompact, setMobileNavCompact] = useState(0);
-  const [pullDistance, setPullDistance] = useState(0);
-  const [pulling, setPulling] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const shellRef = useRef<HTMLDivElement>(null);
-  const pullStartRef = useRef<number | null>(null);
-  const pullDistanceRef = useRef(0);
   const mobileNavCompactRef = useRef(0);
   const lastScrollTopRef = useRef(0);
   const scrollTargetRef = useRef<EventTarget | null>(null);
@@ -46,77 +40,6 @@ export function AppShell({
   useEffect(() => {
     setCollapsed(window.localStorage.getItem(sidebarCollapsedKey) === "1");
   }, []);
-
-  useEffect(() => {
-    const shell = shellRef.current;
-    if (!shell) return;
-
-    function canPullFrom(target: EventTarget | null) {
-      if (!(target instanceof Element) || target.closest("dialog,[role='dialog']")) {
-        return false;
-      }
-
-      let node: Element | null = target;
-      while (node && node !== shell) {
-        if (
-          node instanceof HTMLElement &&
-          node.scrollHeight > node.clientHeight + 1 &&
-          node.scrollTop > 0
-        ) {
-          return false;
-        }
-        node = node.parentElement;
-      }
-      return true;
-    }
-
-    function onTouchStart(event: TouchEvent) {
-      if (refreshing || event.touches.length !== 1 || !canPullFrom(event.target)) return;
-      pullStartRef.current = event.touches[0].clientY;
-      setPulling(true);
-    }
-
-    function onTouchMove(event: TouchEvent) {
-      const start = pullStartRef.current;
-      if (start == null || event.touches.length !== 1) return;
-      const delta = event.touches[0].clientY - start;
-      if (delta <= 0) {
-        pullDistanceRef.current = 0;
-        setPullDistance(0);
-        return;
-      }
-
-      event.preventDefault();
-      const next = Math.min(78, Math.pow(delta, 0.82));
-      pullDistanceRef.current = next;
-      setPullDistance(next);
-    }
-
-    function onTouchEnd() {
-      if (pullStartRef.current == null) return;
-      pullStartRef.current = null;
-      setPulling(false);
-      if (pullDistanceRef.current >= refreshThreshold) {
-        setRefreshing(true);
-        setPullDistance(52);
-        window.setTimeout(() => window.location.reload(), 350);
-        return;
-      }
-      pullDistanceRef.current = 0;
-      setPullDistance(0);
-    }
-
-    shell.addEventListener("touchstart", onTouchStart, { passive: true });
-    shell.addEventListener("touchmove", onTouchMove, { passive: false });
-    shell.addEventListener("touchend", onTouchEnd, { passive: true });
-    shell.addEventListener("touchcancel", onTouchEnd, { passive: true });
-    return () => {
-      shell.removeEventListener("touchstart", onTouchStart);
-      shell.removeEventListener("touchmove", onTouchMove);
-      shell.removeEventListener("touchend", onTouchEnd);
-      shell.removeEventListener("touchcancel", onTouchEnd);
-    };
-  }, [refreshing]);
 
   useEffect(() => {
     if (!userId) {
@@ -168,8 +91,8 @@ export function AppShell({
         `${viewport?.height ?? window.innerHeight}px`,
       );
       document.documentElement.style.setProperty(
-        "--visual-viewport-offset-top",
-        `${viewport?.offsetTop ?? 0}px`,
+        "--visual-viewport-center-y",
+        `${(viewport?.offsetTop ?? 0) + (viewport?.height ?? window.innerHeight) / 2}px`,
       );
     }
 
@@ -190,32 +113,16 @@ export function AppShell({
     });
   }
 
+  function refreshPage() {
+    if (refreshing) return;
+    setRefreshing(true);
+    window.setTimeout(() => window.location.reload(), 450);
+  }
+
   const mobileNavScale = 1 - mobileNavCompact * (1 - mobileNavMinimumScale);
 
   return (
-    <>
-      <div
-        aria-hidden="true"
-        className={`pointer-events-none fixed left-1/2 z-50 grid size-9 -translate-x-1/2 place-items-center rounded-full border border-white/60 bg-white/90 text-stone-700 shadow-lg backdrop-blur-xl transition-opacity duration-150 md:hidden ${
-          pullDistance > 4 ? "opacity-100" : "opacity-0"
-        }`}
-        style={{
-          top: "calc(env(safe-area-inset-top) + 0.5rem)",
-          transform: `translate(-50%, ${Math.max(-40, pullDistance - 44)}px)`,
-        }}
-      >
-        <RefreshIndicatorIcon
-          className={refreshing ? "animate-spin" : ""}
-          style={{ transform: refreshing ? undefined : `rotate(${pullDistance * 4}deg)` }}
-        />
-      </div>
-      <div
-        ref={shellRef}
-        className={`flex h-dvh min-h-0 flex-1 overflow-hidden pt-[env(safe-area-inset-top)] ${
-          pulling ? "" : "transition-transform duration-200 ease-out"
-        }`}
-        style={{ transform: `translateY(${pullDistance}px)` }}
-      >
+    <div className="flex h-dvh min-h-0 flex-1 overflow-hidden pt-[env(safe-area-inset-top)]">
       <aside
         className={`fixed inset-y-0 left-0 z-30 hidden h-dvh w-52 flex-col overflow-hidden border-r border-stone-200 bg-stone-50 transition-[width] duration-200 ease-out md:flex ${
           collapsed ? "md:w-14" : "md:w-52"
@@ -283,15 +190,25 @@ export function AppShell({
       </aside>
 
       <div
-        className={`flex min-h-0 min-w-0 flex-1 flex-col pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-0 ${
+        className={`flex min-h-0 min-w-0 flex-1 flex-col pb-[calc(5rem+env(safe-area-inset-bottom))] transition-transform duration-300 ease-out md:pb-0 ${
           collapsed ? "md:pl-14" : "md:pl-52"
         }`}
+        style={{ transform: refreshing ? "translateY(1.5rem)" : undefined }}
       >
         <header className="flex h-14 shrink-0 items-center gap-3 border-b border-stone-200 px-4">
           <h1 className="flex min-w-0 items-center gap-2 text-base font-semibold tracking-tight text-stone-950">
             {current ? <PageIcon href={current.href} /> : null}
             <span className="truncate">{current?.title ?? "People"}</span>
           </h1>
+          <button
+            type="button"
+            aria-label="Refresh page"
+            disabled={refreshing}
+            onClick={refreshPage}
+            className="ml-auto grid size-8 shrink-0 place-items-center rounded-full text-stone-600 transition-colors hover:bg-stone-100 disabled:text-stone-950 md:hidden"
+          >
+            <RefreshIndicatorIcon className={refreshing ? "animate-spin" : ""} />
+          </button>
           <AccountMenu userId={userId} name={name} email={email} />
         </header>
         <WorkspaceSync userId={userId} />
@@ -342,8 +259,7 @@ export function AppShell({
           </div>
         </nav>
       </div>
-      </div>
-    </>
+    </div>
   );
 }
 
