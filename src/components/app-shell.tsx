@@ -16,7 +16,7 @@ const zoomKey = "people.zoom";
 const zoomLevels = [0.8, 0.9, 1, 1.1, 1.25, 1.5];
 const mobileNavCompactRange = 80;
 const mobileNavMinimumScale = 0.76;
-const pullRefreshThreshold = 56;
+const pullRefreshThreshold = 38;
 
 export function AppShell({
   children,
@@ -76,7 +76,7 @@ export function AppShell({
       const delta = event.touches[0].clientY - start;
       if (delta <= 0) return;
       event.preventDefault();
-      const next = Math.min(76, Math.pow(delta, 0.84));
+      const next = Math.min(72, delta * 0.62);
       pullDistanceRef.current = next;
       setPullDistance(next);
     }
@@ -179,10 +179,13 @@ export function AppShell({
     });
   }
 
-  const mobileNavScale = 1 - mobileNavCompact * (1 - mobileNavMinimumScale);
+  const fixedMobileNav = pathname === "/events" || pathname === "/profile";
+  const mobileNavScale = fixedMobileNav
+    ? 1
+    : 1 - mobileNavCompact * (1 - mobileNavMinimumScale);
 
   return (
-    <div className="flex h-dvh min-h-0 flex-1 overflow-hidden pt-[env(safe-area-inset-top)]">
+    <div className="flex h-dvh min-h-0 flex-1 overflow-hidden">
       <div
         aria-hidden="true"
         className={`pointer-events-none fixed left-1/2 z-50 grid size-9 -translate-x-1/2 place-items-center rounded-full border border-white/60 bg-white/90 text-stone-700 shadow-lg backdrop-blur-xl transition-opacity duration-150 md:hidden ${
@@ -274,7 +277,7 @@ export function AppShell({
       >
         <header
           ref={headerRef}
-          className="flex h-14 shrink-0 touch-pan-x items-center gap-3 border-b border-stone-200 px-4"
+          className="flex h-[calc(3.5rem+env(safe-area-inset-top))] shrink-0 items-center gap-3 border-b border-stone-200 px-4 pt-[env(safe-area-inset-top)] md:h-14 md:pt-0"
         >
           <h1 className="flex min-w-0 items-center gap-2 text-base font-semibold tracking-tight text-stone-950">
             {current ? <PageIcon href={current.href} /> : null}
