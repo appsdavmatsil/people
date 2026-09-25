@@ -16,6 +16,7 @@ const zoomKey = "people.zoom";
 const zoomLevels = [0.8, 0.9, 1, 1.1, 1.25, 1.5];
 const mobileNavCompactRange = 80;
 const mobileNavMinimumScale = 0.76;
+const refreshThreshold = 58;
 
 export function AppShell({
   children,
@@ -32,6 +33,12 @@ export function AppShell({
   const current = pageForPath(pathname);
   const [collapsed, setCollapsed] = useState(false);
   const [mobileNavCompact, setMobileNavCompact] = useState(0);
+  const [pullDistance, setPullDistance] = useState(0);
+  const [pulling, setPulling] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const shellRef = useRef<HTMLDivElement>(null);
+  const pullStartRef = useRef<number | null>(null);
+  const pullDistanceRef = useRef(0);
   const mobileNavCompactRef = useRef(0);
   const lastScrollTopRef = useRef(0);
   const scrollTargetRef = useRef<EventTarget | null>(null);
@@ -39,6 +46,77 @@ export function AppShell({
   useEffect(() => {
     setCollapsed(window.localStorage.getItem(sidebarCollapsedKey) === "1");
   }, []);
+
+  useEffect(() => {
+    const shell = shellRef.current;
+    if (!shell) return;
+
+    function canPullFrom(target: EventTarget | null) {
+      if (!(target instanceof Element) || target.closest("dialog,[role='dialog']")) {
+        return false;
+      }
+
+      let node: Element | null = target;
+      while (node && node !== shell) {
+        if (
+          node instanceof HTMLElement &&
+          node.scrollHeight > node.clientHeight + 1 &&
+          node.scrollTop > 0
+        ) {
+          return false;
+        }
+        node = node.parentElement;
+      }
+      return true;
+    }
+
+    function onTouchStart(event: TouchEvent) {
+      if (refreshing || event.touches.length !== 1 || !canPullFrom(event.target)) return;
+      pullStartRef.current = event.touches[0].clientY;
+      setPulling(true);
+    }
+
+    function onTouchMove(event: TouchEvent) {
+      const start = pullStartRef.current;
+      if (start == null || event.touches.length !== 1) return;
+      const delta = event.touches[0].clientY - start;
+      if (delta <= 0) {
+        pullDistanceRef.current = 0;
+        setPullDistance(0);
+        return;
+      }
+
+      event.preventDefault();
+      const next = Math.min(78, Math.pow(delta, 0.82));
+      pullDistanceRef.current = next;
+      setPullDistance(next);
+    }
+
+    function onTouchEnd() {
+      if (pullStartRef.current == null) return;
+      pullStartRef.current = null;
+      setPulling(false);
+      if (pullDistanceRef.current >= refreshThreshold) {
+        setRefreshing(true);
+        setPullDistance(52);
+        window.setTimeout(() => window.location.reload(), 350);
+        return;
+      }
+      pullDistanceRef.current = 0;
+      setPullDistance(0);
+    }
+
+    shell.addEventListener("touchstart", onTouchStart, { passive: true });
+    shell.addEventListener("touchmove", onTouchMove, { passive: false });
+    shell.addEventListener("touchend", onTouchEnd, { passive: true });
+    shell.addEventListener("touchcancel", onTouchEnd, { passive: true });
+    return () => {
+      shell.removeEventListener("touchstart", onTouchStart);
+      shell.removeEventListener("touchmove", onTouchMove);
+      shell.removeEventListener("touchend", onTouchEnd);
+      shell.removeEventListener("touchcancel", onTouchEnd);
+    };
+  }, [refreshing]);
 
   useEffect(() => {
     if (!userId) {
@@ -80,6 +158,30 @@ export function AppShell({
     return () => document.removeEventListener("scroll", onScroll, true);
   }, []);
 
+  useEffect(() => {
+    const viewport = window.visualViewport;
+    if (!viewport) return;
+
+    function syncVisualViewport() {
+      document.documentElement.style.setProperty(
+        "--visual-viewport-height",
+        `${viewport?.height ?? window.innerHeight}px`,
+      );
+      document.documentElement.style.setProperty(
+        "--visual-viewport-offset-top",
+        `${viewport?.offsetTop ?? 0}px`,
+      );
+    }
+
+    syncVisualViewport();
+    viewport.addEventListener("resize", syncVisualViewport);
+    viewport.addEventListener("scroll", syncVisualViewport);
+    return () => {
+      viewport.removeEventListener("resize", syncVisualViewport);
+      viewport.removeEventListener("scroll", syncVisualViewport);
+    };
+  }, []);
+
   function toggleCollapsed() {
     setCollapsed((current) => {
       const next = !current;
@@ -91,7 +193,29 @@ export function AppShell({
   const mobileNavScale = 1 - mobileNavCompact * (1 - mobileNavMinimumScale);
 
   return (
-    <div className="flex h-dvh min-h-0 flex-1 overflow-hidden">
+    <>
+      <div
+        aria-hidden="true"
+        className={`pointer-events-none fixed left-1/2 z-50 grid size-9 -translate-x-1/2 place-items-center rounded-full border border-white/60 bg-white/90 text-stone-700 shadow-lg backdrop-blur-xl transition-opacity duration-150 md:hidden ${
+          pullDistance > 4 ? "opacity-100" : "opacity-0"
+        }`}
+        style={{
+          top: "calc(env(safe-area-inset-top) + 0.5rem)",
+          transform: `translate(-50%, ${Math.max(-40, pullDistance - 44)}px)`,
+        }}
+      >
+        <RefreshIndicatorIcon
+          className={refreshing ? "animate-spin" : ""}
+          style={{ transform: refreshing ? undefined : `rotate(${pullDistance * 4}deg)` }}
+        />
+      </div>
+      <div
+        ref={shellRef}
+        className={`flex h-dvh min-h-0 flex-1 overflow-hidden pt-[env(safe-area-inset-top)] ${
+          pulling ? "" : "transition-transform duration-200 ease-out"
+        }`}
+        style={{ transform: `translateY(${pullDistance}px)` }}
+      >
       <aside
         className={`fixed inset-y-0 left-0 z-30 hidden h-dvh w-52 flex-col overflow-hidden border-r border-stone-200 bg-stone-50 transition-[width] duration-200 ease-out md:flex ${
           collapsed ? "md:w-14" : "md:w-52"
@@ -218,7 +342,35 @@ export function AppShell({
           </div>
         </nav>
       </div>
-    </div>
+      </div>
+    </>
+  );
+}
+
+function RefreshIndicatorIcon({
+  className = "",
+  style,
+}: {
+  className?: string;
+  style?: React.CSSProperties;
+}) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      className={`size-5 ${className}`}
+      style={style}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M20 7v5h-5" />
+      <path d="M4 17v-5h5" />
+      <path d="M6.1 9a7 7 0 0 1 11.4-2.4L20 9" />
+      <path d="M17.9 15a7 7 0 0 1-11.4 2.4L4 15" />
+    </svg>
   );
 }
 
@@ -258,6 +410,10 @@ function AccountMenu({
     const stored = readZoom();
     setZoom(stored);
     applyZoom(stored);
+    const mobile = window.matchMedia("(max-width: 767px)");
+    const syncZoom = () => applyZoom(stored);
+    mobile.addEventListener("change", syncZoom);
+    return () => mobile.removeEventListener("change", syncZoom);
   }, []);
 
   useEffect(() => {
@@ -345,7 +501,7 @@ function AccountMenu({
               Team settings
             </Link>
           </div>
-          <div className="border-t border-stone-200 px-3 py-2.5">
+          <div className="hidden border-t border-stone-200 px-3 py-2.5 md:block">
             <div className="flex items-center justify-between gap-3">
               <span className="text-stone-600">Zoom</span>
               <span className="flex items-center rounded-lg bg-stone-100 p-0.5">
@@ -396,7 +552,8 @@ function readZoom() {
 }
 
 function applyZoom(value: number) {
-  document.documentElement.style.setProperty("zoom", String(value));
+  const effectiveZoom = window.matchMedia("(max-width: 767px)").matches ? 1 : value;
+  document.documentElement.style.setProperty("zoom", String(effectiveZoom));
 }
 
 function changeZoom(index: number, setZoom: (value: number) => void) {

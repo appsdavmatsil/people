@@ -16,4 +16,31 @@ body {
   background: #ffffff;
   color: var(--foreground);
   font-family: var(--font-geist-sans), sans-serif;
+  overscroll-behavior-y: none;
+  -webkit-text-size-adjust: 100%;
+}
+
+dialog[open] {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  max-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 1rem);
+}
+
+@media (max-width: 767px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+
+  dialog[open] {
+    inset: auto;
+    top: calc(var(--visual-viewport-offset-top, 0px) + var(--visual-viewport-height, 100dvh) / 2);
+    left: 50%;
+    margin: 0;
+    transform: translate(-50%, -50%);
+    max-width: calc(100vw - 1rem);
+    max-height: calc(var(--visual-viewport-height, 100dvh) - 1rem);
+  }
 }

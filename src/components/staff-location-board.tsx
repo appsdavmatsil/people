@@ -1586,8 +1586,6 @@ function PlacementBoard({
       return;
     }
 
-    event.preventDefault();
-    event.currentTarget.setPointerCapture(event.pointerId);
     pendingRef.current = {
       staffId,
       pointerId: event.pointerId,
@@ -1609,6 +1607,12 @@ function PlacementBoard({
       if (dx * dx + dy * dy < 25) {
         return;
       }
+      if (Math.abs(dy) > Math.abs(dx)) {
+        pendingRef.current = null;
+        return;
+      }
+      event.preventDefault();
+      event.currentTarget.setPointerCapture(event.pointerId);
     }
 
     const next = {
@@ -3143,11 +3147,16 @@ function LocationColumn({
       return;
     }
 
+    const actionableTarget = target.closest("li[data-item-kind]");
+    if (!actionableTarget) {
+      return;
+    }
+
     const press = {
       pointerId: event.pointerId,
       x: event.clientX,
       y: event.clientY,
-      target,
+      target: actionableTarget,
       currentTarget: event.currentTarget,
       timer: setTimeout(() => {}, 0),
     };
@@ -3163,7 +3172,7 @@ function LocationColumn({
       }, 900);
       navigator.vibrate?.(10);
       showMenu(press.target, press.currentTarget, press.x, press.y, true);
-    }, 500);
+    }, 650);
     longPressRef.current = press;
   }
 
@@ -3175,7 +3184,7 @@ function LocationColumn({
 
     const dx = event.clientX - press.x;
     const dy = event.clientY - press.y;
-    if (dx * dx + dy * dy > 36) {
+    if (dx * dx + dy * dy > 16) {
       cancelLongPress(event.pointerId);
     }
   }
@@ -3729,7 +3738,7 @@ function HiringCard({
       data-item-kind="hiring"
       data-search-hit={spotlight ? "true" : undefined}
       draggable={movable}
-      className={`touch-none rounded-xl border border-yellow-200 bg-yellow-100 px-2.5 py-2 shadow-sm select-none ${
+      className={`touch-pan-y rounded-xl border border-yellow-200 bg-yellow-100 px-2.5 py-2 shadow-sm select-none ${
         movable ? "cursor-grab active:cursor-grabbing" : ""
       } ${dragging ? "opacity-40" : ""} ${spotlight ? "relative z-20 shadow-xl ring-2 ring-white" : ""}`}
       onPointerDown={(event) => onPointerDown(event, role.id)}
@@ -3797,7 +3806,7 @@ function StaffCard({
       data-item-kind="staff"
       data-search-hit={spotlight ? "true" : undefined}
       draggable={movable}
-      className={`relative flex touch-none overflow-visible select-none ${
+      className={`relative flex touch-pan-y overflow-visible select-none ${
         movable ? "cursor-grab active:cursor-grabbing" : ""
       } ${dragging ? "opacity-40" : ""} ${spotlight ? "z-20" : ""}`}
       onPointerDown={(event) => onPointerDown(event, person.id)}
@@ -3891,7 +3900,7 @@ function LabelCard({
       data-item-id={label.id}
       data-item-kind="label"
       draggable={movable}
-      className={`flex touch-none items-center rounded-xl border border-stone-200 bg-white px-2.5 py-2 shadow-sm select-none ${
+      className={`flex touch-pan-y items-center rounded-xl border border-stone-200 bg-white px-2.5 py-2 shadow-sm select-none ${
         movable ? "cursor-grab active:cursor-grabbing" : ""
       } ${dragging ? "opacity-40" : ""}`}
       style={labelSurface(color)}

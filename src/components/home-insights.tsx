@@ -347,18 +347,18 @@ function WorkforceChart({ shares }: { shares: VenueShare[] }) {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="mb-2 grid grid-cols-3 gap-2">
+      <div className="mb-2 grid grid-cols-3 gap-1.5 sm:gap-2">
         {categories.map((category) => (
-          <div key={category.key} className="rounded-2xl bg-stone-50 px-3 py-2">
-            <p className="flex items-center gap-1.5 text-[10px] text-stone-400">
-              <span className="size-1.5 rounded-full" style={{ backgroundColor: category.color }} />
-              {category.label}
+          <div key={category.key} className="min-w-0 rounded-2xl bg-stone-50 px-2 py-2 sm:px-3">
+            <p className="flex min-w-0 items-center gap-1 text-[9px] text-stone-400 sm:gap-1.5 sm:text-[10px]">
+              <span className="size-1.5 shrink-0 rounded-full" style={{ backgroundColor: category.color }} />
+              <span className="truncate">{category.label}</span>
             </p>
             <p className="mt-0.5 text-sm font-semibold text-stone-950 tabular-nums">{category.value}</p>
           </div>
         ))}
       </div>
-      <div className="flex min-h-0 flex-1 flex-col gap-1">
+      <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto">
         {shares.map((share) => (
           <WorkforceRow key={share.venue.id} share={share} />
         ))}
@@ -371,8 +371,8 @@ function WorkforceRow({ share }: { share: VenueShare }) {
   const percents = percentShares(share.slices, share.total);
 
   return (
-    <div className="grid min-h-0 flex-1 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3">
-      <div className="aspect-square h-full max-h-16">
+    <div className="grid min-h-[3.75rem] shrink-0 grid-cols-[2.75rem_minmax(0,1fr)_2rem] items-center gap-2 py-1 sm:min-h-0 sm:flex-1 sm:grid-cols-[3.5rem_minmax(0,1fr)_auto] sm:gap-3">
+      <div className="size-11 sm:size-14">
         <Ring slices={share.slices} total={share.total} venue={share.venue.name} className="size-full" compact />
       </div>
       <div className="min-w-0">
