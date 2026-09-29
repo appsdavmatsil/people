@@ -40,6 +40,7 @@ const emptyForm = {
   position: "",
   venueId: "",
   venue: "",
+  salary: "",
 };
 
 type Notice = {
@@ -52,6 +53,7 @@ const outsourcedColumns = [
   { key: "company", label: "Company" },
   { key: "position", label: "Position" },
   { key: "venue", label: "Venue" },
+  { key: "salary", label: "Salary" },
 ] as const;
 
 type OutsourcedColumnKey = (typeof outsourcedColumns)[number]["key"];
@@ -131,6 +133,7 @@ export function OutsourcedDirectory({ editId }: { editId?: string }) {
       position: person.position,
       venueId: venue?.id ?? "",
       venue: person.venue,
+      salary: person.rate == null ? "" : String(person.rate),
     });
     setFormError("");
     dialogRef.current?.showModal();
@@ -173,8 +176,13 @@ export function OutsourcedDirectory({ editId }: { editId?: string }) {
     const company = form.company.trim();
     const position = form.position.trim();
     const venue = form.venue.trim();
-    if (!fullName || !company || !position || !venue) {
-      setFormError("Enter a name, company, position, and venue.");
+    const salary = Number(form.salary.replaceAll(",", ""));
+    if (!fullName || !company || !position || !venue || !form.salary.trim()) {
+      setFormError("Enter a name, company, position, venue, and salary.");
+      return;
+    }
+    if (!Number.isFinite(salary) || salary < 0) {
+      setFormError("Enter a valid salary.");
       return;
     }
 
@@ -187,7 +195,7 @@ export function OutsourcedDirectory({ editId }: { editId?: string }) {
       venue,
       startDate: previous?.startDate ?? "",
       endDate: previous?.endDate ?? "",
-      rate: previous?.rate ?? null,
+      rate: salary,
       archived: previous?.archived,
     };
     if (editingId) {
@@ -254,7 +262,7 @@ export function OutsourcedDirectory({ editId }: { editId?: string }) {
         setNotice({
           tone: "error",
           text: result.skipped
-            ? "No people were imported. Each row needs a full name."
+            ? "No people were imported. Each row needs a full name and valid salary."
             : "That sheet has the right columns, but no rows yet.",
         });
         return;
@@ -262,7 +270,7 @@ export function OutsourcedDirectory({ editId }: { editId?: string }) {
 
       update((current) => [...current, ...result.people]);
       const skipped = result.skipped
-        ? ` ${result.skipped} ${result.skipped === 1 ? "row was" : "rows were"} skipped because a name was missing.`
+        ? ` ${result.skipped} ${result.skipped === 1 ? "row was" : "rows were"} skipped because a name or valid salary was missing.`
         : "";
       setNotice({
         tone: "ok",
@@ -350,7 +358,7 @@ export function OutsourcedDirectory({ editId }: { editId?: string }) {
           <tbody>
             {visible.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-3 py-8 text-center text-stone-500">
+                <td colSpan={6} className="px-3 py-8 text-center text-stone-500">
                   {listed.length === 0
                     ? people.length === 0
                       ? "No outsourced staff yet. Add someone, or import a spreadsheet."
@@ -372,6 +380,9 @@ export function OutsourcedDirectory({ editId }: { editId?: string }) {
                   <td className="border-b border-stone-100 px-3 py-2 text-stone-700">{person.position}</td>
                   <td className="border-b border-stone-100 px-3 py-2 text-stone-700">
                     {venueNickname(person.venue, locations) || "—"}
+                  </td>
+                  <td className="border-b border-stone-100 px-3 py-2 text-stone-700 tabular-nums">
+                    {person.rate == null ? "—" : person.rate.toLocaleString("en-US")}
                   </td>
                   <td className="border-b border-stone-100 px-2 py-1">
                     <RowActions
@@ -499,6 +510,22 @@ export function OutsourcedDirectory({ editId }: { editId?: string }) {
                 />
               )}
             </label>
+            <label className="block text-sm font-medium text-stone-800">
+              Salary
+              <input
+                value={form.salary}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, salary: event.target.value }))
+                }
+                inputMode="decimal"
+                placeholder="0"
+                required
+                className={fieldClass}
+              />
+              <span className="mt-1 block text-xs font-normal text-stone-500">
+                Outsourced salary is treated as 100% salary with no allowances.
+              </span>
+            </label>
             {formError ? <p className="text-sm text-red-700">{formError}</p> : null}
           </div>
 
@@ -546,6 +573,10 @@ function outsourcedCell(
 
   if (key === "venue") {
     return venueNickname(person.venue, locations);
+  }
+
+  if (key === "salary") {
+    return person.rate == null ? "" : String(person.rate);
   }
 
   return person[key];
@@ -604,4 +635,3 @@ function blankLast(leftBlank: boolean, rightBlank: boolean) {
 
   return leftBlank ? 1 : -1;
 }
-

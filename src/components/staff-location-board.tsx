@@ -152,20 +152,31 @@ export function StaffLocationBoard() {
   const { tags: cardTags, update: updateCardTags } = useCardTags();
   const { orders, update: updateOrders } = useBoardOrder();
   const { employees, update: updateEmployees } = useStaffDirectory();
+  const { people: outsourcedPeople, update: updateOutsourced } = useOutsourced();
   const activeEmployees = employees.filter((employee) => !employee.archived);
-  const placements = activeEmployees.map((employee) => ({
-    id: employee.id,
-    name: employee.fullName,
-    locationId: locationIdForVenue(employee.venue, locations),
-    position: employee.position,
-    salary: employee.salary,
-  }));
-  const unassignedPeople = activeEmployees.flatMap((employee) => {
-    if (locationIdForVenue(employee.venue, locations)) {
+  const activeOutsourced = outsourcedPeople.filter((person) => !person.archived);
+  const placements = [
+    ...activeEmployees.map((employee) => ({
+      id: employee.id,
+      name: employee.fullName,
+      locationId: locationIdForVenue(employee.venue, locations),
+      position: employee.position,
+      salary: employee.salary,
+    })),
+    ...activeOutsourced.map((person) => ({
+      id: person.id,
+      name: person.fullName,
+      locationId: locationIdForVenue(person.venue, locations),
+      position: person.position,
+      salary: person.rate,
+    })),
+  ];
+  const unassignedPeople = [...activeEmployees, ...activeOutsourced].flatMap((person) => {
+    if (locationIdForVenue(person.venue, locations)) {
       return [];
     }
 
-    return [{ id: employee.id, name: employee.fullName, position: employee.position }];
+    return [{ id: person.id, name: person.fullName, position: person.position }];
   });
 
   function updatePlacements(next: StaffPlacement[]) {
@@ -185,9 +196,28 @@ export function StaffLocationBoard() {
       return employee.venue === venue ? [employee] : [{ ...employee, venue }];
     });
     const added = next
-      .filter((person) => !employees.some((employee) => employee.id === person.id))
+      .filter(
+        (person) =>
+          !employees.some((employee) => employee.id === person.id) &&
+          !outsourcedPeople.some((outsourced) => outsourced.id === person.id),
+      )
       .map((person) => employeeFromPlacement(person, locations));
     updateEmployees([...updated, ...added]);
+    updateOutsourced(
+      outsourcedPeople.flatMap((outsourced) => {
+        if (outsourced.archived) return [outsourced];
+        const person = incoming.get(outsourced.id);
+        if (!person) return [];
+        const location = locations.find((item) => item.id === person.locationId);
+        return [{
+          ...outsourced,
+          fullName: person.name,
+          position: person.position ?? "",
+          venue: location ? location.venueName || location.nickname : "",
+          rate: person.salary ?? null,
+        }];
+      }),
+    );
   }
 
   return (
@@ -1957,6 +1987,10 @@ function PlacementBoard({
             row.kind === "staff"
               ? employees.find((item) => item.id === row.person.id)
               : undefined;
+          const outsourced =
+            row.kind === "staff"
+              ? outsourcedPeople.find((item) => item.id === row.person.id)
+              : undefined;
           return (
             <Fragment key={`${row.kind}-${itemId}`}>
               {slot?.beforeItemId === itemId ? <DropLine /> : null}
@@ -1967,17 +2001,21 @@ function PlacementBoard({
                   photo={employee?.photo ?? null}
                   color={color}
                   cardLabel={cardLabels.find((item) => item.staffId === row.person.id)?.text ?? ""}
-                  cardTag={cardTags.find((item) => item.staffId === row.person.id)?.text ?? ""}
+                  cardTag={
+                    outsourced
+                      ? `Outsourced${outsourced.company ? ` · ${outsourced.company}` : ""}`
+                      : cardTags.find((item) => item.staffId === row.person.id)?.text ?? ""
+                  }
                   onOpenProfile={() => openProfile(row.person.id)}
                   promotion={
-                    kind === "venue" && showPromotions && includePromotions
+                    kind === "venue" && !outsourced && showPromotions && includePromotions
                       ? pendingPromotion(promotions, row.person.id, today)
                       : null
                   }
                   hideSalary={hideSalary(row.person.position ?? "")}
                   spotlight={searching && searchHits.has(row.person.id)}
                   hidePromotionSalary={hideSalary(
-                    (kind === "venue" && showPromotions && includePromotions
+                    (kind === "venue" && !outsourced && showPromotions && includePromotions
                       ? pendingPromotion(promotions, row.person.id, today)?.newPosition
                       : "") ?? "",
                   )}
@@ -2386,7 +2424,9 @@ function PlacementBoard({
             costs={
               location.venueName
                 ? venueCostBreakdown(
-                    peopleAt(location.id),
+                    peopleAt(location.id).filter(
+                      (person) => !outsourcedPeople.some((item) => item.id === person.id),
+                    ),
                     outsourcedAt(location.id),
                     showHiring ? hiringAt(location.id) : [],
                     kind === "venue" && includePromotions && showPromotions ? promotions : [],
@@ -2697,6 +2737,7 @@ function PlacementBoard({
             <StaffEditFields
               form={editForm}
               kind={kind}
+              outsourced={outsourcedPeople.some((person) => person.id === editForm.id)}
               locations={locations}
               lookups={lookups}
               onChange={setEditForm}
@@ -4450,12 +4491,14 @@ function moneyField(value: number | null) {
 function StaffEditFields({
   form,
   kind,
+  outsourced,
   locations,
   lookups,
   onChange,
 }: {
   form: StaffEditForm;
   kind: "venue" | "event";
+  outsourced: boolean;
   locations: LocationReference[];
   lookups: DirectoryLookups;
   onChange: (next: StaffEditForm) => void;
@@ -4469,6 +4512,10 @@ function StaffEditFields({
   const knownPosition = lookups.positions.some((position) => position.name === form.position);
 
   function updateSalary(salary: string) {
+    if (outsourced) {
+      onChange({ ...form, salary, basicSalary: "", allowances: "" });
+      return;
+    }
     const amount = parseMoneyInput(salary);
     if (amount == null) {
       onChange({ ...form, salary, basicSalary: "", allowances: "" });
@@ -4580,7 +4627,7 @@ function StaffEditFields({
           ))}
         </select>
       </label>
-      {kind === "venue" ? (
+      {kind === "venue" && !outsourced ? (
         <>
           <label className="block text-sm font-medium text-stone-800">
             Country
@@ -4657,7 +4704,7 @@ function StaffEditFields({
         </>
       ) : (
         <label className="block text-sm font-medium text-stone-800">
-          Salary
+          {outsourced ? "Salary (100%)" : "Salary"}
           <input
             type="number"
             min="0"
@@ -4667,6 +4714,11 @@ function StaffEditFields({
             onChange={(event) => updateSalary(event.target.value)}
             className={fieldClass}
           />
+          {outsourced ? (
+            <span className="mt-1 block text-xs font-normal text-stone-500">
+              No allowances are applied to outsourced staff.
+            </span>
+          ) : null}
         </label>
       )}
     </div>

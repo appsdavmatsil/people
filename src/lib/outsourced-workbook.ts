@@ -13,6 +13,7 @@ const columns = [
   { key: "company", label: "Company" },
   { key: "position", label: "Position" },
   { key: "venue", label: "Venue" },
+  { key: "salary", label: "Salary" },
 ] as const;
 
 type ColumnKey = (typeof columns)[number]["key"];
@@ -30,6 +31,9 @@ const aliases: Record<string, ColumnKey> = {
   venue: "venue",
   "venue name": "venue",
   location: "venue",
+  salary: "salary",
+  rate: "salary",
+  "current salary": "salary",
 };
 
 export type OutsourcedImport = {
@@ -46,6 +50,7 @@ export async function buildOutsourcedWorkbook(people: OutsourcedPerson[]) {
       { text: person.company, number: null },
       { text: person.position, number: null },
       { text: person.venue, number: null },
+      { text: person.rate == null ? "" : String(person.rate), number: person.rate },
     ]),
   ];
   return writeXlsx(rows);
@@ -80,7 +85,7 @@ export async function importOutsourcedWorkbook(data: ArrayBuffer): Promise<Outso
       people: [],
       skipped: 0,
       error:
-        "Export a sheet from this page first. It needs columns for full name, company, position, and venue.",
+        "Export a sheet from this page first. It needs columns for full name, company, position, venue, and salary.",
     };
   }
 
@@ -106,7 +111,8 @@ export async function importOutsourcedWorkbook(data: ArrayBuffer): Promise<Outso
     }
 
     const fullName = cellText(record.fullName).replace(/\s+/g, " ");
-    if (!fullName) {
+    const salary = salaryFromCell(record.salary);
+    if (!fullName || salary == null || salary < 0) {
       skipped += 1;
       continue;
     }
@@ -119,9 +125,16 @@ export async function importOutsourcedWorkbook(data: ArrayBuffer): Promise<Outso
       venue: cellText(record.venue),
       startDate: "",
       endDate: "",
-      rate: null,
+      rate: salary,
     });
   }
 
   return { people, skipped };
+}
+
+function salaryFromCell(cell: SheetCell | undefined) {
+  if (!cell) return null;
+  if (cell.number != null && Number.isFinite(cell.number)) return cell.number;
+  const parsed = Number(cell.text.replaceAll(",", "").trim());
+  return Number.isFinite(parsed) && cell.text.trim() ? parsed : null;
 }
