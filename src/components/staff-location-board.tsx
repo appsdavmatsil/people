@@ -220,6 +220,8 @@ export function StaffLocationBoard() {
 export function EventsManningBoard() {
   const { events } = useEvents();
   const { employees } = useStaffDirectory();
+  const { locations: venueCatalog } = useLocations();
+  const { ids: venueBoardIds } = useLocationBoard();
   const { ids, update: updateIds } = useEventBoard();
   const { placements, update: updatePlacements } = useEventPlacements();
   const { labels, update: updateLabels } = useEventBoardLabels();
@@ -229,6 +231,22 @@ export function EventsManningBoard() {
   const locations = ids.flatMap((id) => {
     const event = events.find((item) => item.id === id);
     return event ? [{ id: event.id, nickname: event.name, venueName: "", color: "" }] : [];
+  });
+  const sourceVenues = (venueBoardIds ?? venueCatalog.map((venue) => venue.id)).flatMap((id) => {
+    const venue = venueCatalog.find((item) => item.id === id);
+    return venue ? [venue] : [];
+  });
+  const sourcePlacements = employees.filter((employee) => !employee.archived).flatMap((employee) => {
+    const locationId = locationIdForVenue(employee.venue, sourceVenues);
+    return locationId
+      ? [{
+          id: employee.id,
+          name: employee.fullName,
+          locationId,
+          position: employee.position,
+          salary: employee.salary,
+        }]
+      : [];
   });
 
   function updateLocations(next: LocationReference[]) {
@@ -267,6 +285,8 @@ export function EventsManningBoard() {
       updateCardTags={updateCardTags}
       orders={orders}
       updateOrders={updateOrders}
+      eventSourceLocations={sourceVenues}
+      eventSourcePlacements={sourcePlacements}
     />
   );
 }
@@ -293,6 +313,8 @@ function PlacementBoard({
   employees = [],
   updateEmployees,
   updateEmployee,
+  eventSourceLocations = [],
+  eventSourcePlacements = [],
 }: {
   kind?: "venue" | "event";
   catalog?: EventDefinition[];
@@ -315,6 +337,8 @@ function PlacementBoard({
   employees?: StaffEmployee[];
   updateEmployees?: (next: StaffEmployee[]) => void;
   updateEmployee?: (employee: StaffEmployee) => void;
+  eventSourceLocations?: LocationReference[];
+  eventSourcePlacements?: StaffPlacement[];
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const profileOpenedAt = useRef(0);
@@ -382,7 +406,21 @@ function PlacementBoard({
   const labelInsertRef = useRef<LabelSlot | null>(null);
   const [status, setStatus] = useState("");
   const [boardQuery, setBoardQuery] = useState("");
+  const [eventSourceLocationId, setEventSourceLocationId] = useState("");
+  const [eventSourceSnapshot, setEventSourceSnapshot] = useState<StaffPlacement[]>(
+    eventSourcePlacements,
+  );
   const dragging = drag !== null;
+
+  useEffect(() => {
+    if (kind !== "event") return;
+    if (!eventSourceLocationId || !eventSourceLocations.some((item) => item.id === eventSourceLocationId)) {
+      setEventSourceLocationId(eventSourceLocations[0]?.id ?? "");
+    }
+    if (eventSourceSnapshot.length === 0 && eventSourcePlacements.length > 0) {
+      setEventSourceSnapshot(eventSourcePlacements);
+    }
+  }, [eventSourceLocationId, eventSourceLocations, eventSourcePlacements, eventSourceSnapshot.length, kind]);
 
   useLayoutEffect(() => {
     placementsRef.current = placements;
@@ -538,6 +576,30 @@ function PlacementBoard({
       const current = placementsRef.current;
       const person = current.find((item) => item.id === staffId);
       if (!person) {
+        const sourcePerson =
+          kind === "event" ? eventSourceSnapshot.find((item) => item.id === staffId) : undefined;
+        const to = slot.locationId;
+        if (!sourcePerson || !to || !known.has(to)) {
+          return;
+        }
+        const currentLabels = labelsRef.current;
+        const currentOrders = ordersRef.current;
+        const targetRows = visualRows(
+          to,
+          staffId,
+          current,
+          known,
+          currentOrders,
+          currentLabels,
+          hiringRolesRef.current,
+          currentLocations,
+        );
+        const inserted = insertStaff(targetRows, staffId, slot.beforeItemId);
+        updatePlacements([...current, { ...sourcePerson, locationId: to }]);
+        updateLabels(reanchorLabels(currentLabels, to, inserted));
+        updateOrders({ ...currentOrders, [columnOrderKey(to)]: persistedOrder(inserted) });
+        const place = currentLocations.find((location) => location.id === to)?.nickname ?? "an event";
+        setStatus(`Allocated ${sourcePerson.name} to ${place}.`);
         return;
       }
 
@@ -609,7 +671,7 @@ function PlacementBoard({
         : "Not placed";
       setStatus(from === to ? `Moved ${person.name}.` : `Moved ${person.name} to ${place}.`);
     },
-    [kind, updateLabels, updateOrders, updatePlacements],
+    [eventSourceSnapshot, kind, updateLabels, updateOrders, updatePlacements],
   );
 
   const placeLabel = useCallback(
@@ -1963,7 +2025,11 @@ function PlacementBoard({
 
   const draggedLabel = drag ? labels.find((label) => label.id === drag.staffId) : null;
   const dragged =
-    drag && !draggedLabel ? placements.find((person) => person.id === drag.staffId) : null;
+    drag && !draggedLabel
+      ? placements.find((person) => person.id === drag.staffId) ??
+        eventSourceSnapshot.find((person) => person.id === drag.staffId) ??
+        null
+      : null;
   const draggedEmployee = dragged
     ? employees.find((employee) => employee.id === dragged.id)
     : undefined;
@@ -2017,6 +2083,23 @@ function PlacementBoard({
       }
       if (matchesBoardSearch(boardSearch, fields)) {
         searchHits.add(role.id);
+      }
+    }
+    if (kind === "event") {
+      for (const person of eventSourceSnapshot) {
+        const employee = employees.find((item) => item.id === person.id);
+        if (
+          matchesBoardSearch(boardSearch, [
+            person.name,
+            employee?.fullName,
+            employee?.firstName,
+            employee?.lastName,
+            person.position,
+            hideSalary(person.position ?? "") ? null : person.salary,
+          ])
+        ) {
+          searchHits.add(person.id);
+        }
       }
     }
   }
@@ -2213,6 +2296,82 @@ function PlacementBoard({
       >
         {searching ? (
           <div className="pointer-events-none absolute inset-0 z-0 bg-stone-950/55" aria-hidden="true" />
+        ) : null}
+        {kind === "event" ? (
+          <section className="relative z-[1] flex min-w-64 flex-none flex-col overflow-hidden rounded-2xl border border-emerald-200 bg-emerald-50/40 shadow-sm">
+            <div className="shrink-0 border-b border-emerald-200 bg-white/90 p-3">
+              <label className="block text-xs font-medium text-stone-600">
+                Current venue
+                <select
+                  value={eventSourceLocationId}
+                  onChange={(event) => setEventSourceLocationId(event.target.value)}
+                  className="mt-1.5 h-9 w-full rounded-lg border border-stone-300 bg-white px-3 text-sm font-medium text-stone-950 outline-none focus:border-stone-950"
+                >
+                  {eventSourceLocations.length === 0 ? (
+                    <option value="">No venues available</option>
+                  ) : null}
+                  {eventSourceLocations.map((venue) => (
+                    <option key={venue.id} value={venue.id}>
+                      {venue.nickname} — {venue.venueName}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button
+                type="button"
+                className="mt-2 inline-flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-emerald-300 bg-emerald-100 px-3 text-sm font-medium text-emerald-900 hover:bg-emerald-200"
+                onClick={() => {
+                  setEventSourceSnapshot(eventSourcePlacements);
+                  setStatus("Updated venue staff from Staff Deployment.");
+                }}
+              >
+                <RefreshIcon />
+                Refresh venue staff
+              </button>
+            </div>
+            <div className="border-b border-emerald-200 px-3 py-2 text-xs text-emerald-900">
+              Drag employees from this venue into an event.
+            </div>
+            <ul className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto p-3">
+              {eventSourceSnapshot.filter((person) => person.locationId === eventSourceLocationId)
+                .length === 0 ? (
+                <li className="rounded-xl border border-dashed border-emerald-200 px-3 py-8 text-center text-sm text-stone-500">
+                  No staff at this venue
+                </li>
+              ) : (
+                eventSourceSnapshot
+                  .filter((person) => person.locationId === eventSourceLocationId)
+                  .map((person) => {
+                    const employee = employees.find((item) => item.id === person.id);
+                    const allocated = placements.some(
+                      (placement) =>
+                        placement.id === person.id &&
+                        placement.locationId &&
+                        knownIds.has(placement.locationId),
+                    );
+                    return (
+                      <StaffCard
+                        key={person.id}
+                        person={person}
+                        displayName={employeeCardName(employee, person.name)}
+                        photo={employee?.photo ?? null}
+                        allocated={allocated}
+                        hideSalary={hideSalary(person.position ?? "")}
+                        spotlight={searching && searchHits.has(person.id)}
+                        dragging={drag?.staffId === person.id || htmlDragId === person.id}
+                        movable
+                        onOpenProfile={() => openProfile(person.id)}
+                        onPointerDown={startDrag}
+                        onPointerMove={moveDrag}
+                        onPointerUp={endDrag}
+                        onHtmlDragStart={startHtmlDrag}
+                        onHtmlDragEnd={endHtmlDrag}
+                      />
+                    );
+                  })
+              )}
+            </ul>
+          </section>
         ) : null}
         {locations.map((location) => (
           <LocationColumn
@@ -3771,6 +3930,7 @@ function StaffCard({
   spotlight = false,
   dragging,
   movable = true,
+  allocated = false,
   onOpenProfile,
   onPointerDown,
   onPointerMove,
@@ -3790,6 +3950,7 @@ function StaffCard({
   spotlight?: boolean;
   dragging: boolean;
   movable?: boolean;
+  allocated?: boolean;
   onOpenProfile: () => void;
   onPointerDown: (event: React.PointerEvent<HTMLElement>, staffId: string) => void;
   onPointerMove: (event: React.PointerEvent<HTMLElement>) => void;
@@ -3817,8 +3978,12 @@ function StaffCard({
     >
       {tagged ? <CardStamp text={cardTag} /> : null}
       <span
-        className={`flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-stone-200 shadow-sm ${
-          labeled ? "bg-stone-100" : "bg-white"
+        className={`flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border shadow-sm ${
+          allocated
+            ? "border-emerald-300 bg-emerald-100"
+            : labeled
+              ? "border-stone-200 bg-stone-100"
+              : "border-stone-200 bg-white"
         } ${spotlight ? "shadow-xl ring-2 ring-white" : ""}`}
       >
       {labeled ? (
@@ -3856,6 +4021,11 @@ function StaffCard({
             </span>
           ) : null}
           <PromotionTag promotion={promotion} hideSalary={hidePromotionSalary} />
+          {allocated ? (
+            <span className="mt-1 inline-flex rounded-full bg-emerald-700 px-2 py-0.5 text-[10px] font-medium text-white">
+              Allocated to event
+            </span>
+          ) : null}
         </span>
       </span>
       </span>
