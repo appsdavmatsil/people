@@ -565,7 +565,8 @@ function readZoom() {
 
 function applyZoom(value: number) {
   const effectiveZoom = window.matchMedia("(max-width: 767px)").matches ? 1 : value;
-  document.documentElement.style.setProperty("zoom", String(effectiveZoom));
+  document.documentElement.style.removeProperty("zoom");
+  document.documentElement.style.fontSize = `${effectiveZoom * 100}%`;
 }
 
 function changeZoom(index: number, setZoom: (value: number) => void) {

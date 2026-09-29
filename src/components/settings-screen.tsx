@@ -226,6 +226,10 @@ function LocationsPanel({
       setError(message);
       return;
     }
+    if (!isHexColor(color)) {
+      setError("Enter a six-digit color code, for example #011023.");
+      return;
+    }
 
     update([
       ...locations,
@@ -249,6 +253,10 @@ function LocationsPanel({
     const message = locationError(locations, cleanedNickname, cleanedVenue, location.id);
     if (message) {
       setError(message);
+      return;
+    }
+    if (!isHexColor(draftColor)) {
+      setError("Enter a six-digit color code, for example #011023.");
       return;
     }
 
@@ -278,7 +286,7 @@ function LocationsPanel({
 
   return (
     <div>
-      <form onSubmit={addLocation} className="grid max-w-3xl gap-3 sm:grid-cols-[9rem_1fr_auto_auto] sm:items-end">
+      <form onSubmit={addLocation} className="grid max-w-4xl gap-3 sm:grid-cols-[9rem_1fr_auto_auto] sm:items-end">
         <label className="block text-sm font-medium text-stone-800">
           Nick name
           <input
@@ -299,13 +307,24 @@ function LocationsPanel({
         </label>
         <label className="block text-sm font-medium text-stone-800">
           Color
-          <input
-            type="color"
-            value={color}
-            onChange={(event) => setColor(event.target.value)}
-            aria-label="Header color"
-            className={`${colorInputClass} mt-1.5`}
-          />
+          <span className="mt-1.5 flex gap-2">
+            <input
+              type="color"
+              value={isHexColor(color) ? normalizeLocationColor(color) : defaultLocationColor}
+              onChange={(event) => setColor(event.target.value)}
+              aria-label="Header color picker"
+              className={colorInputClass}
+            />
+            <input
+              value={color}
+              onChange={(event) => setColor(event.target.value)}
+              onBlur={() => isHexColor(color) && setColor(normalizeLocationColor(color))}
+              aria-label="Header color code"
+              placeholder="#011023"
+              spellCheck={false}
+              className={`${fieldClass} w-28 font-mono uppercase`}
+            />
+          </span>
         </label>
         <button type="submit" className={primaryButtonClass}>
           Add
@@ -318,7 +337,7 @@ function LocationsPanel({
             <tr>
               <th className="w-36 px-3 py-2 font-medium">Nick Name</th>
               <th className="px-3 py-2 font-medium">Venue Name</th>
-              <th className="w-20 px-3 py-2 font-medium">Color</th>
+              <th className="w-40 px-3 py-2 font-medium">Color</th>
               <th className="w-20 px-3 py-2">
                 <span className="sr-only">Actions</span>
               </th>
@@ -361,13 +380,31 @@ function LocationsPanel({
                         </label>
                         <label className="block text-sm font-medium text-stone-800">
                           Color
-                          <input
-                            type="color"
-                            value={draftColor}
-                            onChange={(event) => setDraftColor(event.target.value)}
-                            aria-label={`Header color for ${location.nickname}`}
-                            className={`${colorInputClass} mt-1.5`}
-                          />
+                          <span className="mt-1.5 flex gap-2">
+                            <input
+                              type="color"
+                              value={
+                                isHexColor(draftColor)
+                                  ? normalizeLocationColor(draftColor)
+                                  : defaultLocationColor
+                              }
+                              onChange={(event) => setDraftColor(event.target.value)}
+                              aria-label={`Header color picker for ${location.nickname}`}
+                              className={colorInputClass}
+                            />
+                            <input
+                              value={draftColor}
+                              onChange={(event) => setDraftColor(event.target.value)}
+                              onBlur={() =>
+                                isHexColor(draftColor) &&
+                                setDraftColor(normalizeLocationColor(draftColor))
+                              }
+                              aria-label={`Header color code for ${location.nickname}`}
+                              placeholder="#011023"
+                              spellCheck={false}
+                              className={`${fieldClass} w-28 font-mono uppercase`}
+                            />
+                          </span>
                         </label>
                         <div className="flex gap-2">
                           <button type="submit" className={primaryButtonClass}>
@@ -392,20 +429,25 @@ function LocationsPanel({
                     <td className="px-3 py-2 font-medium text-stone-950">{location.nickname}</td>
                     <td className="px-3 py-2 text-stone-950">{location.venueName}</td>
                     <td className="px-3 py-2">
-                      <input
-                        type="color"
-                        value={location.color || "#ffffff"}
-                        aria-label={`Header color for ${location.nickname}`}
-                        className={colorInputClass}
-                        onChange={(event) => {
-                          const next = normalizeLocationColor(event.target.value, location.nickname);
-                          update(
-                            locations.map((item) =>
-                              item.id === location.id ? { ...item, color: next } : item,
-                            ),
-                          );
-                        }}
-                      />
+                      <span className="flex items-center gap-2">
+                        <input
+                          type="color"
+                          value={location.color || "#ffffff"}
+                          aria-label={`Header color for ${location.nickname}`}
+                          className={colorInputClass}
+                          onChange={(event) => {
+                            const next = normalizeLocationColor(event.target.value, location.nickname);
+                            update(
+                              locations.map((item) =>
+                                item.id === location.id ? { ...item, color: next } : item,
+                              ),
+                            );
+                          }}
+                        />
+                        <span className="font-mono text-xs uppercase text-stone-600">
+                          {location.color || "#ffffff"}
+                        </span>
+                      </span>
                     </td>
                     <td className="px-3 py-2 text-right">
                       <div className="inline-flex items-center justify-end gap-1">
@@ -634,6 +676,10 @@ function locationError(
   }
 
   return "";
+}
+
+function isHexColor(value: string) {
+  return /^#[0-9a-fA-F]{6}$/.test(value.trim());
 }
 
 function CountryPanel({
