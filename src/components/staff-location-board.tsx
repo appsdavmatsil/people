@@ -2002,10 +2002,9 @@ function PlacementBoard({
                   color={color}
                   cardLabel={cardLabels.find((item) => item.staffId === row.person.id)?.text ?? ""}
                   cardTag={
-                    outsourced
-                      ? `Outsourced${outsourced.company ? ` · ${outsourced.company}` : ""}`
-                      : cardTags.find((item) => item.staffId === row.person.id)?.text ?? ""
+                    cardTags.find((item) => item.staffId === row.person.id)?.text ?? ""
                   }
+                  outsourcedCompany={outsourced?.company ?? ""}
                   onOpenProfile={() => openProfile(row.person.id)}
                   promotion={
                     kind === "venue" && !outsourced && showPromotions && includePromotions
@@ -2546,9 +2545,12 @@ function PlacementBoard({
                   {draggedCardName}
                 </span>
               </span>
+              {draggedOutsourced ? (
+                <OutsourcedBadge company={draggedOutsourced.company} />
+              ) : null}
               <PromotionTag
                 promotion={
-                  kind === "venue" && showPromotions && includePromotions
+                  kind === "venue" && !draggedOutsourced && showPromotions && includePromotions
                     ? pendingPromotion(promotions, dragged.id, today)
                     : null
                 }
@@ -3973,6 +3975,7 @@ function StaffCard({
   color = "",
   cardLabel = "",
   cardTag = "",
+  outsourcedCompany = "",
   promotion = null,
   hideSalary = false,
   hidePromotionSalary = false,
@@ -3994,6 +3997,7 @@ function StaffCard({
   color?: string;
   cardLabel?: string;
   cardTag?: string;
+  outsourcedCompany?: string;
   promotion?: StaffPromotion | null;
   hideSalary?: boolean;
   hidePromotionSalary?: boolean;
@@ -4070,6 +4074,9 @@ function StaffCard({
                 </>
               )}
             </span>
+          ) : null}
+          {outsourcedCompany ? (
+            <OutsourcedBadge company={outsourcedCompany} />
           ) : null}
           <PromotionTag promotion={promotion} hideSalary={hidePromotionSalary} />
           {allocated ? (
@@ -5424,6 +5431,16 @@ function dropIdAt(x: number, y: number) {
   }
 
   return null;
+}
+
+function OutsourcedBadge({ company }: { company: string }) {
+  return (
+    <span className="mt-1 inline-flex max-w-full items-center rounded-md border border-stone-300 bg-stone-100 px-1.5 py-0.5 text-[10px] font-medium leading-4 tracking-wide text-stone-600 uppercase">
+      <span className="min-w-0 truncate" title={`Outsourced · ${company}`}>
+        Outsourced{company ? ` · ${company}` : ""}
+      </span>
+    </span>
+  );
 }
 
 function PromotionTag({
