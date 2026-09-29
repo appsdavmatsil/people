@@ -1970,14 +1970,14 @@ function PlacementBoard({
                   cardTag={cardTags.find((item) => item.staffId === row.person.id)?.text ?? ""}
                   onOpenProfile={() => openProfile(row.person.id)}
                   promotion={
-                    kind === "venue" && showPromotions
+                    kind === "venue" && showPromotions && includePromotions
                       ? pendingPromotion(promotions, row.person.id, today)
                       : null
                   }
                   hideSalary={hideSalary(row.person.position ?? "")}
                   spotlight={searching && searchHits.has(row.person.id)}
                   hidePromotionSalary={hideSalary(
-                    (kind === "venue" && showPromotions
+                    (kind === "venue" && showPromotions && includePromotions
                       ? pendingPromotion(promotions, row.person.id, today)?.newPosition
                       : "") ?? "",
                   )}
@@ -2178,13 +2178,13 @@ function PlacementBoard({
               aria-pressed={includePromotions}
               aria-label={
                 includePromotions
-                  ? "Venue totals include pending promotions"
-                  : "Venue totals use current salaries"
+                  ? "Pending promotion totals and card tags are visible"
+                  : "Pending promotion totals and card tags are hidden"
               }
               title={
                 includePromotions
-                  ? "Showing totals with pending promotions. Click to use current salaries."
-                  : "Showing current salary totals. Click to include pending promotions."
+                  ? "Showing pending promotion totals and card tags. Click to hide them."
+                  : "Pending promotion totals and card tags are hidden. Click to show them."
               }
               className={`inline-flex size-9 items-center justify-center rounded-lg border ${
                 includePromotions
@@ -2356,6 +2356,7 @@ function PlacementBoard({
                         displayName={employeeCardName(employee, person.name)}
                         photo={employee?.photo ?? null}
                         allocated={allocated}
+                        onRemoveAllocation={allocated ? () => removeStaff(person.id) : undefined}
                         hideSalary={hideSalary(person.position ?? "")}
                         spotlight={searching && searchHits.has(person.id)}
                         dragging={drag?.staffId === person.id || htmlDragId === person.id}
@@ -2501,7 +2502,7 @@ function PlacementBoard({
               </span>
               <PromotionTag
                 promotion={
-                  kind === "venue" && showPromotions
+                  kind === "venue" && showPromotions && includePromotions
                     ? pendingPromotion(promotions, dragged.id, today)
                     : null
                 }
@@ -3931,6 +3932,7 @@ function StaffCard({
   dragging,
   movable = true,
   allocated = false,
+  onRemoveAllocation,
   onOpenProfile,
   onPointerDown,
   onPointerMove,
@@ -3951,6 +3953,7 @@ function StaffCard({
   dragging: boolean;
   movable?: boolean;
   allocated?: boolean;
+  onRemoveAllocation?: () => void;
   onOpenProfile: () => void;
   onPointerDown: (event: React.PointerEvent<HTMLElement>, staffId: string) => void;
   onPointerMove: (event: React.PointerEvent<HTMLElement>) => void;
@@ -4022,8 +4025,23 @@ function StaffCard({
           ) : null}
           <PromotionTag promotion={promotion} hideSalary={hidePromotionSalary} />
           {allocated ? (
-            <span className="mt-1 inline-flex rounded-full bg-emerald-700 px-2 py-0.5 text-[10px] font-medium text-white">
-              Allocated to event
+            <span className="mt-1 flex items-center gap-1.5">
+              <span className="inline-flex rounded-full bg-emerald-700 px-2 py-0.5 text-[10px] font-medium text-white">
+                Allocated to event
+              </span>
+              {onRemoveAllocation ? (
+                <button
+                  type="button"
+                  className="inline-flex h-5 items-center rounded-full border border-emerald-300 bg-white px-2 text-[10px] font-medium text-emerald-800 hover:bg-emerald-50"
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onRemoveAllocation();
+                  }}
+                >
+                  Remove
+                </button>
+              ) : null}
             </span>
           ) : null}
         </span>
