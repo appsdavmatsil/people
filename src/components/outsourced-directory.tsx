@@ -35,6 +35,7 @@ const primaryButtonClass =
 
 const emptyForm = {
   fullName: "",
+  photo: null as string | null,
   company: "",
   positionId: "",
   position: "",
@@ -64,9 +65,11 @@ export function OutsourcedDirectory({ editId }: { editId?: string }) {
   const { people, update } = useOutsourced();
   const dialogRef = useRef<HTMLDialogElement>(null);
   const importRef = useRef<HTMLInputElement>(null);
+  const photoRef = useRef<HTMLInputElement>(null);
   const [form, setForm] = useState(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formError, setFormError] = useState("");
+  const [photoError, setPhotoError] = useState("");
   const [notice, setNotice] = useState<Notice | null>(null);
   const [busy, setBusy] = useState<"import" | "export" | null>(null);
   const [showArchived, setShowArchived] = useState(false);
@@ -115,6 +118,7 @@ export function OutsourcedDirectory({ editId }: { editId?: string }) {
     setEditingId(null);
     setForm(emptyForm);
     setFormError("");
+    setPhotoError("");
     dialogRef.current?.showModal();
   }
 
@@ -128,6 +132,7 @@ export function OutsourcedDirectory({ editId }: { editId?: string }) {
     setEditingId(person.id);
     setForm({
       fullName: person.fullName,
+      photo: person.photo ?? null,
       company: person.company,
       positionId: position?.id ?? "",
       position: person.position,
@@ -136,6 +141,7 @@ export function OutsourcedDirectory({ editId }: { editId?: string }) {
       salary: person.rate == null ? "" : String(person.rate),
     });
     setFormError("");
+    setPhotoError("");
     dialogRef.current?.showModal();
   }
 
@@ -170,6 +176,30 @@ export function OutsourcedDirectory({ editId }: { editId?: string }) {
     }));
   }
 
+  function updatePhoto(file: File | null) {
+    setPhotoError("");
+    if (!file) {
+      setForm((current) => ({ ...current, photo: null }));
+      return;
+    }
+    if (!file.type.startsWith("image/")) {
+      setPhotoError("Choose an image file.");
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      setPhotoError("Use an image under 2 MB.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      setForm((current) => ({
+        ...current,
+        photo: typeof reader.result === "string" ? reader.result : null,
+      }));
+    };
+    reader.readAsDataURL(file);
+  }
+
   function addPerson(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const fullName = form.fullName.trim().replace(/\s+/g, " ");
@@ -190,6 +220,7 @@ export function OutsourcedDirectory({ editId }: { editId?: string }) {
     const person: OutsourcedPerson = {
       id: editingId ?? crypto.randomUUID(),
       fullName,
+      photo: form.photo,
       company,
       position,
       venue,
@@ -420,6 +451,53 @@ export function OutsourcedDirectory({ editId }: { editId?: string }) {
           />
 
           <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
+            <div className="flex items-center gap-4">
+              <button
+                type="button"
+                className="flex size-16 shrink-0 items-center justify-center overflow-hidden rounded-full bg-stone-100 text-base font-medium text-stone-500"
+                onClick={() => photoRef.current?.click()}
+                aria-label={form.photo ? "Update profile picture" : "Upload profile picture"}
+              >
+                {form.photo ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={form.photo} alt="" className="size-full object-cover" />
+                ) : (
+                  outsourcedInitials(form.fullName)
+                )}
+              </button>
+              <div>
+                <p className="text-sm font-medium text-stone-800">Profile picture</p>
+                <div className="mt-1.5 flex items-center gap-2">
+                  <button
+                    type="button"
+                    className="text-sm font-medium text-stone-950 underline-offset-4 hover:underline"
+                    onClick={() => photoRef.current?.click()}
+                  >
+                    {form.photo ? "Update" : "Upload"}
+                  </button>
+                  {form.photo ? (
+                    <button
+                      type="button"
+                      className="text-sm text-stone-500 underline-offset-4 hover:text-stone-950 hover:underline"
+                      onClick={() => updatePhoto(null)}
+                    >
+                      Remove
+                    </button>
+                  ) : null}
+                </div>
+                {photoError ? <p className="mt-1 text-xs text-red-700">{photoError}</p> : null}
+              </div>
+              <input
+                ref={photoRef}
+                type="file"
+                accept="image/*"
+                className="sr-only"
+                onChange={(event) => {
+                  updatePhoto(event.target.files?.[0] ?? null);
+                  event.target.value = "";
+                }}
+              />
+            </div>
             <label className="block text-sm font-medium text-stone-800">
               Full name
               <input
@@ -634,4 +712,10 @@ function blankLast(leftBlank: boolean, rightBlank: boolean) {
   }
 
   return leftBlank ? 1 : -1;
+}
+
+function outsourcedInitials(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  return `${parts[0]?.[0] ?? ""}${parts.length > 1 ? parts.at(-1)?.[0] ?? "" : ""}`.toUpperCase();
 }

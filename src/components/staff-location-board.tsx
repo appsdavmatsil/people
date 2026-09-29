@@ -1998,7 +1998,7 @@ function PlacementBoard({
                 <StaffCard
                   person={row.person}
                   displayName={employeeCardName(employee, row.person.name)}
-                  photo={employee?.photo ?? null}
+                  photo={employee?.photo ?? outsourced?.photo ?? null}
                   color={color}
                   cardLabel={cardLabels.find((item) => item.staffId === row.person.id)?.text ?? ""}
                   cardTag={
@@ -2070,6 +2070,9 @@ function PlacementBoard({
       : null;
   const draggedEmployee = dragged
     ? employees.find((employee) => employee.id === dragged.id)
+    : undefined;
+  const draggedOutsourced = dragged
+    ? outsourcedPeople.find((person) => person.id === dragged.id)
     : undefined;
   const draggedCardName = dragged ? employeeCardName(draggedEmployee, dragged.name) : "";
   const draggedHiring =
@@ -2533,7 +2536,10 @@ function PlacementBoard({
             </span>
           ) : null}
           <span className="flex items-start gap-2 px-2.5 py-2">
-            <Initials name={draggedCardName} photo={draggedEmployee?.photo ?? null} />
+            <Initials
+              name={draggedCardName}
+              photo={draggedEmployee?.photo ?? draggedOutsourced?.photo ?? null}
+            />
             <span className="min-w-0 flex-1">
               <span className="flex h-7 items-center">
                 <span className="block min-w-0 truncate text-sm font-medium text-stone-950" title={dragged.name}>
@@ -2900,6 +2906,7 @@ function PlacementBoard({
               <ProfileDialog
                 titleId={titleId}
                 employee={employees.find((employee) => employee.id === profileStaffId) ?? null}
+                photo={outsourcedPeople.find((person) => person.id === profileStaffId)?.photo ?? null}
                 person={placements.find((person) => person.id === profileStaffId) ?? null}
                 venue={profileVenue(
                   employees.find((employee) => employee.id === profileStaffId) ?? null,
@@ -4204,6 +4211,7 @@ function Initials({
 function ProfileDialog({
   titleId,
   employee,
+  photo: suppliedPhoto,
   person,
   venue,
   promotions,
@@ -4213,6 +4221,7 @@ function ProfileDialog({
 }: {
   titleId: string;
   employee: StaffEmployee | null;
+  photo?: string | null;
   person: StaffPlacement | null;
   venue: string;
   promotions: StaffPromotion[];
@@ -4227,7 +4236,7 @@ function ProfileDialog({
   const flag = country ? countryFlag(country) : "";
   const dob = textValue(employee?.dateOfBirth);
   const age = ageFromIso(dob);
-  const photo = employee?.photo ?? null;
+  const photo = employee?.photo ?? suppliedPhoto ?? null;
   const records = showPromotions ? promotions : [];
 
   return (

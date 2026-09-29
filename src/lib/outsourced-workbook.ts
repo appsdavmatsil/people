@@ -120,6 +120,7 @@ export async function importOutsourcedWorkbook(data: ArrayBuffer): Promise<Outso
     people.push({
       id: crypto.randomUUID(),
       fullName,
+      photo: null,
       company: cellText(record.company),
       position: cellText(record.position),
       venue: cellText(record.venue),

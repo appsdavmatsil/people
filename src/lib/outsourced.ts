@@ -1,6 +1,7 @@
 export type OutsourcedPerson = {
   id: string;
   fullName: string;
+  photo?: string | null;
   company: string;
   position: string;
   venue: string;
