@@ -2080,6 +2080,20 @@ function PlacementBoard({
       : null;
   const cardLabelByStaff = new Map(cardLabels.map((item) => [item.staffId, item.text]));
   const cardTagByStaff = new Map(cardTags.map((item) => [item.staffId, item.text]));
+  const outsourcedIds = new Set(outsourcedPeople.filter((person) => !person.archived).map((person) => person.id));
+  const deployedPeople = placements.filter(
+    (person) => resolvedLocationId(person, knownIds) != null,
+  );
+  const boardCounts = {
+    inHouse: deployedPeople.filter((person) => !outsourcedIds.has(person.id)).length,
+    outsource: deployedPeople.filter((person) => outsourcedIds.has(person.id)).length,
+    hiring: showHiring
+      ? hiringRoles
+          .filter((role) => !role.archived && locationIdForRole(role, locations) != null)
+          .reduce((total, role) => total + Math.max(role.openings, 0), 0)
+      : 0,
+  };
+  const boardTotalCount = boardCounts.inHouse + boardCounts.outsource + boardCounts.hiring;
   const promotedStaff = new Set(
     kind === "venue"
       ? placements.flatMap((person) =>
@@ -2147,13 +2161,23 @@ function PlacementBoard({
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 py-5 md:px-6">
       <div className="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <p className="max-w-xl text-sm text-stone-500">
-          {kind === "event"
-            ? "Drag an event heading to change its position. Drag a card to reorder it or move it to another event. Saved in this browser."
-            : arrangementLocked
-              ? "The board is locked. Unlock it to move staff. Drag a venue heading to change its position."
-              : "Drag a venue heading to change its position. Drag a card to reorder it in the column, or onto another venue to move it. Saved in this browser."}
-        </p>
+        <div className="min-w-0">
+          <p className="max-w-xl text-sm text-stone-500">
+            {kind === "event"
+              ? "Drag an event heading to change its position. Drag a card to reorder it or move it to another event. Saved in this browser."
+              : arrangementLocked
+                ? "The board is locked. Unlock it to move staff. Drag a venue heading to change its position."
+                : "Drag a venue heading to change its position. Drag a card to reorder it in the column, or onto another venue to move it. Saved in this browser."}
+          </p>
+          {kind === "venue" ? (
+            <dl className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-stone-500">
+              <BoardCount label="In house" value={boardCounts.inHouse} />
+              <BoardCount label="Outsourced" value={boardCounts.outsource} />
+              {showHiring ? <BoardCount label="Hiring" value={boardCounts.hiring} /> : null}
+              <BoardCount label="Total" value={boardTotalCount} total />
+            </dl>
+          ) : null}
+        </div>
         <div className="flex min-w-0 items-center justify-end gap-2">
           <label className="relative min-w-0 flex-1 sm:w-64 sm:flex-none">
             <span className="sr-only">Search staff by name, position, or salary</span>
@@ -2946,11 +2970,32 @@ function ModalPortal({ children }: { children: React.ReactNode }) {
   return createPortal(children, document.body);
 }
 
+function BoardCount({
+  label,
+  value,
+  total = false,
+}: {
+  label: string;
+  value: number;
+  total?: boolean;
+}) {
+  return (
+    <div className={`flex items-baseline gap-1 ${total ? "font-medium text-stone-800" : ""}`}>
+      <dt>{label}</dt>
+      <dd className="tabular-nums">{value}</dd>
+    </div>
+  );
+}
+
 type VenueCosts = {
   inHouse: number;
   outsource: number;
   hiring: number;
   total: number;
+  inHouseCount: number;
+  outsourceCount: number;
+  hiringCount: number;
+  totalCount: number;
   inHouseMasked: boolean;
   hiringMasked: boolean;
   hideHiring: boolean;
@@ -3001,6 +3046,13 @@ function venueCostBreakdown(
     outsource,
     hiring: hiringCost,
     total: roundMoney(inHouse + outsource + hiringCost),
+    inHouseCount: people.length,
+    outsourceCount: outsourced.length,
+    hiringCount: hiring.reduce((total, role) => total + Math.max(role.openings, 0), 0),
+    totalCount:
+      people.length +
+      outsourced.length +
+      hiring.reduce((total, role) => total + Math.max(role.openings, 0), 0),
     inHouseMasked,
     hiringMasked,
     hideHiring: hideHiringLine,
@@ -3493,13 +3545,14 @@ function LocationColumn({
             <dl className={`py-2 text-left text-xs ${ink === "light" ? "text-white/75" : "text-stone-500"}`}>
               {(
                 [
-                  { label: "In house staff cost", value: costs.inHouse, masked: costs.inHouseMasked },
-                  { label: "Outsource staff cost", value: costs.outsource, masked: false },
+                  { label: "In house staff cost", count: costs.inHouseCount, value: costs.inHouse, masked: costs.inHouseMasked },
+                  { label: "Outsource staff cost", count: costs.outsourceCount, value: costs.outsource, masked: false },
                   ...(costs.hideHiring
                     ? []
-                    : [{ label: "Hiring staff cost", value: costs.hiring, masked: costs.hiringMasked }]),
+                    : [{ label: "Hiring staff cost", count: costs.hiringCount, value: costs.hiring, masked: costs.hiringMasked }]),
                   {
                     label: "Total venue cost",
+                    count: costs.totalCount,
                     value: costs.total,
                     masked: costs.inHouseMasked || costs.hiringMasked,
                     total: true,
@@ -3516,7 +3569,9 @@ function LocationColumn({
                       : ""
                   }`}
                 >
-                  <dt>{line.label}</dt>
+                  <dt className="min-w-0 truncate">
+                    {line.label} <span className={ink === "light" ? "text-white/60" : "text-stone-400"}>({line.count})</span>
+                  </dt>
                   <dd
                     className={`shrink-0 font-medium tabular-nums ${
                       ink === "light" ? "text-white" : "text-stone-950"
