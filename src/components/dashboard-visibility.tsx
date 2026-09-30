@@ -256,6 +256,9 @@ export function DashboardVisibilityButton() {
   const ungrouped = positions.filter(
     (item) => !lookups.departments.some((department) => department.id === item.departmentId),
   );
+  const allPositionKeys = positions.map((item) => positionKey(item.name)).filter(Boolean);
+  const allPositionsSelected =
+    allPositionKeys.length > 0 && allPositionKeys.every((key) => visiblePositions.includes(key));
 
   function open() {
     setError("");
@@ -456,7 +459,27 @@ export function DashboardVisibilityButton() {
                 </label>
                 <fieldset>
                   <legend className="text-sm font-medium text-stone-800">Salary by position</legend>
-                  <p className="mt-1 text-sm text-stone-500">Checked positions show their salary on the board.</p>
+                  <div className="mt-1 flex items-start justify-between gap-3">
+                    <p className="text-sm text-stone-500">Checked positions show their salary on the board.</p>
+                    <div className="flex shrink-0 items-center gap-1">
+                      <button
+                        type="button"
+                        disabled={allPositionsSelected || allPositionKeys.length === 0}
+                        className="rounded-md px-2 py-1 text-xs font-medium text-stone-600 hover:bg-stone-100 hover:text-stone-950 disabled:opacity-35"
+                        onClick={() => setVisiblePositions(allPositionKeys)}
+                      >
+                        Select all
+                      </button>
+                      <button
+                        type="button"
+                        disabled={visiblePositions.length === 0}
+                        className="rounded-md px-2 py-1 text-xs font-medium text-stone-600 hover:bg-stone-100 hover:text-stone-950 disabled:opacity-35"
+                        onClick={() => setVisiblePositions([])}
+                      >
+                        Unselect all
+                      </button>
+                    </div>
+                  </div>
                   <div className="mt-3 space-y-3">
                     {groups.map((group) => (
                       <div key={group.department.id}>

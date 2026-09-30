@@ -1568,6 +1568,56 @@ function PlacementBoard({
     }
   }
 
+  function duplicateLabel(id: string) {
+    const current = labels.find((item) => item.id === id);
+    if (!current) return;
+    const rows = itemsAt(current.locationId);
+    const index = rows.findIndex((row) => boardItemId(row) === id);
+    const duplicateId = crypto.randomUUID();
+    placeLabel(
+      duplicateId,
+      {
+        locationId: current.locationId,
+        beforeId: null,
+        index: 0,
+        beforeItemId: index >= 0 && rows[index + 1] ? boardItemId(rows[index + 1]) : null,
+      },
+      [...labels, { ...current, id: duplicateId }],
+    );
+    setStatus(`Duplicated ${current.text}.`);
+  }
+
+  function duplicateHiring(roleId: string) {
+    const role = hiringRoles.find((item) => item.id === roleId);
+    if (!role) return;
+    const locationId = locationIdForRole(role, locations);
+    if (!locationId) return;
+    const duplicate = { ...role, id: crypto.randomUUID() };
+    const known = new Set(locations.map((location) => location.id));
+    const rows = visualRows(
+      locationId,
+      undefined,
+      placements,
+      known,
+      orders,
+      labels,
+      hiringRoles,
+      locations,
+    );
+    const index = rows.findIndex((row) => row.id === roleId);
+    const inserted = insertItem(
+      rows,
+      { kind: "hiring", id: duplicate.id },
+      index >= 0 ? rows[index + 1]?.id ?? null : null,
+    );
+    updateHiring([...hiringRoles, duplicate]);
+    updateOrders({
+      ...orders,
+      [columnOrderKey(locationId)]: persistedOrder(inserted),
+    });
+    setStatus(`Duplicated hiring for ${role.position}.`);
+  }
+
   function addLabel(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const text = normalizePlacementName(labelText);
@@ -2486,6 +2536,7 @@ function PlacementBoard({
             promotedStaff={promotedStaff}
             onAddLabel={(x, y, aboveItemId) => openLabelDialog(location.id, x, y, aboveItemId)}
             onEditLabel={openEditLabel}
+            onDuplicateLabel={duplicateLabel}
             onDeleteLabel={deleteLabel}
             labeledStaff={cardLabelByStaff}
             onAddCardLabel={openCardLabelDialog}
@@ -2496,6 +2547,7 @@ function PlacementBoard({
             onRestartPositions={() => restartPositions(location.id)}
             onAddHiring={() => openAddHiring(location.id)}
             onEditHiring={(roleId) => openEditHiring(location.id, roleId)}
+            onDuplicateHiring={duplicateHiring}
             onAskRemove={() =>
               setPendingRemoveId((current) => (current === location.id ? null : location.id))
             }
@@ -3190,6 +3242,7 @@ function LocationColumn({
   promotedStaff,
   onAddLabel,
   onEditLabel,
+  onDuplicateLabel,
   onDeleteLabel,
   labeledStaff,
   onAddCardLabel,
@@ -3200,6 +3253,7 @@ function LocationColumn({
   onRestartPositions,
   onAddHiring,
   onEditHiring,
+  onDuplicateHiring,
   onAskRemove,
   onRemove,
   searching = false,
@@ -3231,6 +3285,7 @@ function LocationColumn({
   promotedStaff: Set<string>;
   onAddLabel: (x: number, y: number, aboveItemId: string | null) => void;
   onEditLabel: (labelId: string) => void;
+  onDuplicateLabel: (labelId: string) => void;
   onDeleteLabel: (labelId: string) => void;
   labeledStaff: Map<string, string>;
   onAddCardLabel: (staffId: string) => void;
@@ -3241,6 +3296,7 @@ function LocationColumn({
   onRestartPositions: () => void;
   onAddHiring?: () => void;
   onEditHiring?: (roleId: string | null) => void;
+  onDuplicateHiring?: (roleId: string) => void;
   onAskRemove?: () => void;
   onRemove?: () => void;
   searching?: boolean;
@@ -3344,7 +3400,10 @@ function LocationColumn({
     const removeItem = Boolean(staffId || (onAskRemove && onRemove));
     const cardItems = staffId ? (labeledStaff.has(staffId) ? 2 : 1) : 0;
     const tagItems = staffId ? (taggedStaff.has(staffId) ? 2 : 1) : 0;
-    const hiringItems = (onAddHiring && onList ? 1 : 0) + (hiringId && onEditHiring ? 1 : 0);
+    const hiringItems =
+      (onAddHiring && onList ? 1 : 0) +
+      (hiringId && onEditHiring ? 1 : 0) +
+      (hiringId && onDuplicateHiring ? 1 : 0);
     const itemCount =
       2 +
       (removeItem ? 1 : 0) +
@@ -3353,7 +3412,7 @@ function LocationColumn({
       (staffId && onEditPromotion && promotedStaff.has(staffId) ? 1 : 0) +
       cardItems +
       tagItems +
-      (labelId ? 2 : 0) +
+      (labelId ? 3 : 0) +
       (onList ? 1 : 0) +
       hiringItems;
     const width = 192;
@@ -3907,6 +3966,23 @@ function LocationColumn({
                   const labelId = menu.labelId;
                   setMenu(null);
                   if (labelId) {
+                    onDuplicateLabel(labelId);
+                  }
+                }}
+              >
+                <MenuGlyph>
+                  <DuplicateIcon />
+                </MenuGlyph>
+                Duplicate Separation
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className="flex h-8 items-center gap-2 rounded-md px-2 text-left text-sm text-stone-700 hover:bg-stone-100 hover:text-stone-950"
+                onClick={() => {
+                  const labelId = menu.labelId;
+                  setMenu(null);
+                  if (labelId) {
                     onDeleteLabel(labelId);
                   }
                 }}
@@ -3949,6 +4025,25 @@ function LocationColumn({
                 <PencilIcon />
               </MenuGlyph>
               Edit hiring
+            </button>
+          ) : null}
+          {menu.hiringId && onDuplicateHiring ? (
+            <button
+              type="button"
+              role="menuitem"
+              className="flex h-8 items-center gap-2 rounded-md bg-yellow-100 px-2 text-left text-sm text-stone-700 hover:bg-yellow-200 hover:text-stone-950"
+              onClick={() => {
+                const hiringId = menu.hiringId;
+                setMenu(null);
+                if (hiringId) {
+                  onDuplicateHiring(hiringId);
+                }
+              }}
+            >
+              <MenuGlyph>
+                <DuplicateIcon />
+              </MenuGlyph>
+              Duplicate hiring
             </button>
           ) : null}
           {menu.onList ? (
@@ -5824,6 +5919,15 @@ function MenuGlyph({
     <span className={`flex w-4 shrink-0 items-center justify-center ${className}`} aria-hidden="true">
       {children}
     </span>
+  );
+}
+
+function DuplicateIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true" fill="none">
+      <rect x="4.25" y="4.25" width="7" height="7" rx="1.25" stroke="currentColor" strokeWidth="1.3" />
+      <path d="M2.75 9.25H2.5A1.5 1.5 0 0 1 1 7.75V2.5A1.5 1.5 0 0 1 2.5 1h5.25a1.5 1.5 0 0 1 1.5 1.5v.25" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+    </svg>
   );
 }
 
