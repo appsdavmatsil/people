@@ -16,6 +16,7 @@ const MAX_ROWS = 5000;
 
 const columns = [
   { key: "position", label: "Position" },
+  { key: "candidateName", label: "Candidate name" },
   { key: "department", label: "Department" },
   { key: "venue", label: "Venue" },
   { key: "openings", label: "Openings" },
@@ -27,6 +28,8 @@ type ColumnKey = (typeof columns)[number]["key"];
 
 const aliases: Record<string, ColumnKey> = {
   position: "position",
+  "candidate name": "candidateName",
+  candidate: "candidateName",
   "job title": "position",
   title: "position",
   role: "position",
@@ -54,6 +57,7 @@ export async function buildHiringWorkbook(roles: HiringRole[]) {
     columns.map((column) => ({ text: column.label, number: null })),
     ...roles.map((role) => [
       { text: role.position, number: null },
+      { text: role.candidateName ?? "", number: null },
       { text: role.department, number: null },
       { text: role.venue, number: null },
       { text: "", number: role.openings },
@@ -129,6 +133,7 @@ export async function importHiringWorkbook(data: ArrayBuffer): Promise<HiringImp
     roles.push({
       id: crypto.randomUUID(),
       position,
+      candidateName: cellText(record.candidateName),
       department: cellText(record.department),
       venue: cellText(record.venue),
       openings,

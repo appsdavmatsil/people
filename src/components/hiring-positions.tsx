@@ -58,6 +58,7 @@ const emptyOutsourcedForm = {
 const emptyForm = {
   positionId: "",
   position: "",
+  candidateName: "",
   departmentId: "",
   department: "",
   venueId: "",
@@ -73,6 +74,7 @@ type Notice = {
 
 const hiringColumns = [
   { key: "position", label: "Position" },
+  { key: "candidateName", label: "Candidate" },
   { key: "department", label: "Department" },
   { key: "venue", label: "Venue" },
   { key: "openings", label: "Openings" },
@@ -168,6 +170,7 @@ export function HiringPositions() {
     setForm({
       positionId: position?.id ?? "",
       position: role.position,
+      candidateName: role.candidateName ?? "",
       departmentId: department?.id ?? position?.departmentId ?? "",
       department: role.department,
       venueId: venue?.id ?? "",
@@ -229,6 +232,7 @@ export function HiringPositions() {
     const role: HiringRole = {
       id: editingId ?? crypto.randomUUID(),
       position,
+      candidateName: form.candidateName.trim(),
       department,
       venue,
       openings,
@@ -526,7 +530,7 @@ export function HiringPositions() {
           <tbody>
             {visible.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-3 py-8 text-center text-stone-500">
+                <td colSpan={8} className="px-3 py-8 text-center text-stone-500">
                   {listed.length === 0
                     ? roles.length === 0
                       ? "No hiring positions yet. Add one, or import a spreadsheet."
@@ -544,6 +548,7 @@ export function HiringPositions() {
                   <td className="border-b border-stone-100 px-3 py-2 font-medium text-stone-950">
                     {role.position}
                   </td>
+                  <td className="border-b border-stone-100 px-3 py-2 text-stone-700">{role.candidateName || "—"}</td>
                   <td className="border-b border-stone-100 px-3 py-2 text-stone-700">{role.department}</td>
                   <td className="border-b border-stone-100 px-3 py-2 text-stone-700">
                     {venueNickname(role.venue, locations) || "—"}
@@ -631,6 +636,10 @@ export function HiringPositions() {
                   className={fieldClass}
                 />
               )}
+            </label>
+            <label className="block text-sm font-medium text-stone-800">
+              Candidate name
+              <input value={form.candidateName} onChange={(event) => setForm((current) => ({ ...current, candidateName: event.target.value }))} placeholder="Optional candidate" className={fieldClass}/>
             </label>
             <label className="block text-sm font-medium text-stone-800">
               Department
@@ -986,7 +995,7 @@ function hiringCell(
     return venueNickname(role.venue, locations);
   }
 
-  return role[key];
+  return role[key] ?? "";
 }
 
 function filterHiring(
@@ -1061,13 +1070,13 @@ function compareHiring(
       ? hiringStatusLabel(left.status)
       : key === "venue"
         ? venueNickname(left.venue, locations)
-        : left[key].trim();
+        : (left[key] ?? "").trim();
   const rightValue =
     key === "status"
       ? hiringStatusLabel(right.status)
       : key === "venue"
         ? venueNickname(right.venue, locations)
-        : right[key].trim();
+        : (right[key] ?? "").trim();
   if (!leftValue || !rightValue) {
     return { blank: blankLast(!leftValue, !rightValue), value: 0 };
   }
@@ -1085,4 +1094,3 @@ function blankLast(leftBlank: boolean, rightBlank: boolean) {
 
   return leftBlank ? 1 : -1;
 }
-

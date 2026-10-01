@@ -14,6 +14,7 @@ export type HiringStatus = (typeof hiringStatuses)[number]["id"];
 export type HiringRole = {
   id: string;
   position: string;
+  candidateName?: string;
   department: string;
   venue: string;
   openings: number;
@@ -119,6 +120,7 @@ function normalizeRole(value: unknown): HiringRole | null {
   }
 
   const position = cleanText(value.position);
+  const candidateName = cleanText(value.candidateName);
   const department = cleanText(value.department);
   const venue = cleanText(value.venue);
   const openings = wholeNumber(value.openings);
@@ -131,6 +133,7 @@ function normalizeRole(value: unknown): HiringRole | null {
   return {
     id,
     position,
+    candidateName,
     department,
     venue,
     openings,

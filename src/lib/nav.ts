@@ -2,6 +2,7 @@ export const pages = [
   { href: "/dashboard", title: "Home" },
   { href: "/staffdirectory", title: "Staff Directory" },
   { href: "/staffdeployment", title: "Staff Deployment" },
+  { href: "/insights", title: "Insights" },
   { href: "/events", title: "Events Manning" },
   { href: "/settings", title: "Settings" },
 ] as const;

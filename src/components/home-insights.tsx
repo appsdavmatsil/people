@@ -61,6 +61,7 @@ export function HomeInsights() {
   const staffTotal = salary.reduce((sum, point) => sum + point.staff, 0);
   const salaryTotal = salary.reduce((sum, point) => sum + point.salary, 0);
   const promotionTotal = promotionPoints.reduce((sum, point) => sum + point.count, 0);
+  const joiningYears = joiningYearsByStaff(employees);
   const positionTotal = positions.total;
   const workforceTotal = workforce.reduce((sum, share) => sum + share.total, 0);
   const celebrations = celebrationLists(employees);
@@ -107,7 +108,7 @@ export function HomeInsights() {
         departments={lookups.departments}
         onDepartment={setPromotionDepartment}
       >
-        <PromotionRing points={promotionPoints} total={promotionTotal} />
+        <div className="grid h-full min-h-0 grid-cols-2 gap-3"><PromotionRing points={promotionPoints} total={promotionTotal} compact /><JoiningYearsRing points={joiningYears} /></div>
       </InsightCard>
       <CelebrationCard
         title="Work celebrations"
@@ -155,6 +156,10 @@ export function HomeInsights() {
   );
 }
 
+function sectionSymbol(title: string) {
+  return ({ "Staff and salary": "◔", Workforce: "◉", Positions: "◌", Promotions: "↗", "Work celebrations": "✦", "Birthday celebrations": "♢" } as Record<string, string>)[title] ?? "•";
+}
+
 type Celebration = {
   id: string;
   name: string;
@@ -180,7 +185,7 @@ function CelebrationCard({
   return (
     <section className="flex min-h-44 flex-col overflow-hidden rounded-[1.35rem] bg-white px-5 py-4 shadow-[0_1px_1px_rgba(28,25,23,0.04),0_18px_40px_-28px_rgba(28,25,23,0.45)] ring-1 ring-stone-900/6 lg:min-h-0">
       <div className="flex items-baseline justify-between gap-3">
-        <h2 className="text-[13px] font-medium text-stone-500">{title}</h2>
+        <h2 className="flex items-center gap-1.5 text-[13px] font-medium text-stone-500"><span className="text-base leading-none text-stone-700">{sectionSymbol(title)}</span>{title}</h2>
         <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[11px] font-semibold text-stone-600 tabular-nums">
           {celebrations.length}
         </span>
@@ -379,7 +384,7 @@ function InsightCard({
     <section className="relative flex min-h-80 flex-col overflow-hidden rounded-[1.35rem] bg-white shadow-[0_1px_1px_rgba(28,25,23,0.04),0_18px_40px_-28px_rgba(28,25,23,0.45)] ring-1 ring-stone-900/6 lg:min-h-0">
       <div className="flex items-start justify-between gap-3 px-5 pt-4 pr-40">
         <div className="min-w-0">
-          <h2 className="text-[13px] font-medium text-stone-500">{title}</h2>
+          <h2 className="flex items-center gap-1.5 text-[13px] font-medium text-stone-500"><span className="text-base leading-none text-stone-700">{sectionSymbol(title)}</span>{title}</h2>
           <div className="mt-1 flex min-w-0 items-center gap-4 whitespace-nowrap">
             <p className="flex shrink-0 items-baseline gap-2">
               <span className="text-[1.7rem] leading-none font-semibold tracking-tight text-stone-950 tabular-nums">
@@ -701,7 +706,7 @@ function PositionChart({ share, hasVenues }: { share: VenueShare; hasVenues: boo
   );
 }
 
-function PromotionRing({ points, total }: { points: PromotionPoint[]; total: number }) {
+function PromotionRing({ points, total, compact = false }: { points: PromotionPoint[]; total: number; compact?: boolean }) {
   if (points.length === 0) {
     return <EmptyChart label="Add a venue to see promotions." />;
   }
@@ -717,9 +722,9 @@ function PromotionRing({ points, total }: { points: PromotionPoint[]; total: num
     }));
 
   return (
-    <div className="flex h-full min-h-0 items-center gap-5">
-      <Ring slices={slices} total={total} venue="Promotions" className="size-36 shrink-0" />
-      <ul className="min-w-0 flex-1 space-y-2">
+    <div className={`flex h-full min-h-0 items-center ${compact ? "gap-2" : "gap-5"}`}>
+      <Ring slices={slices} total={total} venue="Promotions" className={`${compact ? "size-24" : "size-36"} shrink-0`} />
+      <ul className={`min-w-0 flex-1 ${compact ? "space-y-1" : "space-y-2"}`}>
         {points.map((point) => {
           const width = total > 0 ? (point.count / total) * 100 : 0;
           return (
@@ -739,6 +744,14 @@ function PromotionRing({ points, total }: { points: PromotionPoint[]; total: num
     </div>
   );
 }
+
+function JoiningYearsRing({ points }: { points: { year: string; count: number }[] }) {
+  const total = points.reduce((sum, point) => sum + point.count, 0);
+  const slices = points.map((point, index) => ({ key: point.year, label: point.year, value: point.count, color: ["#1c1917", "#a8a29e", "#c2410c", "#0f3026", "#a91d2a"][index % 5], detail: "Joining year" }));
+  return <div className="flex h-full min-h-0 items-center gap-2"><Ring slices={slices} total={total} venue="Joining years" className="size-24 shrink-0" /><div className="min-w-0"><p className="mb-1 text-xs font-medium text-stone-700">Joining years</p><ul className="space-y-1">{points.slice(0,5).map((point)=><li key={point.year} className="flex justify-between gap-2 text-[11px] text-stone-600"><span>{point.year}</span><b>{point.count}</b></li>)}</ul></div></div>;
+}
+
+function joiningYearsByStaff(employees: StaffEmployee[]) { const counts = new Map<string, number>(); for (const employee of employees) { if (employee.archived || !employee.joiningDate) continue; const year = employee.joiningDate.slice(0,4); if (/^\d{4}$/.test(year)) counts.set(year, (counts.get(year) ?? 0) + 1); } return [...counts].map(([year,count])=>({year,count})).sort((a,b)=>b.year.localeCompare(a.year)); }
 
 function Ring({
   slices,

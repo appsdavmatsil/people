@@ -7,6 +7,7 @@ export const privacyPages = [
   { href: "/staffdirectory/hiring", title: "Hiring Positions" },
   { href: "/staffdirectory/promotions", title: "Promotions" },
   { href: "/staffdeployment", title: "Staff Deployment" },
+  { href: "/insights", title: "Insights" },
   { href: "/events", title: "Events Manning" },
   { href: "/settings", title: "Settings" },
   { href: "/profile", title: "Profile settings" },

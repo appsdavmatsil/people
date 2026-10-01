@@ -301,7 +301,7 @@ export function AppShell({
         style={{ transform: pullDistance > 0 ? `translateY(${pullDistance}px)` : undefined }}
       >
         <header className="flex h-[calc(3.5rem+env(safe-area-inset-top))] shrink-0 items-center gap-3 border-b border-stone-200 px-4 pt-[env(safe-area-inset-top)] md:h-14 md:pt-0">
-          <h1 className="flex min-w-0 items-center gap-2 text-base font-semibold tracking-tight text-stone-950">
+          <h1 className="flex min-w-0 items-center gap-2 text-lg font-semibold tracking-tight text-stone-950">
             {current ? <PageIcon href={current.href} /> : null}
             <span className="truncate">{current?.title ?? "People"}</span>
           </h1>
@@ -649,6 +649,7 @@ const pageIcons = {
   "/staffdirectory": DirectoryIcon,
   "/staffdeployment": DeploymentIcon,
   "/events": EventsIcon,
+  "/insights": InsightsIcon,
   "/settings": SettingsIcon,
   "/profile": ProfileIcon,
 } as const;
@@ -656,6 +657,15 @@ const pageIcons = {
 function PageIcon({ href }: { href: string }) {
   const Icon = pageIcons[href as keyof typeof pageIcons];
   return Icon ? <Icon /> : null;
+}
+
+function InsightsIcon() {
+  return (
+    <svg className="size-5 shrink-0" viewBox="0 0 16 16" aria-hidden="true" fill="none">
+      <path d="M2.5 13.5V9.25M6.5 13.5V5.75M10.5 13.5V7.5M14 13.5H2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+      <path d="m2.5 6.75 3-2.25 3 1.25 4.5-3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
 }
 
 function HomeIcon() {
