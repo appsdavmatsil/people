@@ -1,0 +1,3 @@
+http://people.localhost {
+	reverse_proxy localhost:3010
+}
