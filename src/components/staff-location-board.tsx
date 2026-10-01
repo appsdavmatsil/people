@@ -2049,6 +2049,7 @@ function PlacementBoard({
                   person={row.person}
                   displayName={employeeCardName(employee, row.person.name)}
                   photo={employee?.photo ?? outsourced?.photo ?? null}
+                  terminated={Boolean(employee?.terminationDate)}
                   color={color}
                   cardLabel={cardLabels.find((item) => item.staffId === row.person.id)?.text ?? ""}
                   cardTag={
@@ -2212,18 +2213,23 @@ function PlacementBoard({
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 py-5 md:px-6">
       <div className="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
-          <p className="max-w-xl text-sm text-stone-500">
-            {kind === "event"
-              ? "Drag an event heading to change its position. Drag a card to reorder it or move it to another event. Saved in this browser."
-              : arrangementLocked
-                ? "The board is locked. Unlock it to move staff. Drag a venue heading to change its position."
-                : "Drag a venue heading to change its position. Drag a card to reorder it in the column, or onto another venue to move it. Saved in this browser."}
-          </p>
+          {kind === "event" ? (
+            <p className="max-w-xl text-sm text-stone-500">
+              Drag an event heading to change its position. Drag a card to reorder it or move it to another event. Saved in this browser.
+            </p>
+          ) : null}
           {kind === "venue" ? (
-            <dl className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-stone-500">
+            <dl className="flex flex-wrap items-center gap-2 text-xs text-stone-600">
               <BoardCount label="In house" value={boardCounts.inHouse} />
+              <CountOperator symbol="+" />
               <BoardCount label="Outsourced" value={boardCounts.outsource} />
-              {showHiring ? <BoardCount label="Hiring" value={boardCounts.hiring} /> : null}
+              {showHiring ? (
+                <>
+                  <CountOperator symbol="+" />
+                  <BoardCount label="Hiring" value={boardCounts.hiring} />
+                </>
+              ) : null}
+              <CountOperator symbol="=" />
               <BoardCount label="Total" value={boardTotalCount} total />
             </dl>
           ) : null}
@@ -2469,6 +2475,7 @@ function PlacementBoard({
                         person={person}
                         displayName={employeeCardName(employee, person.name)}
                         photo={employee?.photo ?? null}
+                        terminated={Boolean(employee?.terminationDate)}
                         allocated={allocated}
                         onRemoveAllocation={allocated ? () => removeStaff(person.id) : undefined}
                         hideSalary={hideSalary(person.position ?? "")}
@@ -3032,11 +3039,21 @@ function BoardCount({
   total?: boolean;
 }) {
   return (
-    <div className={`flex items-baseline gap-1 ${total ? "font-medium text-stone-800" : ""}`}>
+    <div
+      className={`flex items-baseline gap-1 rounded-full border px-2.5 py-1 shadow-sm ${
+        total
+          ? "border-stone-800 bg-stone-900 font-medium text-white"
+          : "border-stone-200 bg-white text-stone-600"
+      }`}
+    >
       <dt>{label}</dt>
-      <dd className="tabular-nums">{value}</dd>
+      <dd className={`font-semibold tabular-nums ${total ? "text-white" : "text-stone-950"}`}>{value}</dd>
     </div>
   );
+}
+
+function CountOperator({ symbol }: { symbol: "+" | "=" }) {
+  return <span className="font-semibold text-stone-400" aria-hidden="true">{symbol}</span>;
 }
 
 type VenueCosts = {
@@ -4126,6 +4143,7 @@ function StaffCard({
   cardLabel = "",
   cardTag = "",
   outsourcedCompany = "",
+  terminated = false,
   promotion = null,
   hideSalary = false,
   hidePromotionSalary = false,
@@ -4148,6 +4166,7 @@ function StaffCard({
   cardLabel?: string;
   cardTag?: string;
   outsourcedCompany?: string;
+  terminated?: boolean;
   promotion?: StaffPromotion | null;
   hideSalary?: boolean;
   hidePromotionSalary?: boolean;
@@ -4184,7 +4203,9 @@ function StaffCard({
       {tagged ? <CardStamp text={cardTag} /> : null}
       <span
         className={`flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border shadow-sm ${
-          allocated
+          terminated
+            ? "border-red-400 bg-red-100"
+            : allocated
             ? "border-emerald-300 bg-emerald-100"
             : labeled
               ? "border-stone-200 bg-stone-100"
@@ -4227,6 +4248,11 @@ function StaffCard({
           ) : null}
           {outsourcedCompany ? (
             <OutsourcedBadge company={outsourcedCompany} />
+          ) : null}
+          {terminated ? (
+            <span className="mt-1 inline-flex w-fit rounded-full bg-red-700 px-2 py-0.5 text-[10px] font-semibold text-white uppercase">
+              Terminated
+            </span>
           ) : null}
           <PromotionTag promotion={promotion} hideSalary={hidePromotionSalary} />
           {allocated ? (
@@ -4365,7 +4391,7 @@ function Initials({
   );
 }
 
-function ProfileDialog({
+export function ProfileDialog({
   titleId,
   employee,
   photo: suppliedPhoto,

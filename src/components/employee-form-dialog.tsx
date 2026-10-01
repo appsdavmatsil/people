@@ -33,6 +33,7 @@ const emptyForm = {
   nationality: "",
   dateOfBirth: "",
   joiningDate: "",
+  terminationDate: "",
   positionId: "",
   position: "",
   venueId: "",
@@ -212,6 +213,7 @@ export function EmployeeFormDialog({
       nationality: form.nationality.trim(),
       dateOfBirth: form.dateOfBirth,
       joiningDate: form.joiningDate,
+      terminationDate: form.terminationDate,
       position: form.position.trim(),
       venue: form.venue.trim(),
       archived: previous?.archived,
@@ -350,7 +352,7 @@ export function EmployeeFormDialog({
             ))}
           </datalist>
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-3">
             <label className="block text-sm font-medium text-stone-800">
               Date of birth
               <input
@@ -373,6 +375,17 @@ export function EmployeeFormDialog({
                   setForm((current) => ({ ...current, joiningDate: event.target.value }))
                 }
                 required={editingId == null}
+                className={fieldClass}
+              />
+            </label>
+            <label className="block text-sm font-medium text-stone-800">
+              Termination date
+              <input
+                type="date"
+                value={form.terminationDate}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, terminationDate: event.target.value }))
+                }
                 className={fieldClass}
               />
             </label>
@@ -546,6 +559,7 @@ function formFromEmployee(
     nationality: employee.nationality,
     dateOfBirth: employee.dateOfBirth,
     joiningDate: employee.joiningDate,
+    terminationDate: employee.terminationDate ?? "",
     positionId: position?.id ?? "",
     position: employee.position,
     venueId: venue?.id ?? "",

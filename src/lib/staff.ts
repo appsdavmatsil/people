@@ -7,6 +7,7 @@ export type StaffEmployee = {
   nationality: string;
   dateOfBirth: string;
   joiningDate: string;
+  terminationDate?: string;
   position: string;
   venue: string;
   basicSalary: number | null;
@@ -22,6 +23,7 @@ export const staffColumns = [
   { key: "nationality", label: "Country" },
   { key: "dateOfBirth", label: "Date of birth" },
   { key: "joiningDate", label: "Joining date" },
+  { key: "terminationDate", label: "Termination date" },
   { key: "position", label: "Current position" },
   { key: "venue", label: "Current venue" },
   { key: "basicSalary", label: "Basic salary" },
@@ -56,6 +58,10 @@ const headerAliases: Record<string, StaffColumnKey> = {
   "join date": "joiningDate",
   "start date": "joiningDate",
   "date joined": "joiningDate",
+  "termination date": "terminationDate",
+  "terminated date": "terminationDate",
+  "end date": "terminationDate",
+  "last working date": "terminationDate",
   "current position": "position",
   position: "position",
   "job title": "position",
@@ -89,6 +95,7 @@ export function emptyFilters(): StaffFilters {
     nationality: "",
     dateOfBirth: "",
     joiningDate: "",
+    terminationDate: "",
     position: "",
     venue: "",
     basicSalary: "",
@@ -224,11 +231,11 @@ export function staffCellText(employee: StaffEmployee, key: StaffColumnKey) {
     return formatSalary(employee[key]);
   }
 
-  if (key === "dateOfBirth" || key === "joiningDate") {
+  if (key === "dateOfBirth" || key === "joiningDate" || key === "terminationDate") {
     return employee[key] ? formatDate(employee[key]) : "";
   }
 
-  return employee[key];
+  return employee[key] ?? "";
 }
 
 export function filterStaff(employees: StaffEmployee[], filters: StaffFilters) {
@@ -244,7 +251,7 @@ export function filterStaff(employees: StaffEmployee[], filters: StaffFilters) {
         ? employee[column.key] == null
           ? ""
           : String(employee[column.key])
-        : employee[column.key].toLowerCase();
+        : (employee[column.key] ?? "").toLowerCase();
 
       return display.includes(query) || raw.includes(query);
     }),
@@ -287,8 +294,8 @@ function compareEmployees(
     return { blank: 0, value: left[key] - right[key] };
   }
 
-  const leftValue = left[key].trim();
-  const rightValue = right[key].trim();
+  const leftValue = (left[key] ?? "").trim();
+  const rightValue = (right[key] ?? "").trim();
   if (!leftValue || !rightValue) {
     return { blank: blankLast(!leftValue, !rightValue), value: 0 };
   }

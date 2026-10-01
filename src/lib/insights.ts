@@ -48,7 +48,7 @@ const positionColors = ["#1c1917", "#c2410c", "#a8a29e"];
 export const workforceColors = {
   inhouse: "#1c1917",
   outsourced: "#c2410c",
-  hiring: "#a8a29e",
+  hiring: "#eab308",
 } as const;
 
 export function chartVenues(locations: LocationReference[], boardIds: string[] | null) {

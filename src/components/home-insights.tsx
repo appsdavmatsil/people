@@ -1,6 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { createPortal } from "react-dom";
+import { ProfileDialog } from "@/components/staff-location-board";
+import { usePrivacy } from "@/components/privacy-provider";
 import { useDirectoryLookups } from "@/components/use-directory-lookups";
 import { useHiring } from "@/components/use-hiring";
 import { useLocationBoard, useLocations } from "@/components/use-locations";
@@ -19,7 +22,8 @@ import {
   type VenueShare,
 } from "@/lib/insights";
 import type { LookupDepartment } from "@/lib/directory-lookups";
-import { formatSalary } from "@/lib/staff";
+import { salaryHidden } from "@/lib/privacy";
+import { formatSalary, type StaffEmployee } from "@/lib/staff";
 
 export function HomeInsights() {
   const { employees } = useStaffDirectory();
@@ -29,6 +33,8 @@ export function HomeInsights() {
   const { locations } = useLocations();
   const { ids: boardIds } = useLocationBoard();
   const { lookups } = useDirectoryLookups();
+  const { snapshot } = usePrivacy();
+  const [profileEmployee, setProfileEmployee] = useState<StaffEmployee | null>(null);
   const venues = chartVenues(locations, boardIds);
   const [salaryDepartment, setSalaryDepartment] = useDepartment(lookups.departments);
   const [promotionDepartment, setPromotionDepartment] = useDepartment(lookups.departments);
@@ -57,9 +63,10 @@ export function HomeInsights() {
   const promotionTotal = promotionPoints.reduce((sum, point) => sum + point.count, 0);
   const positionTotal = positions.total;
   const workforceTotal = workforce.reduce((sum, share) => sum + share.total, 0);
+  const celebrations = celebrationLists(employees);
 
   return (
-    <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-y-auto bg-stone-100/70 p-3 lg:grid-cols-2 lg:overflow-hidden lg:[grid-template-rows:minmax(0,1.12fr)_minmax(0,0.88fr)]">
+    <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-y-auto bg-stone-100/70 p-3 lg:grid-cols-2 lg:grid-rows-3 lg:overflow-hidden">
       <InsightCard
         title="Staff and salary"
         figure={String(staffTotal)}
@@ -67,6 +74,7 @@ export function HomeInsights() {
         departmentId={salaryDepartment}
         departments={lookups.departments}
         onDepartment={setSalaryDepartment}
+        headerContent={<StaffSalaryLegend />}
       >
         <StaffSalaryChart points={salary} />
       </InsightCard>
@@ -77,6 +85,7 @@ export function HomeInsights() {
         departmentId={workforceDepartment}
         departments={lookups.departments}
         onDepartment={setWorkforceDepartment}
+        headerContent={<WorkforceSummary shares={workforce} />}
       >
         <WorkforceChart shares={workforce} />
       </InsightCard>
@@ -100,8 +109,243 @@ export function HomeInsights() {
       >
         <PromotionRing points={promotionPoints} total={promotionTotal} />
       </InsightCard>
+      <CelebrationCard
+        title="Work celebrations"
+        emptyLabel="No work anniversaries in this window."
+        celebrations={celebrations.work}
+        onOpenProfile={setProfileEmployee}
+      />
+      <CelebrationCard
+        title="Birthday celebrations"
+        emptyLabel="No birthdays in this window."
+        celebrations={celebrations.birthdays}
+        onOpenProfile={setProfileEmployee}
+      />
+      {profileEmployee && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              className="fixed inset-0 z-[80] flex items-center justify-center bg-stone-950/40 p-4"
+              onClick={() => setProfileEmployee(null)}
+            >
+              <div
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="home-profile-title"
+                className="flex max-h-[min(100%,40rem)] w-[min(100%,28rem)] flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white text-stone-950 shadow-xl"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <ProfileDialog
+                  titleId="home-profile-title"
+                  employee={profileEmployee}
+                  person={null}
+                  venue={profileEmployee.venue}
+                  promotions={promotions
+                    .filter((promotion) => promotion.staffId === profileEmployee.id)
+                    .sort((left, right) => right.effectiveDate.localeCompare(left.effectiveDate))}
+                  showPromotions={snapshot.showPromotions}
+                  salaryIsHidden={(position) => salaryHidden(snapshot.hiddenSalaryPositions, position)}
+                  onClose={() => setProfileEmployee(null)}
+                />
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
     </div>
   );
+}
+
+type Celebration = {
+  id: string;
+  name: string;
+  photo: string | null;
+  position: string;
+  occurrence: Date;
+  detail: string;
+  dayOffset: number;
+  employee: StaffEmployee;
+};
+
+function CelebrationCard({
+  title,
+  emptyLabel,
+  celebrations,
+  onOpenProfile,
+}: {
+  title: string;
+  emptyLabel: string;
+  celebrations: Celebration[];
+  onOpenProfile: (employee: StaffEmployee) => void;
+}) {
+  return (
+    <section className="flex min-h-44 flex-col overflow-hidden rounded-[1.35rem] bg-white px-5 py-4 shadow-[0_1px_1px_rgba(28,25,23,0.04),0_18px_40px_-28px_rgba(28,25,23,0.45)] ring-1 ring-stone-900/6 lg:min-h-0">
+      <div className="flex items-baseline justify-between gap-3">
+        <h2 className="text-[13px] font-medium text-stone-500">{title}</h2>
+        <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[11px] font-semibold text-stone-600 tabular-nums">
+          {celebrations.length}
+        </span>
+      </div>
+      {celebrations.length === 0 ? (
+        <p className="flex flex-1 items-center text-sm text-stone-400">{emptyLabel}</p>
+      ) : (
+        <ul className="mt-3 grid min-h-0 flex-1 grid-cols-1 gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
+          {celebrations.map((celebration) => (
+            <li key={celebration.id} className="flex min-w-0 items-center gap-3 rounded-2xl bg-stone-50 px-3 py-2">
+              <EmployeeAvatar employee={celebration} onOpen={() => onOpenProfile(celebration.employee)} />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[13px] font-medium text-stone-900">{celebration.name}</span>
+                <span className="block truncate text-[11px] text-stone-500">
+                  {celebration.detail} · {formatCelebrationDate(celebration.occurrence)} · {relativeCelebrationDay(celebration.dayOffset)} · {celebration.position || "Position not set"}
+                </span>
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+function EmployeeAvatar({
+  employee,
+  onOpen,
+}: {
+  employee: Pick<Celebration, "name" | "photo">;
+  onOpen: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      aria-label={`View profile for ${employee.name}`}
+      className="flex size-10 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-full bg-stone-900 text-[11px] font-semibold text-white ring-1 ring-stone-900/10 transition-transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-stone-500"
+    >
+      {employee.photo ? (
+        // Staff photos can be imported data URLs or local object URLs, which are not supported by next/image.
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={employee.photo} alt="" className="size-full object-cover" />
+      ) : (
+        employeeInitials(employee.name)
+      )}
+    </button>
+  );
+}
+
+function celebrationLists(employees: StaffEmployee[]) {
+  const today = atLocalMidnight(new Date());
+  const start = new Date(today);
+  const end = new Date(today);
+  start.setMonth(start.getMonth() - 1);
+  end.setMonth(end.getMonth() + 1);
+  const active = employees.filter((employee) => !employee.archived && !employee.terminationDate);
+
+  return {
+    work: active
+      .map((employee) => createCelebration(employee, employee.joiningDate, today, start, end, "work"))
+      .filter((item): item is Celebration => item !== null)
+      .sort(compareCelebrations),
+    birthdays: active
+      .map((employee) => createCelebration(employee, employee.dateOfBirth, today, start, end, "birthday"))
+      .filter((item): item is Celebration => item !== null)
+      .sort(compareCelebrations),
+  };
+}
+
+function createCelebration(
+  employee: StaffEmployee,
+  sourceDate: string,
+  today: Date,
+  start: Date,
+  end: Date,
+  kind: "work" | "birthday",
+): Celebration | null {
+  const parsed = parseIsoDate(sourceDate);
+  if (!parsed) {
+    return null;
+  }
+
+  const occurrences = [today.getFullYear() - 1, today.getFullYear(), today.getFullYear() + 1]
+    .map((year) => annualOccurrence(year, parsed.month, parsed.day))
+    .filter((date) => date >= start && date <= end)
+    .sort((left, right) => Math.abs(dayDifference(left, today)) - Math.abs(dayDifference(right, today)));
+  const occurrence = occurrences[0];
+  if (!occurrence) {
+    return null;
+  }
+
+  const years = occurrence.getFullYear() - parsed.year;
+  if (kind === "work" && years < 1) {
+    return null;
+  }
+  const detail = kind === "birthday"
+    ? `Turns ${Math.max(0, years)}`
+    : `${Math.max(0, years)} ${years === 1 ? "year" : "years"}`;
+
+  return {
+    id: `${kind}-${employee.id}`,
+    name: employee.fullName || [employee.firstName, employee.lastName].filter(Boolean).join(" ") || "Unnamed employee",
+    photo: employee.photo,
+    position: employee.position,
+    occurrence,
+    detail,
+    dayOffset: dayDifference(occurrence, today),
+    employee,
+  };
+}
+
+function parseIsoDate(value: string) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(value.trim());
+  if (!match) {
+    return null;
+  }
+
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  if (month < 1 || month > 12 || day < 1 || day > 31) {
+    return null;
+  }
+
+  return { year, month, day };
+}
+
+function annualOccurrence(year: number, month: number, day: number) {
+  const finalDay = Math.min(day, new Date(year, month, 0).getDate());
+  return new Date(year, month - 1, finalDay);
+}
+
+function atLocalMidnight(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function dayDifference(left: Date, right: Date) {
+  return Math.round((left.getTime() - right.getTime()) / 86_400_000);
+}
+
+function compareCelebrations(left: Celebration, right: Celebration) {
+  return left.dayOffset - right.dayOffset || left.name.localeCompare(right.name);
+}
+
+function formatCelebrationDate(date: Date) {
+  return new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short" }).format(date);
+}
+
+function relativeCelebrationDay(dayOffset: number) {
+  if (dayOffset === 0) {
+    return "Today";
+  }
+  if (dayOffset === 1) {
+    return "Tomorrow";
+  }
+  if (dayOffset === -1) {
+    return "Yesterday";
+  }
+  return dayOffset > 0 ? `In ${dayOffset} days` : `${Math.abs(dayOffset)} days ago`;
+}
+
+function employeeInitials(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  return parts.slice(0, 2).map((part) => part[0]?.toUpperCase()).join("") || "?";
 }
 
 function useDepartment(departments: LookupDepartment[]) {
@@ -117,6 +361,7 @@ function InsightCard({
   departmentId,
   departments,
   onDepartment,
+  headerContent,
   children,
 }: {
   title: string;
@@ -125,6 +370,7 @@ function InsightCard({
   departmentId: string;
   departments: LookupDepartment[];
   onDepartment: (departmentId: string) => void;
+  headerContent?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const selectId = `${title.toLowerCase().replace(/\s+/g, "-")}-department`;
@@ -134,12 +380,15 @@ function InsightCard({
       <div className="flex items-start justify-between gap-3 px-5 pt-4 pr-40">
         <div className="min-w-0">
           <h2 className="text-[13px] font-medium text-stone-500">{title}</h2>
-          <p className="mt-1 flex items-baseline gap-2">
-            <span className="text-[1.7rem] leading-none font-semibold tracking-tight text-stone-950 tabular-nums">
-              {figure}
-            </span>
-            <span className="truncate text-xs text-stone-400">{figureLabel}</span>
-          </p>
+          <div className="mt-1 flex min-w-0 items-center gap-4 whitespace-nowrap">
+            <p className="flex shrink-0 items-baseline gap-2">
+              <span className="text-[1.7rem] leading-none font-semibold tracking-tight text-stone-950 tabular-nums">
+                {figure}
+              </span>
+              <span className="text-xs text-stone-400">{figureLabel}</span>
+            </p>
+            {headerContent}
+          </div>
         </div>
       </div>
       <label htmlFor={selectId} className="absolute top-3.5 right-3.5 z-10">
@@ -173,8 +422,8 @@ function StaffSalaryChart({ points }: { points: StaffSalaryPoint[] }) {
   }
 
   const width = 640;
-  const height = 268;
-  const pad = { top: 18, right: 36, bottom: 28, left: 46 };
+  const height = 190;
+  const pad = { top: 12, right: 36, bottom: 24, left: 46 };
   const plotWidth = width - pad.left - pad.right;
   const plotHeight = height - pad.top - pad.bottom;
   const salaryMax = axisMax(Math.max(...points.map((point) => point.salary)));
@@ -196,21 +445,7 @@ function StaffSalaryChart({ points }: { points: StaffSalaryPoint[] }) {
   const current = hover == null ? null : points[hover.index];
 
   return (
-    <div className="flex h-full min-h-52 flex-col">
-      <div className="mb-1 flex items-center gap-4 px-1 text-[11px] text-stone-400">
-        <span className="inline-flex items-center gap-1.5">
-          <span className="inline-block h-2.5 w-2.5 rounded-[3px] bg-stone-800" />
-          Salary
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <span className="inline-block h-2 w-4 rounded-full bg-orange-500/80" />
-          Staff
-        </span>
-        <span className="inline-flex items-center gap-1.5">
-          <span className="inline-block w-4 border-t border-dashed border-stone-400" />
-          Average salary
-        </span>
-      </div>
+    <div className="flex h-full min-h-0 flex-col">
       <div className="relative min-h-0 flex-1">
         <svg
           viewBox={`0 0 ${width} ${height}`}
@@ -328,80 +563,92 @@ function StaffSalaryChart({ points }: { points: StaffSalaryPoint[] }) {
   );
 }
 
-function WorkforceChart({ shares }: { shares: VenueShare[] }) {
-  if (shares.length === 0) {
-    return <EmptyChart label="Add a venue to see this mix." />;
-  }
-
-  const categories = [
-    { key: "inhouse", label: "In-house", color: "#1c1917" },
-    { key: "outsourced", label: "Outsourced", color: "#c2410c" },
-    { key: "hiring", label: "Hiring", color: "#a8a29e" },
-  ].map((category) => ({
-    ...category,
-    value: shares.reduce(
-      (sum, share) => sum + (share.slices.find((slice) => slice.key === category.key)?.value ?? 0),
-      0,
-    ),
-  }));
-
+function StaffSalaryLegend() {
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div className="mb-2 grid grid-cols-3 gap-1.5 sm:gap-2">
-        {categories.map((category) => (
-          <div key={category.key} className="min-w-0 rounded-2xl bg-stone-50 px-2 py-2 sm:px-3">
-            <p className="flex min-w-0 items-center gap-1 text-[9px] text-stone-400 sm:gap-1.5 sm:text-[10px]">
-              <span className="size-1.5 shrink-0 rounded-full" style={{ backgroundColor: category.color }} />
-              <span className="truncate">{category.label}</span>
-            </p>
-            <p className="mt-0.5 text-sm font-semibold text-stone-950 tabular-nums">{category.value}</p>
-          </div>
-        ))}
-      </div>
-      <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto">
-        {shares.map((share) => (
-          <WorkforceRow key={share.venue.id} share={share} />
-        ))}
-      </div>
+    <div className="flex min-w-0 items-center gap-3 text-[10px] text-stone-400">
+      <span className="inline-flex items-center gap-1.5"><span className="size-2 rounded-[3px] bg-stone-800" />Salary</span>
+      <span className="inline-flex items-center gap-1.5"><span className="h-1.5 w-3 rounded-full bg-orange-500/80" />Staff</span>
+      <span className="inline-flex items-center gap-1.5"><span className="w-3 border-t border-dashed border-stone-400" />Average salary</span>
     </div>
   );
 }
 
-function WorkforceRow({ share }: { share: VenueShare }) {
+function WorkforceChart({ shares }: { shares: VenueShare[] }) {
+  const [hover, setHover] = useState<{
+    share: VenueShare;
+    slice: ShareSlice;
+    x: number;
+    y: number;
+  } | null>(null);
+
+  if (shares.length === 0) {
+    return <EmptyChart label="Add a venue to see this mix." />;
+  }
+
+  return (
+    <div className="flex h-full min-h-0 flex-col" onMouseLeave={() => setHover(null)}>
+      <div className="flex min-h-0 flex-1 flex-col justify-evenly overflow-y-auto">
+        {shares.map((share) => (
+          <WorkforceRow key={share.venue.id} share={share} onHover={setHover} />
+        ))}
+      </div>
+      {hover ? (
+        <PointerCard x={hover.x} y={hover.y} title={hover.share.venue.name} accent={hover.slice.color}>
+          <TipLine label={hover.slice.label} value={String(hover.slice.value)} />
+        </PointerCard>
+      ) : null}
+    </div>
+  );
+}
+
+function WorkforceRow({
+  share,
+  onHover,
+}: {
+  share: VenueShare;
+  onHover: (hover: { share: VenueShare; slice: ShareSlice; x: number; y: number }) => void;
+}) {
   const percents = percentShares(share.slices, share.total);
 
   return (
-    <div className="grid min-h-[3.75rem] shrink-0 grid-cols-[2.75rem_minmax(0,1fr)_2rem] items-center gap-2 py-1 sm:min-h-0 sm:flex-1 sm:grid-cols-[3.5rem_minmax(0,1fr)_auto] sm:gap-3">
-      <div className="size-11 sm:size-14">
-        <Ring slices={share.slices} total={share.total} venue={share.venue.name} className="size-full" compact />
-      </div>
-      <div className="min-w-0">
-        <p className="truncate text-[13px] font-medium text-stone-950">
-          {share.venue.label}
-          <span className="ml-2 font-normal text-stone-400">{share.venue.name}</span>
-        </p>
-        {share.slices.length > 0 ? (
-          <div className="mt-1.5 flex flex-col gap-1">
-            {share.slices.map((slice, index) => (
-              <div key={slice.key} className="flex items-center gap-2 text-[11px] text-stone-500">
-                <span className="w-16 shrink-0 truncate">{slice.label}</span>
-                <span className="h-1 min-w-0 flex-1 overflow-hidden rounded-full bg-stone-100">
-                  <span
-                    className="block h-full rounded-full"
-                    style={{ width: `${percents[index]}%`, backgroundColor: slice.color }}
-                  />
-                </span>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="mt-1 text-[11px] text-stone-400">No people</p>
-        )}
-      </div>
-      <p className="pr-1 text-right">
-        <span className="block text-base leading-none font-semibold text-stone-950 tabular-nums">{share.total}</span>
-        <span className="mt-1 block text-[10px] text-stone-400">total</span>
+    <div className="grid min-h-0 flex-1 grid-cols-[minmax(7rem,0.8fr)_minmax(5rem,1.6fr)_2rem] items-center gap-3 border-b border-stone-100 py-0.5 last:border-b-0">
+      <p className="min-w-0 truncate text-[11px] font-medium text-stone-950">
+        {share.venue.label}
+        <span className="ml-1.5 font-normal text-stone-400">{share.venue.name}</span>
       </p>
+      <span className="flex h-2 min-w-0 overflow-hidden rounded-full bg-stone-100" aria-label={share.slices.map((slice) => `${slice.label} ${slice.value}`).join(", ")}>
+        {share.slices.map((slice, index) => (
+          <span
+            key={slice.key}
+            className="cursor-help transition-[filter] hover:brightness-125"
+            style={{ width: `${percents[index]}%`, backgroundColor: slice.color }}
+            onMouseMove={(event) => onHover({ share, slice, x: event.clientX, y: event.clientY })}
+          />
+        ))}
+      </span>
+      <span className="text-right text-xs font-semibold text-stone-800 tabular-nums">{share.total}</span>
+    </div>
+  );
+}
+
+function WorkforceSummary({ shares }: { shares: VenueShare[] }) {
+  const categories = [
+    { key: "inhouse", label: "In-house", color: "#1c1917" },
+    { key: "outsourced", label: "Outsourced", color: "#c2410c" },
+    { key: "hiring", label: "Hiring", color: "#eab308" },
+  ].map((category) => ({
+    ...category,
+    value: shares.reduce((sum, share) => sum + (share.slices.find((slice) => slice.key === category.key)?.value ?? 0), 0),
+  }));
+
+  return (
+    <div className="flex min-w-0 items-center gap-3 text-[10px] text-stone-500">
+      {categories.map((category) => (
+        <span key={category.key} className="inline-flex items-center gap-1 whitespace-nowrap">
+          <span className="size-1.5 rounded-full" style={{ backgroundColor: category.color }} />
+          {category.label} <strong className="font-semibold text-stone-900 tabular-nums">{category.value}</strong>
+        </span>
+      ))}
     </div>
   );
 }
