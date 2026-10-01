@@ -90,6 +90,7 @@ type StaffEditForm = {
   nationality: string;
   dateOfBirth: string;
   joiningDate: string;
+  terminationDate: string;
   position: string;
   locationId: string;
   basicSalary: string;
@@ -1228,6 +1229,7 @@ function PlacementBoard({
       nationality: employee?.nationality ?? "",
       dateOfBirth: employee?.dateOfBirth ?? "",
       joiningDate: employee?.joiningDate ?? "",
+      terminationDate: employee?.terminationDate ?? "",
       position: employee?.position ?? person?.position ?? "",
       locationId,
       basicSalary: moneyField(employee?.basicSalary ?? null),
@@ -1289,6 +1291,7 @@ function PlacementBoard({
         nationality: editForm.nationality.trim(),
         dateOfBirth: editForm.dateOfBirth,
         joiningDate: editForm.joiningDate,
+        terminationDate: editForm.terminationDate,
         position,
         venue: location ? location.venueName || location.nickname : "",
         photo: editForm.photo,
@@ -1444,7 +1447,7 @@ function PlacementBoard({
     const current = cardLabels.find((item) => item.staffId === staffId);
     updateCardLabels(cardLabels.filter((item) => item.staffId !== staffId));
     if (current) {
-      setStatus(`Removed the label from ${placements.find((item) => item.id === staffId)?.name ?? "this card"}.`);
+      setStatus(`Removed the label from ${cardItemName(staffId)}.`);
     }
   }
 
@@ -1465,7 +1468,7 @@ function PlacementBoard({
       ...cardLabels.filter((item) => item.staffId !== cardLabelStaffId),
       { staffId: cardLabelStaffId, text },
     ]);
-    const name = placements.find((item) => item.id === cardLabelStaffId)?.name ?? "this card";
+    const name = cardItemName(cardLabelStaffId);
     setCardLabelStaffId(null);
     setDialog(null);
     setStatus(`${existing ? "Updated" : "Added"} the label on ${name}.`);
@@ -1484,7 +1487,7 @@ function PlacementBoard({
     const current = cardTags.find((item) => item.staffId === staffId);
     updateCardTags(cardTags.filter((item) => item.staffId !== staffId));
     if (current) {
-      setStatus(`Removed the tag from ${placements.find((item) => item.id === staffId)?.name ?? "this card"}.`);
+      setStatus(`Removed the tag from ${cardItemName(staffId)}.`);
     }
   }
 
@@ -1505,10 +1508,14 @@ function PlacementBoard({
       ...cardTags.filter((item) => item.staffId !== cardTagStaffId),
       { staffId: cardTagStaffId, text },
     ]);
-    const name = placements.find((item) => item.id === cardTagStaffId)?.name ?? "this card";
+    const name = cardItemName(cardTagStaffId);
     setCardTagStaffId(null);
     setDialog(null);
     setStatus(`${existing ? "Updated" : "Added"} the tag on ${name}.`);
+  }
+
+  function cardItemName(id: string) {
+    return placements.find((item) => item.id === id)?.name ?? hiringRoles.find((role) => role.id === id)?.position ?? "this card";
   }
 
   function restartPositions(locationId: string | null) {
@@ -2092,6 +2099,9 @@ function PlacementBoard({
               ) : (
                 <HiringCard
                   role={row.role}
+                  cardLabel={cardLabelByStaff.get(row.role.id) ?? ""}
+                  cardTag={cardTagByStaff.get(row.role.id) ?? ""}
+                  color={color}
                   hideSalary={hideSalary(row.role.position)}
                   spotlight={searching && searchHits.has(row.role.id)}
                   dragging={drag?.staffId === row.role.id || htmlDragId === row.role.id}
@@ -3341,6 +3351,7 @@ function LocationColumn({
     currentTarget: HTMLElement;
   } | null>(null);
   const suppressContextMenuRef = useRef(false);
+  const [collapsed, setCollapsed] = useState(false);
   const [menu, setMenu] = useState<{
     x: number;
     y: number;
@@ -3415,8 +3426,9 @@ function LocationColumn({
       list && currentTarget.contains(list) && !staffId && !labelId && !hiringId,
     );
     const removeItem = Boolean(staffId || (onAskRemove && onRemove));
-    const cardItems = staffId ? (labeledStaff.has(staffId) ? 2 : 1) : 0;
-    const tagItems = staffId ? (taggedStaff.has(staffId) ? 2 : 1) : 0;
+    const annotationId = staffId ?? hiringId;
+    const cardItems = annotationId ? (labeledStaff.has(annotationId) ? 2 : 1) : 0;
+    const tagItems = annotationId ? (taggedStaff.has(annotationId) ? 2 : 1) : 0;
     const hiringItems =
       (onAddHiring && onList ? 1 : 0) +
       (hiringId && onEditHiring ? 1 : 0) +
@@ -3527,6 +3539,8 @@ function LocationColumn({
     }
   }
 
+  const menuAnnotationId = menu?.staffId ?? menu?.hiringId ?? null;
+
   return (
     <section
       data-drop-id={dropId}
@@ -3538,7 +3552,9 @@ function LocationColumn({
       onPointerMoveCapture={moveLongPress}
       onPointerUpCapture={(event) => cancelLongPress(event.pointerId)}
       onPointerCancelCapture={(event) => cancelLongPress(event.pointerId)}
-      className={`relative flex min-w-56 flex-1 basis-0 flex-col overflow-hidden rounded-2xl border ${
+      className={`relative flex flex-col overflow-hidden rounded-2xl border transition-[flex-basis,min-width,width] duration-200 ${
+        collapsed ? "w-14 min-w-14 flex-none basis-14" : "min-w-56 flex-1 basis-0"
+      } ${
         searching ? "z-[1]" : ""
       } ${columnDragging ? "opacity-40" : ""} ${
         active
@@ -3570,13 +3586,13 @@ function LocationColumn({
           event.stopPropagation();
           onColumnDragEnd?.();
         }}
-        className={`shrink-0 px-4 pt-4 text-center ${costs == null ? "pb-3" : ""} ${
+        className={`shrink-0 text-center ${collapsed ? "flex h-full flex-col items-center px-2 py-3" : `px-4 pt-4 ${costs == null ? "pb-3" : ""}`} ${
           onColumnDragStart ? "cursor-grab active:cursor-grabbing" : ""
         }`}
         style={ink ? { backgroundColor: color } : undefined}
       >
-        <div className="relative">
-          {onColumnDragStart ? (
+        <div className={`relative ${collapsed ? "flex h-full w-full flex-col items-center" : ""}`}>
+          {onColumnDragStart && !collapsed ? (
             <span
               className={`absolute top-1.5 left-0 ${ink === "light" ? "text-white/70" : "text-stone-400"}`}
               aria-hidden="true"
@@ -3584,10 +3600,30 @@ function LocationColumn({
               <ColumnGripIcon />
             </span>
           ) : null}
+          {venue ? (
+            <button
+              type="button"
+              draggable={false}
+              aria-label={collapsed ? `Show ${title} venue` : `Hide ${title} venue`}
+              title={collapsed ? `Show ${title}` : `Hide ${title}`}
+              className={`absolute z-[2] flex size-6 items-center justify-center rounded-md transition-colors ${
+                collapsed ? "top-0 left-1/2 -translate-x-1/2" : "top-0.5 right-5"
+              } ${ink === "light" ? "text-white/65 hover:bg-white/15 hover:text-white" : "text-stone-400 hover:bg-stone-950/5 hover:text-stone-700"}`}
+              onPointerDown={(event) => event.stopPropagation()}
+              onClick={(event) => {
+                event.stopPropagation();
+                setCollapsed((current) => !current);
+              }}
+            >
+              <VenueVisibilityIcon hidden={collapsed} />
+            </button>
+          ) : null}
           <h2
-            className={`truncate px-6 tracking-tight ${ink === "light" ? "text-white" : "text-stone-950"} ${
+            className={`${collapsed ? "mt-8 flex-1 text-sm font-semibold [writing-mode:vertical-rl]" : "truncate px-10 tracking-tight"} ${ink === "light" ? "text-white" : "text-stone-950"} ${
               venue
-                ? compactHeading
+                ? collapsed
+                  ? ""
+                  : compactHeading
                   ? "text-xl font-semibold"
                   : "text-2xl font-semibold"
                 : "text-sm font-medium"
@@ -3596,15 +3632,15 @@ function LocationColumn({
           >
             {title}
           </h2>
-          <span
+          {!collapsed ? <span
             className={`absolute top-1 right-0 text-xs tabular-nums ${
               ink === "light" ? "text-white/70" : "text-stone-500"
             }`}
           >
             {count}
-          </span>
+          </span> : null}
         </div>
-        {subtitle ? (
+        {!collapsed && subtitle ? (
           <p
             className={`mt-1 truncate text-xs ${ink === "light" ? "text-white/75" : "text-stone-500"}`}
             title={subtitle}
@@ -3612,7 +3648,7 @@ function LocationColumn({
             {subtitle}
           </p>
         ) : null}
-        {costs == null ? null : (
+        {collapsed || costs == null ? null : (
           <>
             <div
               className={`mt-3 -mx-4 border-t ${ink === "light" ? "border-white/25" : "border-stone-200"}`}
@@ -3665,7 +3701,7 @@ function LocationColumn({
           </>
         )}
       </header>
-      <ul
+      {!collapsed ? <ul
         data-column-list=""
         className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-3 pt-3 pb-3"
       >
@@ -3676,7 +3712,7 @@ function LocationColumn({
         ) : (
           children
         )}
-      </ul>
+      </ul> : null}
       {menu ? (
         <>
           {menu.mobile ? (
@@ -3825,15 +3861,15 @@ function LocationColumn({
               Edit Promotion
             </button>
           ) : null}
-          {menu.staffId ? (
-            labeledStaff.has(menu.staffId) ? (
+          {menuAnnotationId ? (
+            labeledStaff.has(menuAnnotationId) ? (
               <>
                 <button
                   type="button"
                   role="menuitem"
                   className="flex h-8 items-center gap-2 rounded-md px-2 text-left text-sm text-stone-700 hover:bg-stone-100 hover:text-stone-950"
                   onClick={() => {
-                    const staffId = menu.staffId;
+                    const staffId = menuAnnotationId;
                     setMenu(null);
                     if (staffId) {
                       onAddCardLabel(staffId);
@@ -3850,7 +3886,7 @@ function LocationColumn({
                   role="menuitem"
                   className="flex h-8 items-center gap-2 rounded-md px-2 text-left text-sm text-stone-700 hover:bg-stone-100 hover:text-stone-950"
                   onClick={() => {
-                    const staffId = menu.staffId;
+                    const staffId = menuAnnotationId;
                     setMenu(null);
                     if (staffId) {
                       onRemoveCardLabel(staffId);
@@ -3869,7 +3905,7 @@ function LocationColumn({
                 role="menuitem"
                 className="flex h-8 items-center gap-2 rounded-md bg-yellow-100 px-2 text-left text-sm text-stone-700 hover:bg-yellow-200 hover:text-stone-950"
                 onClick={() => {
-                  const staffId = menu.staffId;
+                  const staffId = menuAnnotationId;
                   setMenu(null);
                   if (staffId) {
                     onAddCardLabel(staffId);
@@ -3883,15 +3919,15 @@ function LocationColumn({
               </button>
             )
           ) : null}
-          {menu.staffId ? (
-            taggedStaff.has(menu.staffId) ? (
+          {menuAnnotationId ? (
+            taggedStaff.has(menuAnnotationId) ? (
               <>
                 <button
                   type="button"
                   role="menuitem"
                   className="flex h-8 items-center gap-2 rounded-md px-2 text-left text-sm text-stone-700 hover:bg-stone-100 hover:text-stone-950"
                   onClick={() => {
-                    const staffId = menu.staffId;
+                    const staffId = menuAnnotationId;
                     setMenu(null);
                     if (staffId) {
                       onAddCardTag(staffId);
@@ -3908,7 +3944,7 @@ function LocationColumn({
                   role="menuitem"
                   className="flex h-8 items-center gap-2 rounded-md px-2 text-left text-sm text-stone-700 hover:bg-stone-100 hover:text-stone-950"
                   onClick={() => {
-                    const staffId = menu.staffId;
+                    const staffId = menuAnnotationId;
                     setMenu(null);
                     if (staffId) {
                       onRemoveCardTag(staffId);
@@ -3927,7 +3963,7 @@ function LocationColumn({
                 role="menuitem"
                 className="flex h-8 items-center gap-2 rounded-md bg-rose-50 px-2 text-left text-sm text-stone-700 hover:bg-rose-100 hover:text-stone-950"
                 onClick={() => {
-                  const staffId = menu.staffId;
+                  const staffId = menuAnnotationId;
                   setMenu(null);
                   if (staffId) {
                     onAddCardTag(staffId);
@@ -4088,6 +4124,9 @@ function LocationColumn({
 
 function HiringCard({
   role,
+  color = "",
+  cardLabel = "",
+  cardTag = "",
   hideSalary = false,
   spotlight = false,
   dragging,
@@ -4099,6 +4138,9 @@ function HiringCard({
   onHtmlDragEnd,
 }: {
   role: HiringRole;
+  color?: string;
+  cardLabel?: string;
+  cardTag?: string;
   hideSalary?: boolean;
   spotlight?: boolean;
   dragging: boolean;
@@ -4109,13 +4151,15 @@ function HiringCard({
   onHtmlDragStart: (event: React.DragEvent<HTMLElement>, staffId: string) => void;
   onHtmlDragEnd: () => void;
 }) {
+  const labeled = cardLabel.trim().length > 0;
+  const tagged = cardTag.trim().length > 0;
   return (
     <li
       data-item-id={role.id}
       data-item-kind="hiring"
       data-search-hit={spotlight ? "true" : undefined}
       draggable={movable}
-      className={`touch-auto rounded-xl border border-yellow-200 bg-yellow-100 px-2.5 py-2 shadow-sm select-none ${
+      className={`relative touch-auto overflow-visible rounded-xl border border-yellow-200 bg-yellow-100 shadow-sm select-none ${
         movable ? "cursor-grab active:cursor-grabbing" : ""
       } ${dragging ? "opacity-40" : ""} ${spotlight ? "relative z-20 shadow-xl ring-2 ring-white" : ""}`}
       onPointerDown={(event) => onPointerDown(event, role.id)}
@@ -4124,11 +4168,23 @@ function HiringCard({
       onDragStart={(event) => onHtmlDragStart(event, role.id)}
       onDragEnd={onHtmlDragEnd}
     >
-      <span className="block truncate text-sm font-medium text-stone-950">{role.position}</span>
-      <span className="mt-0.5 flex items-baseline justify-between gap-2 text-xs text-stone-600">
-        <span>Hiring</span>
-        <span className="shrink-0 tabular-nums">
-          {hideSalary || role.salary == null ? "—" : formatBoardSalary(role.salary)}
+      {tagged ? <CardStamp text={cardTag} /> : null}
+      {labeled ? (
+        <span
+          className="block truncate border-b px-2.5 py-1 text-center text-sm font-medium text-stone-950"
+          style={cardLabelBand(color)}
+          title={cardLabel}
+        >
+          {cardLabel}
+        </span>
+      ) : null}
+      <span className="block px-2.5 py-2">
+        <span className="block truncate text-sm font-medium text-stone-950">{role.position}</span>
+        <span className="mt-0.5 flex items-baseline justify-between gap-2 text-xs text-stone-600">
+          <span>Hiring</span>
+          <span className="shrink-0 tabular-nums">
+            {hideSalary || role.salary == null ? "—" : formatBoardSalary(role.salary)}
+          </span>
         </span>
       </span>
     </li>
@@ -4835,7 +4891,7 @@ function StaffEditFields({
               <option key={country.id} value={country.name} />
             ))}
           </datalist>
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-3">
             <label className="block text-sm font-medium text-stone-800">
               Date of birth
               <input
@@ -4851,6 +4907,15 @@ function StaffEditFields({
                 type="date"
                 value={form.joiningDate}
                 onChange={(event) => onChange({ ...form, joiningDate: event.target.value })}
+                className={fieldClass}
+              />
+            </label>
+            <label className="block text-sm font-medium text-stone-800">
+              Termination date
+              <input
+                type="date"
+                value={form.terminationDate}
+                onChange={(event) => onChange({ ...form, terminationDate: event.target.value })}
                 className={fieldClass}
               />
             </label>
@@ -5766,6 +5831,21 @@ function ColumnGripIcon() {
       <circle cx="8.5" cy="8" r="1.15" />
       <circle cx="3.5" cy="12.5" r="1.15" />
       <circle cx="8.5" cy="12.5" r="1.15" />
+    </svg>
+  );
+}
+
+function VenueVisibilityIcon({ hidden }: { hidden: boolean }) {
+  return (
+    <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true" fill="none">
+      <path
+        d="M1.5 8s2.35-4 6.5-4 6.5 4 6.5 4-2.35 4-6.5 4-6.5-4-6.5-4Z"
+        stroke="currentColor"
+        strokeWidth="1.25"
+        strokeLinejoin="round"
+      />
+      <circle cx="8" cy="8" r="1.75" stroke="currentColor" strokeWidth="1.25" />
+      {hidden ? <path d="m2.25 2.25 11.5 11.5" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" /> : null}
     </svg>
   );
 }
