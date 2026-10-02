@@ -24,6 +24,34 @@ const MAX_FILE_BYTES = 15 * 1024 * 1024; // 15 MB per file
 const ALLOWED_MIME_PREFIXES = ["image/"];
 const ALLOWED_MIME_EXACT = ["application/pdf"];
 
+/**
+ * Diagnostic endpoint. Reports which env vars are configured and whether the
+ * service account can reach the Shared Drive. Does NOT expose any secret
+ * values — only booleans and the (non-secret) service-account email / drive
+ * name. Safe to call in production to debug setup.
+ */
+export async function GET(): Promise<NextResponse> {
+  const checks: Record<string, unknown> = {
+    hasGoogleKey: Boolean(process.env.GOOGLE_SERVICE_ACCOUNT_JSON),
+    hasDriveId: Boolean(process.env.STAFF_DRIVE_ID),
+    hasSupabaseServiceKey: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
+  };
+
+  try {
+    const drive = getDriveClient();
+    const config = getDriveConfig();
+    const info = await drive.drives.get({ driveId: config.driveId, fields: "id, name" });
+    checks.driveReachable = true;
+    checks.driveName = info.data.name ?? null;
+  } catch (error) {
+    checks.driveReachable = false;
+    checks.driveError = error instanceof Error ? error.message : String(error);
+  }
+
+  return NextResponse.json(checks);
+}
+
+
 type FieldValues = Record<string, string>;
 
 function isAllowedMime(mime: string): boolean {
