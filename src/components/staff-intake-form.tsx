@@ -1,0 +1,231 @@
+"use client";
+
+import { useMemo, useRef, useState } from "react";
+import {
+  INTAKE_DOCUMENTS,
+  INTAKE_TEXT_FIELDS,
+  type IntakeDocument,
+} from "@/lib/staff-intake";
+
+const fieldClass =
+  "mt-1.5 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-950 outline-none focus:border-stone-950";
+const primaryButtonClass =
+  "inline-flex h-11 w-full items-center justify-center rounded-lg bg-[#063f3b] px-4 text-sm font-semibold text-white transition hover:bg-[#052f2c] disabled:cursor-not-allowed disabled:opacity-60";
+
+type Status = "idle" | "submitting" | "success" | "error";
+
+/**
+ * Converts an image file to JPEG in the browser. This handles iPhone HEIC/HEIF
+ * photos and shrinks large images so uploads succeed on mobile networks.
+ * Non-image files (e.g. PDF) are returned unchanged.
+ */
+async function toUploadableFile(file: File): Promise<File> {
+  if (!file.type.startsWith("image/") && file.type !== "") {
+    return file;
+  }
+
+  try {
+    const bitmap = await createImageBitmap(file);
+    const maxEdge = 2000;
+    const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height));
+    const width = Math.round(bitmap.width * scale);
+    const height = Math.round(bitmap.height * scale);
+
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext("2d");
+    if (!context) {
+      return file;
+    }
+    context.drawImage(bitmap, 0, 0, width, height);
+
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob((result) => resolve(result), "image/jpeg", 0.9),
+    );
+    if (!blob) {
+      return file;
+    }
+
+    const baseName = file.name.replace(/\.[^./\\]+$/, "") || "image";
+    return new File([blob], `${baseName}.jpg`, { type: "image/jpeg" });
+  } catch {
+    // If conversion fails (e.g. unsupported HEIC decode), fall back to original.
+    return file;
+  }
+}
+
+function FileField({
+  doc,
+  file,
+  onSelect,
+}: {
+  doc: IntakeDocument;
+  file: File | null;
+  onSelect: (file: File | null) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  return (
+    <div>
+      <p className="text-sm font-medium text-stone-800">
+        {doc.label}
+        {doc.required ? <span className="text-red-700"> *</span> : null}
+      </p>
+      <div className="mt-1.5 flex items-center gap-2">
+        <button
+          type="button"
+          className="inline-flex h-9 items-center justify-center rounded-lg border border-stone-300 bg-white px-3 text-sm font-medium text-stone-800 hover:bg-stone-50"
+          onClick={() => inputRef.current?.click()}
+        >
+          {file ? "Change file" : "Choose file"}
+        </button>
+        <span className="truncate text-xs text-stone-500">
+          {file ? file.name : "No file selected"}
+        </span>
+      </div>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*,.heic,.heif,application/pdf"
+        className="sr-only"
+        onChange={(event) => {
+          onSelect(event.target.files?.[0] ?? null);
+          event.target.value = "";
+        }}
+      />
+    </div>
+  );
+}
+
+export function StaffIntakeForm() {
+  const [values, setValues] = useState<Record<string, string>>(() =>
+    Object.fromEntries(INTAKE_TEXT_FIELDS.map((field) => [field.name, ""])),
+  );
+  const [files, setFiles] = useState<Record<string, File | null>>(() =>
+    Object.fromEntries(INTAKE_DOCUMENTS.map((doc) => [doc.field, null])),
+  );
+  const [status, setStatus] = useState<Status>("idle");
+  const [message, setMessage] = useState("");
+
+  const todayMax = useMemo(() => {
+    const now = new Date();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+    return `${now.getFullYear()}-${month}-${day}`;
+  }, []);
+
+  function setValue(name: string, value: string) {
+    setValues((current) => ({ ...current, [name]: value }));
+  }
+
+  function setFile(field: string, file: File | null) {
+    setFiles((current) => ({ ...current, [field]: file }));
+  }
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setStatus("submitting");
+    setMessage("");
+
+    try {
+      const formData = new FormData();
+      for (const field of INTAKE_TEXT_FIELDS) {
+        formData.append(field.name, values[field.name] ?? "");
+      }
+      for (const doc of INTAKE_DOCUMENTS) {
+        const file = files[doc.field];
+        if (file) {
+          const uploadable = await toUploadableFile(file);
+          formData.append(doc.field, uploadable, uploadable.name);
+        }
+      }
+
+      const response = await fetch("/api/staff-intake", {
+        method: "POST",
+        body: formData,
+      });
+      const data = (await response.json().catch(() => ({}))) as { error?: string };
+
+      if (!response.ok) {
+        setStatus("error");
+        setMessage(data.error ?? "Something went wrong. Please try again.");
+        return;
+      }
+
+      setStatus("success");
+      setMessage("");
+    } catch {
+      setStatus("error");
+      setMessage("Could not submit the form. Check your connection and try again.");
+    }
+  }
+
+  if (status === "success") {
+    return (
+      <div className="rounded-2xl border border-stone-200 bg-white p-8 text-center shadow-sm">
+        <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-emerald-100 text-emerald-700">
+          <svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              d="M5 12.5l4 4 10-10"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </div>
+        <h2 className="mt-4 text-lg font-semibold text-stone-950">Thank you</h2>
+        <p className="mt-1 text-sm text-stone-600">
+          Your details and documents have been submitted to HR.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <form
+      onSubmit={handleSubmit}
+      className="space-y-4 rounded-2xl border border-stone-200 bg-white p-5 shadow-sm sm:p-6"
+    >
+      {INTAKE_TEXT_FIELDS.map((field) => (
+        <label key={field.name} className="block text-sm font-medium text-stone-800">
+          {field.label}
+          {field.required ? <span className="text-red-700"> *</span> : null}
+          <input
+            type={field.type}
+            value={values[field.name] ?? ""}
+            onChange={(event) => setValue(field.name, event.target.value)}
+            required={field.required}
+            autoComplete={field.autoComplete}
+            max={field.name === "dateOfBirth" ? todayMax : undefined}
+            inputMode={field.type === "tel" ? "tel" : undefined}
+            className={fieldClass}
+          />
+        </label>
+      ))}
+
+      <div className="space-y-4 border-t border-stone-200 pt-4">
+        <p className="text-sm font-semibold text-stone-900">Documents</p>
+        {INTAKE_DOCUMENTS.map((doc) => (
+          <FileField
+            key={doc.field}
+            doc={doc}
+            file={files[doc.field]}
+            onSelect={(file) => setFile(doc.field, file)}
+          />
+        ))}
+      </div>
+
+      {status === "error" && message ? (
+        <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{message}</p>
+      ) : null}
+
+      <button type="submit" className={primaryButtonClass} disabled={status === "submitting"}>
+        {status === "submitting" ? "Submitting…" : "Submit details"}
+      </button>
+      <p className="text-center text-xs text-stone-400">All fields marked * are required.</p>
+    </form>
+  );
+}
