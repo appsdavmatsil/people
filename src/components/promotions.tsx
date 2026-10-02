@@ -515,7 +515,15 @@ export function Promotions() {
                   onClick={() => openPromotion(promotion)}
                 >
                   <td className="border-b border-stone-100 px-3 py-2 font-medium text-stone-950">
-                    {promotion.staffName}
+                    <span className="flex items-center gap-2">
+                      <span className="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-stone-900 text-[10px] font-semibold text-white">
+                        {employees.find((employee) => employee.id === promotion.staffId)?.photo ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={employees.find((employee) => employee.id === promotion.staffId)?.photo ?? ""} alt="" className="size-full object-cover" />
+                        ) : promotion.staffName.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase()}
+                      </span>
+                      <span>{promotion.staffName}</span>
+                    </span>
                   </td>
                   <td className="border-b border-stone-100 px-3 py-2 text-stone-700">
                     {promotion.currentPosition || "—"}
@@ -838,4 +846,3 @@ function latestDuePromotion(promotions: StaffPromotion[], staffId: string) {
     return latest;
   }, null);
 }
-

@@ -327,10 +327,11 @@ export function StaffDirectory({ editId }: { editId?: string }) {
                           {column.key === "name" ? (
                             <button
                               type="button"
-                              className="font-medium text-stone-950 underline-offset-4 hover:underline"
+                              className="flex items-center gap-2 font-medium text-stone-950 underline-offset-4 hover:underline"
                               onClick={() => openEmployee(employee)}
                             >
-                              {value || "—"}
+                              <StaffPhoto photo={employee.photo} name={value} />
+                              <span>{value || "—"}</span>
                             </button>
                           ) : (
                             value || "—"
@@ -399,6 +400,19 @@ function staffImportNotice(
   }
 
   return text;
+}
+
+function StaffPhoto({ photo, name }: { photo: string | null; name: string }) {
+  return (
+    <span className="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-stone-900 text-[10px] font-semibold text-white">
+      {photo ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={photo} alt="" className="size-full object-cover" />
+      ) : (
+        name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join("").toUpperCase()
+      )}
+    </span>
+  );
 }
 
 function employeeName(employee: StaffEmployee) {

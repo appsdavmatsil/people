@@ -23,7 +23,7 @@ import {
 } from "@/lib/insights";
 import type { LookupDepartment } from "@/lib/directory-lookups";
 import { salaryHidden } from "@/lib/privacy";
-import { formatSalary, type StaffEmployee } from "@/lib/staff";
+import { formatDate, formatSalary, type StaffEmployee } from "@/lib/staff";
 
 export function HomeInsights() {
   const { employees } = useStaffDirectory();
@@ -35,6 +35,7 @@ export function HomeInsights() {
   const { lookups } = useDirectoryLookups();
   const { snapshot } = usePrivacy();
   const [profileEmployee, setProfileEmployee] = useState<StaffEmployee | null>(null);
+  const [joiningYear, setJoiningYear] = useState<string | null>(null);
   const venues = chartVenues(locations, boardIds);
   const [salaryDepartment, setSalaryDepartment] = useDepartment(lookups.departments);
   const [promotionDepartment, setPromotionDepartment] = useDepartment(lookups.departments);
@@ -108,7 +109,7 @@ export function HomeInsights() {
         departments={lookups.departments}
         onDepartment={setPromotionDepartment}
       >
-        <div className="grid h-full min-h-0 grid-cols-2 gap-3"><PromotionRing points={promotionPoints} total={promotionTotal} compact /><JoiningYearsRing points={joiningYears} /></div>
+        <div className="grid h-full min-h-0 grid-cols-2 gap-3"><PromotionRing points={promotionPoints} total={promotionTotal} compact /><JoiningYearsRing points={joiningYears} onSelect={setJoiningYear} /></div>
       </InsightCard>
       <CelebrationCard
         title="Work celebrations"
@@ -147,6 +148,27 @@ export function HomeInsights() {
                   salaryIsHidden={(position) => salaryHidden(snapshot.hiddenSalaryPositions, position)}
                   onClose={() => setProfileEmployee(null)}
                 />
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
+      {joiningYear && typeof document !== "undefined"
+        ? createPortal(
+            <div className="fixed inset-0 z-[80] flex items-center justify-center bg-stone-950/40 p-4" onClick={() => setJoiningYear(null)}>
+              <div role="dialog" aria-modal="true" aria-labelledby="joining-year-title" className="flex max-h-[min(100%,40rem)] w-[min(100%,34rem)] flex-col overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-xl" onClick={(event) => event.stopPropagation()}>
+                <div className="flex items-start justify-between gap-4 border-b border-stone-200 px-5 py-4">
+                  <div><h2 id="joining-year-title" className="text-base font-semibold">Joined in {joiningYear}</h2><p className="mt-1 text-sm text-stone-500">{employees.filter((employee) => !employee.archived && employee.joiningDate.startsWith(joiningYear)).length} employees</p></div>
+                  <button type="button" aria-label="Close" className="flex size-8 items-center justify-center rounded-lg text-stone-500 hover:bg-stone-100" onClick={() => setJoiningYear(null)}>×</button>
+                </div>
+                <ul className="min-h-0 flex-1 divide-y divide-stone-100 overflow-y-auto px-2 py-2">
+                  {employees.filter((employee) => !employee.archived && employee.joiningDate.startsWith(joiningYear)).sort((a,b) => a.fullName.localeCompare(b.fullName)).map((employee) => (
+                    <li key={employee.id} className="flex items-center gap-3 rounded-xl px-3 py-2.5 hover:bg-stone-50">
+                      <EmployeeAvatar employee={{name: employee.fullName, photo: employee.photo}} onOpen={() => { setJoiningYear(null); setProfileEmployee(employee); }} />
+                      <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium text-stone-950">{employee.fullName}</span><span className="block truncate text-xs text-stone-500">{employee.position || "Position not set"} · {employee.venue || "Venue not set"} · {formatDate(employee.joiningDate)}</span></span>
+                    </li>
+                  ))}
+                </ul>
               </div>
             </div>,
             document.body,
@@ -745,10 +767,10 @@ function PromotionRing({ points, total, compact = false }: { points: PromotionPo
   );
 }
 
-function JoiningYearsRing({ points }: { points: { year: string; count: number }[] }) {
+function JoiningYearsRing({ points, onSelect }: { points: { year: string; count: number }[]; onSelect: (year: string) => void }) {
   const total = points.reduce((sum, point) => sum + point.count, 0);
   const slices = points.map((point, index) => ({ key: point.year, label: point.year, value: point.count, color: ["#1c1917", "#a8a29e", "#c2410c", "#0f3026", "#a91d2a"][index % 5], detail: "Joining year" }));
-  return <div className="flex h-full min-h-0 items-center gap-2"><Ring slices={slices} total={total} venue="Joining years" className="size-24 shrink-0" /><div className="min-w-0"><p className="mb-1 text-xs font-medium text-stone-700">Joining years</p><ul className="space-y-1">{points.slice(0,5).map((point)=><li key={point.year} className="flex justify-between gap-2 text-[11px] text-stone-600"><span>{point.year}</span><b>{point.count}</b></li>)}</ul></div></div>;
+  return <div className="flex h-full min-h-0 items-center gap-2 overflow-hidden"><Ring slices={slices} total={total} venue="Joining years" className="size-24 shrink-0" /><div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden"><p className="mb-1 shrink-0 text-xs font-medium text-stone-700">Joining years</p><ul className="min-h-0 flex-1 space-y-0.5 overflow-y-scroll pr-1 [scrollbar-gutter:stable]">{points.map((point)=><li key={point.year}><button type="button" onClick={() => onSelect(point.year)} className="flex w-full justify-between gap-2 rounded px-1 py-0.5 text-[11px] text-stone-600 hover:bg-stone-100 hover:text-stone-950"><span>{point.year}</span><b>{point.count}</b></button></li>)}</ul></div></div>;
 }
 
 function joiningYearsByStaff(employees: StaffEmployee[]) { const counts = new Map<string, number>(); for (const employee of employees) { if (employee.archived || !employee.joiningDate) continue; const year = employee.joiningDate.slice(0,4); if (/^\d{4}$/.test(year)) counts.set(year, (counts.get(year) ?? 0) + 1); } return [...counts].map(([year,count])=>({year,count})).sort((a,b)=>b.year.localeCompare(a.year)); }

@@ -28,7 +28,7 @@ import { useStaffDirectory } from "@/components/use-staff-directory";
 import { useEventPlacements } from "@/components/use-staff-placements";
 import { countryFlag } from "@/lib/countries";
 import { normalizeName, type DirectoryLookups } from "@/lib/directory-lookups";
-import { type EventDefinition } from "@/lib/events";
+import { normalizeEventName, sameEventName, type EventDefinition } from "@/lib/events";
 import { type HiringRole } from "@/lib/hiring";
 import {
   pendingPromotion,
@@ -70,6 +70,7 @@ const iconPrimaryButtonClass =
 
 type DialogMode =
   | "venue"
+  | "createEvent"
   | "staff"
   | "unassigned"
   | "label"
@@ -249,7 +250,7 @@ export function StaffLocationBoard() {
 }
 
 export function EventsManningBoard() {
-  const { events } = useEvents();
+  const { events, update: updateEvents } = useEvents();
   const { employees } = useStaffDirectory();
   const { locations: venueCatalog } = useLocations();
   const { ids: venueBoardIds } = useLocationBoard();
@@ -281,8 +282,7 @@ export function EventsManningBoard() {
   });
 
   function updateLocations(next: LocationReference[]) {
-    const known = new Set(events.map((item) => item.id));
-    updateIds(next.map((item) => item.id).filter((id) => known.has(id)));
+    updateIds(next.map((item) => item.id));
   }
 
   const onBoard = new Set(ids);
@@ -301,6 +301,7 @@ export function EventsManningBoard() {
     <PlacementBoard
       kind="event"
       catalog={events}
+      updateCatalog={updateEvents}
       staffChoices={staffChoices}
       employees={employees}
       titleId="events-manning-dialog-title"
@@ -325,6 +326,7 @@ export function EventsManningBoard() {
 function PlacementBoard({
   kind = "venue",
   catalog = [],
+  updateCatalog,
   venueCatalog = [],
   titleId,
   locations,
@@ -349,6 +351,7 @@ function PlacementBoard({
 }: {
   kind?: "venue" | "event";
   catalog?: EventDefinition[];
+  updateCatalog?: (next: EventDefinition[]) => void;
   venueCatalog?: LocationReference[];
   titleId: string;
   locations: LocationReference[];
@@ -385,7 +388,7 @@ function PlacementBoard({
   const { lookups } = useDirectoryLookups();
   const { roles: hiringRoles, update: updateHiring } = useHiring();
   const hiringRolesRef = useRef(hiringRoles);
-  const { people: outsourcedPeople } = useOutsourced();
+  const { people: outsourcedPeople, update: updateOutsourced } = useOutsourced();
   const { promotions, update: updatePromotions } = usePromotions();
   const { includePromotions, setIncludePromotions } = usePayrollView();
   const privacy = usePrivacy();
@@ -400,6 +403,8 @@ function PlacementBoard({
   const [today, setToday] = useState(todayIso);
   const [dialog, setDialog] = useState<DialogMode>(null);
   const [selectedEventId, setSelectedEventId] = useState("");
+  const [newEventName, setNewEventName] = useState("");
+  const [newEventColor, setNewEventColor] = useState("#44403c");
   const [selectedVenueId, setSelectedVenueId] = useState("");
   const [selectedStaffId, setSelectedStaffId] = useState("");
   const [staffLocation, setStaffLocation] = useState("");
@@ -1235,7 +1240,7 @@ function PlacementBoard({
       basicSalary: moneyField(employee?.basicSalary ?? null),
       allowances: moneyField(employee?.allowances ?? null),
       salary: moneyField(employee?.salary ?? person?.salary ?? null),
-      photo: employee?.photo ?? null,
+      photo: employee?.photo ?? outsourcedPeople.find((item) => item.id === staffId)?.photo ?? null,
     });
     setFormError("");
     setPendingRemoveId(null);
@@ -1280,6 +1285,7 @@ function PlacementBoard({
       return;
     }
     const employee = employees.find((item) => item.id === editForm.id);
+    const outsourced = outsourcedPeople.find((item) => item.id === editForm.id);
     if (kind === "venue" && employee && updateEmployee) {
       const location = locations.find((item) => item.id === locationId);
       const parts = splitFullName(name);
@@ -1297,6 +1303,29 @@ function PlacementBoard({
         photo: editForm.photo,
         ...pay,
       });
+    } else if (kind === "venue" && outsourced) {
+      const location = locations.find((item) => item.id === locationId);
+      updateOutsourced(
+        outsourcedPeople.map((person) =>
+          person.id === editForm.id
+            ? {
+                ...person,
+                fullName: name,
+                position,
+                venue: location ? location.venueName || location.nickname : "",
+                rate: pay.salary,
+                photo: editForm.photo,
+              }
+            : person,
+        ),
+      );
+      updatePlacements(
+        placements.map((person) =>
+          person.id === editForm.id
+            ? { ...person, name, locationId, position, salary: pay.salary }
+            : person,
+        ),
+      );
     } else {
       updatePlacements(
         placements.map((person) =>
@@ -1310,6 +1339,28 @@ function PlacementBoard({
     setEditForm(null);
     setDialog(null);
     setStatus(`Updated ${name}.`);
+  }
+
+  function createEvent(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const name = normalizeEventName(newEventName);
+    if (!name) {
+      setFormError("Enter an event name.");
+      return;
+    }
+    if (catalog.some((item) => sameEventName(item.name, name))) {
+      setFormError("An event with this name already exists.");
+      return;
+    }
+    if (!updateCatalog) return;
+    const created: EventDefinition = { id: crypto.randomUUID(), name, color: newEventColor };
+    updateCatalog([...catalog, created]);
+    updateLocations([...locations, { id: created.id, nickname: created.name, venueName: "", color: created.color }]);
+    setNewEventName("");
+    setNewEventColor("#44403c");
+    setFormError("");
+    setDialog(null);
+    setStatus(`Created ${name}.`);
   }
 
   function openAddHiring(locationId: string) {
@@ -2281,6 +2332,22 @@ function PlacementBoard({
               : ""}
           </span>
           <div className="flex shrink-0 gap-2">
+          {kind === "event" ? (
+            <button
+              type="button"
+              aria-label="Create new event"
+              title="Create new event"
+              className={iconButtonClass}
+              onClick={() => {
+                setNewEventName("");
+                setNewEventColor("#44403c");
+                setFormError("");
+                setDialog("createEvent");
+              }}
+            >
+              <PlusIcon />
+            </button>
+          ) : null}
           {kind === "venue" ? <DashboardVisibilityButton /> : null}
           {kind === "venue" ? (
             <button
@@ -2663,7 +2730,7 @@ function PlacementBoard({
         aria-labelledby={titleId}
         className={`m-auto rounded-2xl border border-stone-200 bg-white p-0 text-stone-950 shadow-xl backdrop:bg-stone-950/40 ${
           dialog === "editStaff" || dialog === "promotion"
-            ? "flex h-fit max-h-[min(100%-2rem,40rem)] w-[min(100%-2rem,28rem)] flex-col"
+            ? `flex h-fit max-h-[calc(100dvh-2rem)] flex-col ${dialog === "editStaff" ? "w-[min(100%-2rem,40rem)]" : "w-[min(100%-2rem,28rem)]"}`
             : "h-fit w-[min(100%-2rem,24rem)]"
         }`}
         onCancel={(event) => {
@@ -2705,6 +2772,41 @@ function PlacementBoard({
               onClose={dismissDialog}
             />
           )
+        ) : null}
+
+        {dialog === "createEvent" ? (
+          <form onSubmit={createEvent}>
+            <DialogHeader
+              titleId={titleId}
+              title="Create event"
+              description="Create it here and add it directly to the Events Manning board."
+              icon={<AddEventIcon />}
+              onClose={dismissDialog}
+            />
+            <div className="space-y-4 px-5 py-4">
+              <label className="block text-sm font-medium text-stone-800">
+                Event name
+                <input
+                  value={newEventName}
+                  onChange={(event) => setNewEventName(event.target.value)}
+                  placeholder="Sunday brunch"
+                  className={fieldClass}
+                  autoFocus
+                />
+              </label>
+              <label className="block text-sm font-medium text-stone-800">
+                Accent color
+                <input
+                  type="color"
+                  value={newEventColor}
+                  onChange={(event) => setNewEventColor(event.target.value)}
+                  className="mt-1.5 h-10 w-full cursor-pointer rounded-lg border border-stone-300 bg-white p-1"
+                />
+              </label>
+              {formError ? <p className="text-sm text-red-700">{formError}</p> : null}
+            </div>
+            <DialogFooter onClose={dismissDialog} submitLabel="Create event" />
+          </form>
         ) : null}
 
         {dialog === "unassigned" && unassignedPeople ? (
@@ -2827,7 +2929,7 @@ function PlacementBoard({
         ) : null}
 
         {dialog === "editStaff" && editForm ? (
-          <form onSubmit={saveEditStaff} className="flex max-h-[min(100dvh-4rem,40rem)] min-h-0 flex-col">
+          <form onSubmit={saveEditStaff} className="flex max-h-[calc(100dvh-2rem)] min-h-0 flex-col">
             <DialogHeader
               titleId={titleId}
               title="Edit staff"
@@ -4508,7 +4610,7 @@ export function ProfileDialog({
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-5">
         <div className="flex justify-center">
-          <span className="flex size-28 items-center justify-center overflow-hidden rounded-full bg-stone-900 text-2xl font-medium text-white">
+          <span className="flex size-36 items-center justify-center overflow-hidden rounded-full bg-stone-900 text-3xl font-medium text-white sm:size-40">
             {photo ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={photo} alt="" className="size-full object-cover" />
@@ -4776,6 +4878,8 @@ function StaffEditFields({
   lookups: DirectoryLookups;
   onChange: (next: StaffEditForm) => void;
 }) {
+  const photoRef = useRef<HTMLInputElement>(null);
+  const [photoError, setPhotoError] = useState("");
   const positionGroups = lookups.departments
     .map((department) => ({
       department,
@@ -4810,8 +4914,49 @@ function StaffEditFields({
     onChange({ ...next, salary: pay.salary == null ? "" : String(pay.salary) });
   }
 
+  function updatePhoto(file: File | null) {
+    setPhotoError("");
+    if (!file) {
+      onChange({ ...form, photo: null });
+      return;
+    }
+    if (!file.type.startsWith("image/")) {
+      setPhotoError("Choose an image file.");
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      setPhotoError("Use an image under 2 MB.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => onChange({ ...form, photo: typeof reader.result === "string" ? reader.result : null });
+    reader.readAsDataURL(file);
+  }
+
   return (
     <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
+      <div className="flex items-center gap-4 rounded-xl bg-stone-50 p-3">
+        <button
+          type="button"
+          className="flex size-20 shrink-0 items-center justify-center overflow-hidden rounded-full bg-stone-900 text-lg font-semibold text-white"
+          onClick={() => photoRef.current?.click()}
+          aria-label={form.photo ? "Update profile picture" : "Upload profile picture"}
+        >
+          {form.photo ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={form.photo} alt="" className="size-full object-cover" />
+          ) : initials(form.fullName)}
+        </button>
+        <div className="min-w-0">
+          <p className="text-sm font-medium text-stone-800">Profile picture</p>
+          <div className="mt-1 flex gap-3 text-sm">
+            <button type="button" className="font-medium underline-offset-4 hover:underline" onClick={() => photoRef.current?.click()}>{form.photo ? "Update" : "Upload"}</button>
+            {form.photo ? <button type="button" className="text-stone-500 hover:text-stone-950" onClick={() => updatePhoto(null)}>Remove</button> : null}
+          </div>
+          {photoError ? <p className="mt-1 text-xs text-red-700">{photoError}</p> : null}
+        </div>
+        <input ref={photoRef} type="file" accept="image/*" className="sr-only" onChange={(event) => { updatePhoto(event.target.files?.[0] ?? null); event.target.value = ""; }} />
+      </div>
       <label className="block text-sm font-medium text-stone-800">
         Full name
         <input

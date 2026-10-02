@@ -405,7 +405,15 @@ export function OutsourcedDirectory({ editId }: { editId?: string }) {
                   onClick={() => openPerson(person)}
                 >
                   <td className="border-b border-stone-100 px-3 py-2 font-medium text-stone-950">
-                    {person.fullName}
+                    <span className="flex items-center gap-2">
+                      <span className="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-stone-900 text-[10px] font-semibold text-white">
+                        {person.photo ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={person.photo} alt="" className="size-full object-cover" />
+                        ) : outsourcedInitials(person.fullName)}
+                      </span>
+                      <span>{person.fullName}</span>
+                    </span>
                   </td>
                   <td className="border-b border-stone-100 px-3 py-2 text-stone-700">{person.company}</td>
                   <td className="border-b border-stone-100 px-3 py-2 text-stone-700">{person.position}</td>
