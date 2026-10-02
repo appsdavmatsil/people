@@ -261,7 +261,7 @@ export function EventsManningBoard() {
   const { orders, update: updateOrders } = useEventBoardOrder();
   const locations = ids.flatMap((id) => {
     const event = events.find((item) => item.id === id);
-    return event ? [{ id: event.id, nickname: event.name, venueName: "", color: "" }] : [];
+    return event ? [{ id: event.id, nickname: event.name, venueName: "", color: event.color }] : [];
   });
   const sourceVenues = (venueBoardIds ?? venueCatalog.map((venue) => venue.id)).flatMap((id) => {
     const venue = venueCatalog.find((item) => item.id === id);
@@ -1097,7 +1097,7 @@ function PlacementBoard({
     setPromotionPositionId(match?.id ?? (currentPosition ? "__kept__" : ""));
     setPromotionPosition(currentPosition);
     setPromotionSalary(defaultSalaryText(match));
-    setPromotionDate(today);
+    setPromotionDate(firstDayOfNextMonth(today));
     setFormError("");
     setPendingRemoveId(null);
     setDialog("promotion");
@@ -3374,6 +3374,14 @@ function LocationColumn({
   );
 
   useEffect(() => {
+    try {
+      setCollapsed(window.localStorage.getItem(`people.board-column-hidden:${dropId}`) === "1");
+    } catch {
+      // Keep the visible default when storage is unavailable.
+    }
+  }, [dropId]);
+
+  useEffect(() => {
     if (!menu) {
       return;
     }
@@ -3612,7 +3620,15 @@ function LocationColumn({
               onPointerDown={(event) => event.stopPropagation()}
               onClick={(event) => {
                 event.stopPropagation();
-                setCollapsed((current) => !current);
+                setCollapsed((current) => {
+                  const next = !current;
+                  try {
+                    window.localStorage.setItem(`people.board-column-hidden:${dropId}`, next ? "1" : "0");
+                  } catch {
+                    // The in-memory state still works when storage is unavailable.
+                  }
+                  return next;
+                });
               }}
             >
               <VenueVisibilityIcon hidden={collapsed} />
@@ -4588,6 +4604,15 @@ function ageFromIso(iso: string, today = new Date()) {
   }
 
   return age >= 0 ? age : null;
+}
+
+function firstDayOfNextMonth(iso: string) {
+  const match = /^(\d{4})-(\d{2})-\d{2}$/.exec(iso);
+  const base = match
+    ? new Date(Number(match[1]), Number(match[2]) - 1, 1)
+    : new Date();
+  const next = new Date(base.getFullYear(), base.getMonth() + 1, 1);
+  return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}-01`;
 }
 
 function HiringDialog({

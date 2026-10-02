@@ -221,10 +221,7 @@ export function HiringOpeningActions({
       position: next?.name ?? "",
       departmentId: department?.id ?? "",
       department: department?.name ?? current.department,
-      salary:
-        current.salary !== "" || next?.defaultSalary == null
-          ? current.salary
-          : String(next?.defaultSalary),
+      salary: next?.defaultSalary == null ? "" : String(next.defaultSalary),
     }));
   }
 

@@ -494,8 +494,10 @@ function EventsPanel({
   update: (next: EventDefinition[]) => void;
 }) {
   const [name, setName] = useState("");
+  const [color, setColor] = useState(defaultLocationColor);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draftName, setDraftName] = useState("");
+  const [draftColor, setDraftColor] = useState(defaultLocationColor);
   const [error, setError] = useState("");
 
   function addEvent(event: React.FormEvent<HTMLFormElement>) {
@@ -507,8 +509,9 @@ function EventsPanel({
       return;
     }
 
-    update([...events, { id: crypto.randomUUID(), name: cleaned }]);
+    update([...events, { id: crypto.randomUUID(), name: cleaned, color: normalizeLocationColor(color) || defaultLocationColor }]);
     setName("");
+    setColor(defaultLocationColor);
     setError("");
   }
 
@@ -521,7 +524,7 @@ function EventsPanel({
       return;
     }
 
-    update(events.map((current) => (current.id === item.id ? { ...current, name: cleaned } : current)));
+    update(events.map((current) => (current.id === item.id ? { ...current, name: cleaned, color: normalizeLocationColor(draftColor) || defaultLocationColor } : current)));
     setEditingId(null);
     setError("");
   }
@@ -536,7 +539,7 @@ function EventsPanel({
 
   return (
     <div>
-      <form onSubmit={addEvent} className="grid max-w-xl gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
+      <form onSubmit={addEvent} className="grid max-w-2xl gap-3 sm:grid-cols-[1fr_auto_auto] sm:items-end">
         <label className="block text-sm font-medium text-stone-800">
           Event name
           <input
@@ -546,6 +549,7 @@ function EventsPanel({
             className={`${fieldClass} mt-1.5`}
           />
         </label>
+        <label className="block text-sm font-medium text-stone-800">Accent color<input type="color" value={color} onChange={(event)=>setColor(event.target.value)} className={`${colorInputClass} mt-1.5`}/></label>
         <button type="submit" className={primaryButtonClass}>
           Add
         </button>
@@ -556,6 +560,7 @@ function EventsPanel({
           <thead className="border-b border-stone-200 bg-stone-50 text-xs font-medium text-stone-500">
             <tr>
               <th className="px-3 py-2 font-medium">Event</th>
+              <th className="w-24 px-3 py-2 font-medium">Color</th>
               <th className="w-28 px-3 py-2">
                 <span className="sr-only">Actions</span>
               </th>
@@ -564,7 +569,7 @@ function EventsPanel({
           <tbody className="divide-y divide-stone-100">
             {events.length === 0 ? (
               <tr>
-                <td colSpan={2} className="px-3 py-8 text-center text-sm text-stone-500">
+                <td colSpan={3} className="px-3 py-8 text-center text-sm text-stone-500">
                   No events yet.
                 </td>
               </tr>
@@ -572,10 +577,10 @@ function EventsPanel({
               events.map((item) =>
                 editingId === item.id ? (
                   <tr key={item.id}>
-                    <td colSpan={2} className="px-3 py-3">
+                    <td colSpan={3} className="px-3 py-3">
                       <form
                         onSubmit={(event) => saveEvent(event, item)}
-                        className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end"
+                        className="grid gap-3 sm:grid-cols-[1fr_auto_auto] sm:items-end"
                       >
                         <label className="block text-sm font-medium text-stone-800">
                           Event name
@@ -587,6 +592,7 @@ function EventsPanel({
                             autoFocus
                           />
                         </label>
+                        <label className="block text-sm font-medium text-stone-800">Accent color<input type="color" value={draftColor} onChange={(event)=>setDraftColor(event.target.value)} className={`${colorInputClass} mt-1.5`}/></label>
                         <div className="flex gap-2">
                           <button type="submit" className={primaryButtonClass}>
                             Save
@@ -608,6 +614,7 @@ function EventsPanel({
                 ) : (
                   <tr key={item.id}>
                     <td className="px-3 py-2 font-medium text-stone-950">{item.name}</td>
+                    <td className="px-3 py-2"><span className="block size-6 rounded-md border border-stone-200" style={{backgroundColor:item.color}}/></td>
                     <td className="px-3 py-2 text-right">
                       <button
                         type="button"
@@ -615,6 +622,7 @@ function EventsPanel({
                         onClick={() => {
                           setEditingId(item.id);
                           setDraftName(item.name);
+                          setDraftColor(item.color);
                           setError("");
                         }}
                       >

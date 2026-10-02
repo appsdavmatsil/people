@@ -8,6 +8,7 @@ export const eventBoardEvent = "people-event-board";
 export type EventDefinition = {
   id: string;
   name: string;
+  color: string;
 };
 
 let clientRaw: string | null = null;
@@ -109,7 +110,10 @@ function normalizeEvents(value: unknown): EventDefinition[] {
     }
 
     const id = typeof item.id === "string" && item.id.trim() ? item.id : crypto.randomUUID();
-    events.push({ id, name });
+    const color = typeof item.color === "string" && /^#[0-9a-fA-F]{6}$/.test(item.color)
+      ? item.color.toLowerCase()
+      : "#44403c";
+    events.push({ id, name, color });
   }
 
   return events;
