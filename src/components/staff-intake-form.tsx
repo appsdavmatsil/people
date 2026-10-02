@@ -98,6 +98,105 @@ function FileField({
   );
 }
 
+const MONTHS = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
+const selectClass =
+  "w-full rounded-lg border border-stone-300 bg-white px-2 py-2 text-sm text-stone-950 outline-none focus:border-stone-950";
+
+/**
+ * Date entry as three dropdowns in day / month / year order (dd/mm/yyyy),
+ * independent of browser locale. Stores the value as an ISO yyyy-MM-dd string.
+ */
+function DateField({
+  label,
+  required,
+  value,
+  minYear,
+  maxYear,
+  onChange,
+}: {
+  label: string;
+  required: boolean;
+  value: string;
+  minYear: number;
+  maxYear: number;
+  onChange: (iso: string) => void;
+}) {
+  const [year = "", month = "", day = ""] = value ? value.split("-") : [];
+
+  const years: number[] = [];
+  for (let y = maxYear; y >= minYear; y -= 1) {
+    years.push(y);
+  }
+  const daysInMonth =
+    year && month ? new Date(Number(year), Number(month), 0).getDate() : 31;
+
+  function emit(nextDay: string, nextMonth: string, nextYear: string) {
+    if (nextDay && nextMonth && nextYear) {
+      onChange(
+        `${nextYear}-${nextMonth.padStart(2, "0")}-${nextDay.padStart(2, "0")}`,
+      );
+    } else {
+      // Keep a partial marker so required validation still blocks submit.
+      onChange("");
+    }
+  }
+
+  return (
+    <div className="block text-sm font-medium text-stone-800">
+      {label}
+      {required ? <span className="text-red-700"> *</span> : null}
+      <div className="mt-1.5 grid grid-cols-3 gap-2">
+        <select
+          aria-label={`${label} day`}
+          value={day ? String(Number(day)) : ""}
+          required={required}
+          className={selectClass}
+          onChange={(event) => emit(event.target.value, month, year)}
+        >
+          <option value="">Day</option>
+          {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((d) => (
+            <option key={d} value={d}>
+              {d}
+            </option>
+          ))}
+        </select>
+        <select
+          aria-label={`${label} month`}
+          value={month ? String(Number(month)) : ""}
+          required={required}
+          className={selectClass}
+          onChange={(event) => emit(day, event.target.value, year)}
+        >
+          <option value="">Month</option>
+          {MONTHS.map((name, i) => (
+            <option key={name} value={i + 1}>
+              {name}
+            </option>
+          ))}
+        </select>
+        <select
+          aria-label={`${label} year`}
+          value={year}
+          required={required}
+          className={selectClass}
+          onChange={(event) => emit(day, month, event.target.value)}
+        >
+          <option value="">Year</option>
+          {years.map((y) => (
+            <option key={y} value={y}>
+              {y}
+            </option>
+          ))}
+        </select>
+      </div>
+    </div>
+  );
+}
+
 export function StaffIntakeForm() {
   const [values, setValues] = useState<Record<string, string>>(() =>
     Object.fromEntries(INTAKE_TEXT_FIELDS.map((field) => [field.name, ""])),
@@ -108,12 +207,7 @@ export function StaffIntakeForm() {
   const [status, setStatus] = useState<Status>("idle");
   const [message, setMessage] = useState("");
 
-  const todayMax = useMemo(() => {
-    const now = new Date();
-    const month = String(now.getMonth() + 1).padStart(2, "0");
-    const day = String(now.getDate()).padStart(2, "0");
-    return `${now.getFullYear()}-${month}-${day}`;
-  }, []);
+  const currentYear = useMemo(() => new Date().getFullYear(), []);
 
   function setValue(name: string, value: string) {
     setValues((current) => ({ ...current, [name]: value }));
@@ -189,22 +283,40 @@ export function StaffIntakeForm() {
       onSubmit={handleSubmit}
       className="space-y-4 rounded-2xl border border-stone-200 bg-white p-5 shadow-sm sm:p-6"
     >
-      {INTAKE_TEXT_FIELDS.map((field) => (
-        <label key={field.name} className="block text-sm font-medium text-stone-800">
-          {field.label}
-          {field.required ? <span className="text-red-700"> *</span> : null}
-          <input
-            type={field.type}
-            value={values[field.name] ?? ""}
-            onChange={(event) => setValue(field.name, event.target.value)}
-            required={field.required}
-            autoComplete={field.autoComplete}
-            max={field.name === "dateOfBirth" ? todayMax : undefined}
-            inputMode={field.type === "tel" ? "tel" : undefined}
-            className={fieldClass}
-          />
-        </label>
-      ))}
+      {INTAKE_TEXT_FIELDS.map((field) => {
+        if (field.type === "date") {
+          // DOB: past only. Joining/expiry dates: allow a wide future range.
+          const minYear = field.name === "dateOfBirth" ? currentYear - 80 : currentYear - 20;
+          const maxYear = field.name === "dateOfBirth" ? currentYear : currentYear + 30;
+          return (
+            <DateField
+              key={field.name}
+              label={field.label}
+              required={field.required}
+              value={values[field.name] ?? ""}
+              minYear={minYear}
+              maxYear={maxYear}
+              onChange={(iso) => setValue(field.name, iso)}
+            />
+          );
+        }
+
+        return (
+          <label key={field.name} className="block text-sm font-medium text-stone-800">
+            {field.label}
+            {field.required ? <span className="text-red-700"> *</span> : null}
+            <input
+              type={field.type}
+              value={values[field.name] ?? ""}
+              onChange={(event) => setValue(field.name, event.target.value)}
+              required={field.required}
+              autoComplete={field.autoComplete}
+              inputMode={field.type === "tel" ? "tel" : undefined}
+              className={fieldClass}
+            />
+          </label>
+        );
+      })}
 
       <div className="space-y-4 border-t border-stone-200 pt-4">
         <p className="text-sm font-semibold text-stone-900">Documents</p>
