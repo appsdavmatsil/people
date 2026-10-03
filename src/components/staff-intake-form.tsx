@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { ConfigDocument, ConfigTextField } from "@/lib/form-config";
 import { countryDialList, type CountryDial } from "@/lib/countries";
 
@@ -227,62 +227,26 @@ const DIAL_LIST = (() => {
   return [...pinned, ...rest];
 })();
 
-/** Detects the user's current country ISO from the browser, best-effort. */
-function detectCountryIso(): string {
-  try {
-    const region = new Intl.Locale(navigator.language).maximize().region;
-    if (region) return region;
-  } catch {
-    // ignore
-  }
-  // Fallback: map a few common timezones to a country.
-  try {
-    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    const tzMap: Record<string, string> = {
-      "Asia/Dubai": "AE",
-      "Asia/Kolkata": "IN",
-      "Asia/Karachi": "PK",
-      "Asia/Manila": "PH",
-      "Asia/Kathmandu": "NP",
-      "Europe/London": "GB",
-    };
-    if (tzMap[tz]) return tzMap[tz];
-  } catch {
-    // ignore
-  }
-  return "AE"; // sensible default for this UAE-based business
-}
-
 /**
  * Phone input with a country-code picker. Stores the full value including the
- * dial code (e.g. "+971 501234567"). The picker auto-selects the detected
- * current country on first render.
+ * dial code (e.g. "+971 501234567"). Defaults to UAE (+971).
  */
 function PhoneField({
   label,
   required,
-  value,
   onChange,
   help,
 }: {
   label: string;
   required: boolean;
-  value: string;
   onChange: (full: string) => void;
   help?: string;
 }) {
-  const [dial, setDial] = useState<string>("+971");
+  // Default to UAE. Keyed by ISO so shared dial codes (e.g. +1) stay distinct.
+  const [iso, setIso] = useState<string>("AE");
   const [local, setLocal] = useState<string>("");
 
-  // Auto-detect current country once on mount.
-  useEffect(() => {
-    const iso = detectCountryIso();
-    const match = DIAL_LIST.find((c) => c.iso === iso);
-    if (match) {
-      setDial(match.dial);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const selected = DIAL_LIST.find((c) => c.iso === iso) ?? DIAL_LIST[0];
 
   function emit(nextDial: string, nextLocal: string) {
     const trimmed = nextLocal.trim();
@@ -296,15 +260,16 @@ function PhoneField({
       <div className="mt-1.5 flex gap-2">
         <select
           aria-label={`${label} country code`}
-          value={dial}
+          value={iso}
           className="w-28 shrink-0 rounded-lg border border-stone-300 bg-white px-2 py-2 text-sm text-stone-950 outline-none focus:border-stone-950"
           onChange={(event) => {
-            setDial(event.target.value);
-            emit(event.target.value, local);
+            setIso(event.target.value);
+            const next = DIAL_LIST.find((c) => c.iso === event.target.value);
+            emit(next?.dial ?? "+971", local);
           }}
         >
           {DIAL_LIST.map((c: CountryDial) => (
-            <option key={c.iso} value={c.dial}>
+            <option key={c.iso} value={c.iso}>
               {c.flag} {c.dial}
             </option>
           ))}
@@ -318,7 +283,7 @@ function PhoneField({
           className="w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-950 outline-none focus:border-stone-950"
           onChange={(event) => {
             setLocal(event.target.value);
-            emit(dial, event.target.value);
+            emit(selected?.dial ?? "+971", event.target.value);
           }}
         />
       </div>
@@ -447,7 +412,6 @@ export function StaffIntakeForm({
               label={field.label}
               required={field.required}
               help={field.help}
-              value={values[field.name] ?? ""}
               onChange={(full) => setValue(field.name, full)}
             />
           );
