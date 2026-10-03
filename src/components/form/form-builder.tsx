@@ -77,6 +77,7 @@ export function FormBuilder({ config }: { config: FormConfig }) {
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto pb-10">
+      <div className="mx-auto w-full max-w-4xl">
       <div className="mb-4 flex items-center justify-between">
         <div>
           <h1 className="text-lg font-semibold text-stone-950">Form Builder</h1>
@@ -210,6 +211,7 @@ export function FormBuilder({ config }: { config: FormConfig }) {
           + Add document
         </button>
       </section>
+      </div>
     </div>
   );
 }
