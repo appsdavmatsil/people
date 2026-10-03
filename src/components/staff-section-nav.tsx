@@ -8,6 +8,7 @@ const sections = [
   { href: "/staffdirectory/outsourced", label: "Out Sourced" },
   { href: "/staffdirectory/hiring", label: "Hiring Positions" },
   { href: "/staffdirectory/promotions", label: "Promotions" },
+  { href: "/staffdirectory/documents", label: "Documents" },
 ] as const;
 
 export function StaffSectionNav() {

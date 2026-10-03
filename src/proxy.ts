@@ -56,7 +56,7 @@ export async function proxy(request: NextRequest) {
     path.startsWith("/login") ||
     path.startsWith("/auth") ||
     path.startsWith("/onboarding") ||
-    path.startsWith("/api/staff-intake") ||
+    path === "/api/staff-intake" ||
     path === "/install" ||
     path === "/manifest.webmanifest" ||
     path === "/sw.js";
