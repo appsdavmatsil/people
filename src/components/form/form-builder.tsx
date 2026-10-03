@@ -90,6 +90,8 @@ export function FormBuilder({ config }: { config: FormConfig }) {
         </button>
       </div>
 
+      <ShareLink />
+
       {status === "saved" ? (
         <p className="mb-3 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
           Saved. The public form is updated.
@@ -211,6 +213,55 @@ export function FormBuilder({ config }: { config: FormConfig }) {
           + Add document
         </button>
       </section>
+      </div>
+    </div>
+  );
+}
+
+function ShareLink() {
+  const [copied, setCopied] = useState(false);
+  const [url] = useState(() =>
+    typeof window !== "undefined" ? `${window.location.origin}/staff-details` : "/staff-details",
+  );
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // ignore
+    }
+  }
+
+  return (
+    <div className="mb-5 rounded-xl border border-stone-200 bg-stone-50 p-4">
+      <p className="text-sm font-semibold text-stone-900">Shareable form link</p>
+      <p className="mt-0.5 text-xs text-stone-500">
+        Send this link to staff. No login needed — they fill in their details and upload documents.
+      </p>
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <input
+          readOnly
+          value={url}
+          onFocus={(e) => e.currentTarget.select()}
+          className="min-w-0 flex-1 rounded-lg border border-stone-300 bg-white px-3 py-2 font-mono text-xs text-stone-800"
+        />
+        <button
+          type="button"
+          onClick={copy}
+          className="inline-flex h-9 shrink-0 items-center rounded-lg bg-[#063f3b] px-3 text-sm font-semibold text-white hover:bg-[#052f2c]"
+        >
+          {copied ? "Copied!" : "Copy link"}
+        </button>
+        <a
+          href={url}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex h-9 shrink-0 items-center rounded-lg border border-stone-300 bg-white px-3 text-sm font-medium text-stone-800 hover:bg-stone-100"
+        >
+          Open
+        </a>
       </div>
     </div>
   );
