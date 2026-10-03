@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { DialogHeading, PencilIcon, PlusIcon } from "@/components/directory-actions";
+import { CountrySelect } from "@/components/country-select";
 import { useDirectoryLookups } from "@/components/use-directory-lookups";
 import { useLocations } from "@/components/use-locations";
 import { type LookupPosition } from "@/lib/directory-lookups";
@@ -335,22 +336,13 @@ export function EmployeeFormDialog({
 
           <label className="block text-sm font-medium text-stone-800">
             Country
-            <input
+            <CountrySelect
               value={form.nationality}
-              onChange={(event) =>
-                setForm((current) => ({ ...current, nationality: event.target.value }))
-              }
-              list="country-suggestions"
-              autoComplete="country-name"
+              onChange={(next) => setForm((current) => ({ ...current, nationality: next }))}
               required={editingId == null}
-              className={fieldClass}
+              options={lookups.countries.map((c) => c.name)}
             />
           </label>
-          <datalist id="country-suggestions">
-            {lookups.countries.map((country) => (
-              <option key={country.id} value={country.name} />
-            ))}
-          </datalist>
 
           <div className="grid gap-4 sm:grid-cols-3">
             <label className="block text-sm font-medium text-stone-800">

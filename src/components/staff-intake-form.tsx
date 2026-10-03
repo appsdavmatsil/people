@@ -3,6 +3,7 @@
 import { useMemo, useRef, useState } from "react";
 import type { ConfigDocument, ConfigTextField } from "@/lib/form-config";
 import { countryDialList, type CountryDial } from "@/lib/countries";
+import { CountrySelect } from "@/components/country-select";
 
 const fieldClass =
   "mt-1.5 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-950 outline-none focus:border-stone-950";
@@ -421,14 +422,22 @@ export function StaffIntakeForm({
           <label key={field.name} className="block text-sm font-medium text-stone-800">
             {field.label}
             {field.required ? <span className="text-red-700"> *</span> : null}
-            <input
-              type={field.type === "email" ? "email" : "text"}
-              value={values[field.name] ?? ""}
-              onChange={(event) => setValue(field.name, event.target.value)}
-              required={field.required}
-              autoComplete={field.autoComplete}
-              className={fieldClass}
-            />
+            {field.autoComplete === "country-name" || field.name === "nationality" ? (
+              <CountrySelect
+                value={values[field.name] ?? ""}
+                onChange={(next) => setValue(field.name, next)}
+                required={field.required}
+              />
+            ) : (
+              <input
+                type={field.type === "email" ? "email" : "text"}
+                value={values[field.name] ?? ""}
+                onChange={(event) => setValue(field.name, event.target.value)}
+                required={field.required}
+                autoComplete={field.autoComplete}
+                className={fieldClass}
+              />
+            )}
             {field.help ? (
               <span className="mt-1 block text-xs font-normal text-stone-500">{field.help}</span>
             ) : null}
