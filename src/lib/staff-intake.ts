@@ -39,7 +39,6 @@ export const INTAKE_TEXT_FIELDS: IntakeTextField[] = [
   { name: "passportExpiry", label: "Passport expiry date", type: "date", required: true },
   { name: "emiratesIdNumber", label: "Emirates ID number", type: "text", required: true },
   { name: "emiratesIdExpiry", label: "Emirates ID expiry date", type: "date", required: true },
-  { name: "visaNumber", label: "Residence visa number", type: "text", required: true },
   { name: "visaExpiry", label: "Residence visa expiry date", type: "date", required: true },
 ];
 

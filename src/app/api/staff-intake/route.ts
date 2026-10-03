@@ -195,7 +195,6 @@ export async function POST(request: Request): Promise<NextResponse> {
         passport_expiry: values.passportExpiry,
         emirates_id_number: values.emiratesIdNumber,
         emirates_id_expiry: values.emiratesIdExpiry,
-        visa_number: values.visaNumber,
         visa_expiry: values.visaExpiry,
         drive_folder_id: folderId,
         documents: uploaded.map((file) => ({
