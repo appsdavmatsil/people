@@ -142,6 +142,12 @@ export function FormBuilder({ config }: { config: FormConfig }) {
                 <button type="button" className={btn} onClick={() => moveField(i, 1)} aria-label="Move down">↓</button>
                 <button type="button" className={btn} onClick={() => removeField(i)} aria-label="Remove">✕</button>
               </div>
+              <input
+                className={`${fieldClass} sm:col-span-5`}
+                value={f.help ?? ""}
+                placeholder="Instruction text shown under the field (optional)"
+                onChange={(e) => updateField(i, { help: e.target.value })}
+              />
             </div>
           ))}
         </div>
@@ -191,6 +197,12 @@ export function FormBuilder({ config }: { config: FormConfig }) {
                 Required
               </label>
               <button type="button" className={btn} onClick={() => removeDoc(i)} aria-label="Remove">✕</button>
+              <input
+                className={`${fieldClass} sm:col-span-5`}
+                value={d.help ?? ""}
+                placeholder="Instruction text shown under the document (optional)"
+                onChange={(e) => updateDoc(i, { help: e.target.value })}
+              />
             </div>
           ))}
         </div>

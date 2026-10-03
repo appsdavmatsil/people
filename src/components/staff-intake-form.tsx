@@ -69,6 +69,9 @@ function FileField({
         {doc.label}
         {doc.required ? <span className="text-red-700"> *</span> : null}
       </p>
+      {doc.help ? (
+        <p className="mt-0.5 text-xs text-stone-500">{doc.help}</p>
+      ) : null}
       <div className="mt-1.5 flex items-center gap-2">
         <button
           type="button"
@@ -110,6 +113,7 @@ const selectClass =
 function DateField({
   label,
   required,
+  help,
   value,
   minYear,
   maxYear,
@@ -117,6 +121,7 @@ function DateField({
 }: {
   label: string;
   required: boolean;
+  help?: string;
   value: string;
   minYear: number;
   maxYear: number;
@@ -203,6 +208,9 @@ function DateField({
           ))}
         </select>
       </div>
+      {help ? (
+        <span className="mt-1 block text-xs font-normal text-stone-500">{help}</span>
+      ) : null}
     </div>
   );
 }
@@ -245,11 +253,13 @@ function PhoneField({
   required,
   value,
   onChange,
+  help,
 }: {
   label: string;
   required: boolean;
   value: string;
   onChange: (full: string) => void;
+  help?: string;
 }) {
   const [dial, setDial] = useState<string>("+971");
   const [local, setLocal] = useState<string>("");
@@ -302,6 +312,9 @@ function PhoneField({
           }}
         />
       </div>
+      {help ? (
+        <span className="mt-1 block text-xs font-normal text-stone-500">{help}</span>
+      ) : null}
     </label>
   );
 }
@@ -408,6 +421,7 @@ export function StaffIntakeForm({
               key={field.name}
               label={field.label}
               required={field.required}
+              help={field.help}
               value={values[field.name] ?? ""}
               minYear={minYear}
               maxYear={maxYear}
@@ -422,6 +436,7 @@ export function StaffIntakeForm({
               key={field.name}
               label={field.label}
               required={field.required}
+              help={field.help}
               value={values[field.name] ?? ""}
               onChange={(full) => setValue(field.name, full)}
             />
@@ -440,6 +455,9 @@ export function StaffIntakeForm({
               autoComplete={field.autoComplete}
               className={fieldClass}
             />
+            {field.help ? (
+              <span className="mt-1 block text-xs font-normal text-stone-500">{field.help}</span>
+            ) : null}
           </label>
         );
       })}

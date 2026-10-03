@@ -26,25 +26,25 @@ values (
   true,
   '{
     "textFields": [
-      { "name": "fullName", "label": "Full name", "type": "text", "required": true, "autoComplete": "name" },
+      { "name": "fullName", "label": "Full name", "type": "text", "required": true, "autoComplete": "name", "help": "Enter your name exactly as it appears on your passport." },
       { "name": "email", "label": "Email", "type": "email", "required": true, "autoComplete": "email" },
       { "name": "dateOfBirth", "label": "Date of birth", "type": "date", "required": true },
-      { "name": "phone", "label": "Phone number", "type": "phone", "required": true },
-      { "name": "whatsapp", "label": "WhatsApp phone number", "type": "phone", "required": true },
+      { "name": "phone", "label": "Phone number", "type": "phone", "required": true, "help": "Select your country code, then enter your number." },
+      { "name": "whatsapp", "label": "WhatsApp phone number", "type": "phone", "required": true, "help": "The number you use on WhatsApp." },
       { "name": "joiningDate", "label": "Joining date", "type": "date", "required": true },
       { "name": "nationality", "label": "Nationality", "type": "text", "required": true, "autoComplete": "country-name" },
       { "name": "passportNumber", "label": "Passport number", "type": "text", "required": true },
-      { "name": "passportExpiry", "label": "Passport expiry date", "type": "date", "required": true },
-      { "name": "emiratesIdNumber", "label": "Emirates ID number", "type": "text", "required": true },
-      { "name": "emiratesIdExpiry", "label": "Emirates ID expiry date", "type": "date", "required": true },
-      { "name": "visaExpiry", "label": "Residence visa expiry date", "type": "date", "required": true }
+      { "name": "passportExpiry", "label": "Passport expiry date", "type": "date", "required": true, "help": "The expiry date printed on your passport." },
+      { "name": "emiratesIdNumber", "label": "Emirates ID number", "type": "text", "required": true, "help": "The 15-digit number on the front of your Emirates ID (784-...)." },
+      { "name": "emiratesIdExpiry", "label": "Emirates ID expiry date", "type": "date", "required": true, "help": "The expiry date printed on your Emirates ID." },
+      { "name": "visaExpiry", "label": "Residence visa expiry date", "type": "date", "required": true, "help": "The expiry date on your residence visa." }
     ],
     "documents": [
-      { "field": "profilePhoto", "label": "Profile Photo", "required": true },
-      { "field": "passportImage", "label": "Passport", "dateField": "passportExpiry", "required": true },
-      { "field": "emiratesIdFront", "label": "Emirates ID Front", "dateField": "emiratesIdExpiry", "required": true },
-      { "field": "emiratesIdBack", "label": "Emirates ID Back", "dateField": "emiratesIdExpiry", "required": true },
-      { "field": "visaImage", "label": "Residence Visa", "dateField": "visaExpiry", "required": true }
+      { "field": "profilePhoto", "label": "Profile Photo", "required": true, "help": "A clear, recent photo of your face." },
+      { "field": "passportImage", "label": "Passport", "dateField": "passportExpiry", "required": true, "help": "Photo or scan of your passport photo page." },
+      { "field": "emiratesIdFront", "label": "Emirates ID Front", "dateField": "emiratesIdExpiry", "required": true, "help": "Front side of your Emirates ID." },
+      { "field": "emiratesIdBack", "label": "Emirates ID Back", "dateField": "emiratesIdExpiry", "required": true, "help": "Back side of your Emirates ID." },
+      { "field": "visaImage", "label": "Residence Visa", "dateField": "visaExpiry", "required": true, "help": "Photo or scan of your residence visa." }
     ],
     "naming": {
       "folderPattern": "{name}",
