@@ -15,10 +15,6 @@ function isImage(fileName: string): boolean {
   return /\.(jpe?g|png|webp|gif|heic|heif)$/i.test(fileName);
 }
 
-function isPdf(fileName: string): boolean {
-  return /\.pdf$/i.test(fileName);
-}
-
 const th = "whitespace-nowrap px-3 py-2 text-left text-xs font-semibold text-stone-500";
 const td = "whitespace-nowrap px-3 py-2 text-sm text-stone-900 align-middle";
 
@@ -83,19 +79,13 @@ export function FormResponses({ submissions }: { submissions: IntakeSubmission[]
                           onClick={() => setPreview(doc)}
                           className="size-9 shrink-0 overflow-hidden rounded border border-stone-200 bg-stone-100 hover:ring-2 hover:ring-[#063f3b]"
                         >
-                          {isImage(doc.file_name) ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                              src={`/api/staff-intake/file/${doc.file_id}`}
-                              alt={doc.label}
-                              loading="lazy"
-                              className="h-full w-full object-cover"
-                            />
-                          ) : (
-                            <span className="flex h-full w-full items-center justify-center text-[9px] font-semibold text-stone-500">
-                              {isPdf(doc.file_name) ? "PDF" : "FILE"}
-                            </span>
-                          )}
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={`/api/staff-intake/file/${doc.file_id}?thumb=1`}
+                            alt={doc.label}
+                            loading="lazy"
+                            className="h-full w-full object-cover"
+                          />
                         </button>
                       ))}
                     </div>

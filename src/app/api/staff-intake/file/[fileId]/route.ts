@@ -48,6 +48,35 @@ export async function GET(
 
   try {
     const drive = getDriveClient();
+
+    // Thumbnail mode: serve Google Drive's generated thumbnail (works for
+    // images AND PDFs — shows the first page). Used for small table previews.
+    const wantThumb = new URL(_request.url).searchParams.get("thumb") === "1";
+    if (wantThumb) {
+      const meta = await drive.files.get({
+        fileId,
+        fields: "thumbnailLink",
+        supportsAllDrives: true,
+      });
+      const link = meta.data.thumbnailLink;
+      if (link) {
+        // Request a larger thumbnail by bumping the size param Drive appends.
+        const bigger = link.replace(/=s\d+$/, "=s400");
+        const thumb = await fetch(bigger);
+        if (thumb.ok) {
+          const buf = Buffer.from(await thumb.arrayBuffer());
+          return new Response(buf, {
+            status: 200,
+            headers: {
+              "Content-Type": thumb.headers.get("content-type") ?? "image/jpeg",
+              "Cache-Control": "private, max-age=300",
+            },
+          });
+        }
+      }
+      // Fall through to full file if no thumbnail is available.
+    }
+
     const meta = await drive.files.get({
       fileId,
       fields: "mimeType, name",
