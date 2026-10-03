@@ -215,7 +215,17 @@ function DateField({
   );
 }
 
-const DIAL_LIST = countryDialList();
+// All countries, with UAE and other common staff nationalities pinned to the
+// top for quick selection. UAE (+971) is the default.
+const DIAL_LIST = (() => {
+  const all = countryDialList();
+  const pinnedIso = ["AE", "IN", "PH", "PK", "NP", "GB", "EG"];
+  const pinned = pinnedIso
+    .map((iso) => all.find((c) => c.iso === iso))
+    .filter((c): c is CountryDial => Boolean(c));
+  const rest = all.filter((c) => !pinnedIso.includes(c.iso));
+  return [...pinned, ...rest];
+})();
 
 /** Detects the user's current country ISO from the browser, best-effort. */
 function detectCountryIso(): string {
