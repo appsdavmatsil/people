@@ -650,9 +650,19 @@ const pageIcons = {
   "/staffdeployment": DeploymentIcon,
   "/events": EventsIcon,
   "/insights": InsightsIcon,
+  "/form": FormIcon,
   "/settings": SettingsIcon,
   "/profile": ProfileIcon,
 } as const;
+
+function FormIcon() {
+  return (
+    <svg className="size-5 shrink-0" viewBox="0 0 16 16" aria-hidden="true" fill="none">
+      <rect x="3" y="2" width="10" height="12" rx="1.2" stroke="currentColor" strokeWidth="1.4" />
+      <path d="M5.5 5.5h5M5.5 8h5M5.5 10.5h3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    </svg>
+  );
+}
 
 function PageIcon({ href }: { href: string }) {
   const Icon = pageIcons[href as keyof typeof pageIcons];

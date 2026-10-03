@@ -1,11 +1,8 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
-import {
-  INTAKE_DOCUMENTS,
-  INTAKE_TEXT_FIELDS,
-  type IntakeDocument,
-} from "@/lib/staff-intake";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { ConfigDocument, ConfigTextField } from "@/lib/form-config";
+import { countryDialList, type CountryDial } from "@/lib/countries";
 
 const fieldClass =
   "mt-1.5 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-950 outline-none focus:border-stone-950";
@@ -60,7 +57,7 @@ function FileField({
   file,
   onSelect,
 }: {
-  doc: IntakeDocument;
+  doc: ConfigDocument;
   file: File | null;
   onSelect: (file: File | null) => void;
 }) {
@@ -210,12 +207,117 @@ function DateField({
   );
 }
 
-export function StaffIntakeForm() {
+const DIAL_LIST = countryDialList();
+
+/** Detects the user's current country ISO from the browser, best-effort. */
+function detectCountryIso(): string {
+  try {
+    const region = new Intl.Locale(navigator.language).maximize().region;
+    if (region) return region;
+  } catch {
+    // ignore
+  }
+  // Fallback: map a few common timezones to a country.
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const tzMap: Record<string, string> = {
+      "Asia/Dubai": "AE",
+      "Asia/Kolkata": "IN",
+      "Asia/Karachi": "PK",
+      "Asia/Manila": "PH",
+      "Asia/Kathmandu": "NP",
+      "Europe/London": "GB",
+    };
+    if (tzMap[tz]) return tzMap[tz];
+  } catch {
+    // ignore
+  }
+  return "AE"; // sensible default for this UAE-based business
+}
+
+/**
+ * Phone input with a country-code picker. Stores the full value including the
+ * dial code (e.g. "+971 501234567"). The picker auto-selects the detected
+ * current country on first render.
+ */
+function PhoneField({
+  label,
+  required,
+  value,
+  onChange,
+}: {
+  label: string;
+  required: boolean;
+  value: string;
+  onChange: (full: string) => void;
+}) {
+  const [dial, setDial] = useState<string>("+971");
+  const [local, setLocal] = useState<string>("");
+
+  // Auto-detect current country once on mount.
+  useEffect(() => {
+    const iso = detectCountryIso();
+    const match = DIAL_LIST.find((c) => c.iso === iso);
+    if (match) {
+      setDial(match.dial);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function emit(nextDial: string, nextLocal: string) {
+    const trimmed = nextLocal.trim();
+    onChange(trimmed ? `${nextDial} ${trimmed}` : "");
+  }
+
+  return (
+    <label className="block text-sm font-medium text-stone-800">
+      {label}
+      {required ? <span className="text-red-700"> *</span> : null}
+      <div className="mt-1.5 flex gap-2">
+        <select
+          aria-label={`${label} country code`}
+          value={dial}
+          className="w-28 shrink-0 rounded-lg border border-stone-300 bg-white px-2 py-2 text-sm text-stone-950 outline-none focus:border-stone-950"
+          onChange={(event) => {
+            setDial(event.target.value);
+            emit(event.target.value, local);
+          }}
+        >
+          {DIAL_LIST.map((c: CountryDial) => (
+            <option key={c.iso} value={c.dial}>
+              {c.flag} {c.dial}
+            </option>
+          ))}
+        </select>
+        <input
+          type="tel"
+          inputMode="tel"
+          required={required}
+          value={local}
+          placeholder="50 123 4567"
+          className="w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-950 outline-none focus:border-stone-950"
+          onChange={(event) => {
+            setLocal(event.target.value);
+            emit(dial, event.target.value);
+          }}
+        />
+      </div>
+    </label>
+  );
+}
+
+export function StaffIntakeForm({
+  textFields,
+  documents,
+}: {
+  textFields: ConfigTextField[];
+  documents: ConfigDocument[];
+}) {
   const [values, setValues] = useState<Record<string, string>>(() =>
-    Object.fromEntries(INTAKE_TEXT_FIELDS.map((field) => [field.name, ""])),
+    Object.fromEntries(textFields.map((field) => [field.name, ""])),
   );
   const [files, setFiles] = useState<Record<string, File | null>>(() =>
-    Object.fromEntries(INTAKE_DOCUMENTS.map((doc) => [doc.field, null])),
+    Object.fromEntries(documents.map((doc) => [doc.field, null])),
   );
   const [status, setStatus] = useState<Status>("idle");
   const [message, setMessage] = useState("");
@@ -237,10 +339,10 @@ export function StaffIntakeForm() {
 
     try {
       const formData = new FormData();
-      for (const field of INTAKE_TEXT_FIELDS) {
+      for (const field of textFields) {
         formData.append(field.name, values[field.name] ?? "");
       }
-      for (const doc of INTAKE_DOCUMENTS) {
+      for (const doc of documents) {
         const file = files[doc.field];
         if (file) {
           const uploadable = await toUploadableFile(file);
@@ -296,7 +398,7 @@ export function StaffIntakeForm() {
       onSubmit={handleSubmit}
       className="space-y-4 rounded-2xl border border-stone-200 bg-white p-5 shadow-sm sm:p-6"
     >
-      {INTAKE_TEXT_FIELDS.map((field) => {
+      {textFields.map((field) => {
         if (field.type === "date") {
           // DOB: past only. Joining/expiry dates: allow a wide future range.
           const minYear = field.name === "dateOfBirth" ? currentYear - 80 : currentYear - 20;
@@ -314,17 +416,28 @@ export function StaffIntakeForm() {
           );
         }
 
+        if (field.type === "phone") {
+          return (
+            <PhoneField
+              key={field.name}
+              label={field.label}
+              required={field.required}
+              value={values[field.name] ?? ""}
+              onChange={(full) => setValue(field.name, full)}
+            />
+          );
+        }
+
         return (
           <label key={field.name} className="block text-sm font-medium text-stone-800">
             {field.label}
             {field.required ? <span className="text-red-700"> *</span> : null}
             <input
-              type={field.type}
+              type={field.type === "email" ? "email" : "text"}
               value={values[field.name] ?? ""}
               onChange={(event) => setValue(field.name, event.target.value)}
               required={field.required}
               autoComplete={field.autoComplete}
-              inputMode={field.type === "tel" ? "tel" : undefined}
               className={fieldClass}
             />
           </label>
@@ -333,7 +446,7 @@ export function StaffIntakeForm() {
 
       <div className="space-y-4 border-t border-stone-200 pt-4">
         <p className="text-sm font-semibold text-stone-900">Documents</p>
-        {INTAKE_DOCUMENTS.map((doc) => (
+        {documents.map((doc) => (
           <FileField
             key={doc.field}
             doc={doc}

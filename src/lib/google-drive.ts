@@ -36,10 +36,16 @@ let cachedDrive: drive_v3.Drive | null = null;
 
 function parseServiceAccount(raw: string): Record<string, unknown> {
   const trimmed = raw.trim();
-  const text = trimmed.startsWith("{")
-    ? trimmed
-    : Buffer.from(trimmed, "base64").toString("utf8");
-  return JSON.parse(text) as Record<string, unknown>;
+
+  // Preferred form: base64-encoded JSON. Base64 contains no newlines or quotes,
+  // so it survives copy/paste into env UIs without corruption.
+  if (!trimmed.startsWith("{")) {
+    const decoded = Buffer.from(trimmed, "base64").toString("utf8");
+    return JSON.parse(decoded) as Record<string, unknown>;
+  }
+
+  // Fallback: raw JSON string.
+  return JSON.parse(trimmed) as Record<string, unknown>;
 }
 
 export function getDriveConfig(): DriveConfig {

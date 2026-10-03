@@ -14,6 +14,17 @@ export type StaffEmployee = {
   allowances: number | null;
   salary: number | null;
   archived?: boolean;
+  // Imported from a staff-intake submission (via Merge).
+  email?: string;
+  phone?: string;
+  whatsapp?: string;
+  passportNumber?: string;
+  passportExpiry?: string;
+  emiratesIdNumber?: string;
+  emiratesIdExpiry?: string;
+  visaExpiry?: string;
+  /** ISO timestamp when document data was last merged from a submission. */
+  importedAt?: string;
 };
 
 export const staffColumns = [

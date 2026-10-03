@@ -3,11 +3,10 @@ import { createServiceClient } from "@/lib/supabase/service";
 import {
   buildFileName,
   buildFolderName,
-  INTAKE_DOCUMENTS,
-  INTAKE_TEXT_FIELDS,
   normalizeIsoDate,
   todayIso,
 } from "@/lib/staff-intake";
+import { loadFormConfig, type ConfigTextField } from "@/lib/form-config";
 import {
   findOrCreateFolder,
   getDriveClient,
@@ -61,10 +60,13 @@ function isAllowedMime(mime: string): boolean {
   );
 }
 
-function collectTextFields(form: FormData): { values: FieldValues; error?: string } {
+function collectTextFields(
+  form: FormData,
+  textFields: ConfigTextField[],
+): { values: FieldValues; error?: string } {
   const values: FieldValues = {};
 
-  for (const field of INTAKE_TEXT_FIELDS) {
+  for (const field of textFields) {
     const raw = form.get(field.name);
     const value = typeof raw === "string" ? raw.trim() : "";
 
@@ -99,12 +101,17 @@ export async function POST(request: Request): Promise<NextResponse> {
     return NextResponse.json({ error: "Invalid form submission." }, { status: 400 });
   }
 
-  const { values, error } = collectTextFields(form);
+  const config = await loadFormConfig();
+
+  const { values, error } = collectTextFields(form, config.textFields);
   if (error) {
     return NextResponse.json({ error }, { status: 400 });
   }
 
-  const fullName = values.fullName;
+  const fullName = values.fullName ?? "";
+  if (!fullName) {
+    return NextResponse.json({ error: "Full name is required." }, { status: 400 });
+  }
   const uploadDate = todayIso();
 
   // Validate files before touching Google Drive.
@@ -116,7 +123,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   };
   const pending: PendingUpload[] = [];
 
-  for (const doc of INTAKE_DOCUMENTS) {
+  for (const doc of config.documents) {
     const entry = form.get(doc.field);
 
     if (!(entry instanceof File) || entry.size === 0) {
@@ -141,7 +148,14 @@ export async function POST(request: Request): Promise<NextResponse> {
     }
 
     const date = doc.dateField ? values[doc.dateField] : uploadDate;
-    const fileName = buildFileName(doc.label, fullName, date, entry.name, entry.type);
+    const fileName = buildFileName(
+      doc.label,
+      fullName,
+      date,
+      entry.name,
+      entry.type,
+      config.naming.filePattern,
+    );
     const buffer = Buffer.from(await entry.arrayBuffer());
     pending.push({ label: doc.label, fileName, mimeType: entry.type, buffer });
   }
@@ -151,12 +165,12 @@ export async function POST(request: Request): Promise<NextResponse> {
   let folderId: string;
   try {
     const drive = getDriveClient();
-    const config = getDriveConfig();
+    const driveConfig = getDriveConfig();
     folderId = await findOrCreateFolder(
       drive,
-      config,
-      buildFolderName(fullName),
-      config.rootFolderId,
+      driveConfig,
+      buildFolderName(fullName, config.naming.folderPattern),
+      driveConfig.rootFolderId,
     );
 
     uploaded = [];
@@ -197,6 +211,7 @@ export async function POST(request: Request): Promise<NextResponse> {
         emirates_id_expiry: values.emiratesIdExpiry,
         visa_expiry: values.visaExpiry,
         drive_folder_id: folderId,
+        data: values,
         documents: uploaded.map((file) => ({
           label: file.label,
           file_id: file.id,

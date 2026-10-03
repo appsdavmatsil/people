@@ -1,12 +1,17 @@
 import type { Metadata } from "next";
 import { StaffIntakeForm } from "@/components/staff-intake-form";
+import { loadFormConfig } from "@/lib/form-config";
 
 export const metadata: Metadata = {
   title: "Staff Details",
   description: "Submit your staff details and documents.",
 };
 
-export default function OnboardingPage() {
+export const dynamic = "force-dynamic";
+
+export default async function OnboardingPage() {
+  const config = await loadFormConfig();
+
   return (
     <main className="min-h-dvh overflow-y-auto bg-stone-100 px-5 py-10">
       <div className="mx-auto w-full max-w-xl">
@@ -17,7 +22,10 @@ export default function OnboardingPage() {
             Your files are stored securely by HR.
           </p>
         </header>
-        <StaffIntakeForm />
+        <StaffIntakeForm
+          textFields={config.textFields}
+          documents={config.documents}
+        />
       </div>
     </main>
   );

@@ -332,6 +332,14 @@ export function StaffDirectory({ editId }: { editId?: string }) {
                             >
                               <StaffPhoto photo={employee.photo} name={value} />
                               <span>{value || "—"}</span>
+                              {employee.importedAt ? (
+                                <span
+                                  title={`Imported data on ${new Date(employee.importedAt).toLocaleDateString("en-GB")}`}
+                                  className="rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700"
+                                >
+                                  Imported
+                                </span>
+                              ) : null}
                             </button>
                           ) : (
                             value || "—"

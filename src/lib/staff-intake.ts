@@ -101,7 +101,7 @@ export function fileExtension(originalName: string, mimeType: string): string {
 }
 
 /**
- * Builds the Drive file name:  {label}_{name}_{date}.{ext}
+ * Builds the Drive file name from a pattern, e.g. "{label}_{name}_{date}".
  * `date` is the expiry date for ID documents or the upload date for photos.
  */
 export function buildFileName(
@@ -110,13 +110,19 @@ export function buildFileName(
   date: string,
   originalName: string,
   mimeType: string,
+  pattern = "{label}_{name}_{date}",
 ): string {
   const safeName = sanitizeNameSegment(fullName);
   const ext = fileExtension(originalName, mimeType);
-  return `${label}_${safeName}_${date}.${ext}`;
+  const base = pattern
+    .replaceAll("{label}", label)
+    .replaceAll("{name}", safeName)
+    .replaceAll("{date}", date);
+  return `${base}.${ext}`;
 }
 
-/** The per-employee folder name is simply the sanitized full name. */
-export function buildFolderName(fullName: string): string {
-  return sanitizeNameSegment(fullName);
+/** The per-employee folder name from a pattern, e.g. "{name}". */
+export function buildFolderName(fullName: string, pattern = "{name}"): string {
+  const safeName = sanitizeNameSegment(fullName);
+  return sanitizeNameSegment(pattern.replaceAll("{name}", safeName));
 }
