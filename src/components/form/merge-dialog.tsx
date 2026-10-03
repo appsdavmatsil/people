@@ -32,7 +32,7 @@ export function MergeDialog({
   onClose: () => void;
 }) {
   const { employees, update } = useStaffDirectory();
-  const [search, setSearch] = useState(submission.full_name);
+  const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [open, setOpen] = useState(true);
   const [done, setDone] = useState(false);
@@ -52,8 +52,8 @@ export function MergeDialog({
   const matches = useMemo(() => {
     const q = search.trim().toLowerCase();
     const active = employees.filter((e) => !e.archived);
-    if (!q) return active.slice(0, 8);
-    return active.filter((e) => e.fullName.toLowerCase().includes(q)).slice(0, 8);
+    if (!q) return active.slice(0, 25);
+    return active.filter((e) => e.fullName.toLowerCase().includes(q)).slice(0, 25);
   }, [employees, search]);
 
   const selected = employees.find((e) => e.id === selectedId) ?? null;
