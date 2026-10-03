@@ -125,22 +125,35 @@ function DateField({
   maxYear: number;
   onChange: (iso: string) => void;
 }) {
-  const [year = "", month = "", day = ""] = value ? value.split("-") : [];
+  // Hold each part independently so a partial selection is never wiped.
+  const [parts, setParts] = useState<{ day: string; month: string; year: string }>(
+    () => {
+      if (value) {
+        const [y, m, d] = value.split("-");
+        return { day: String(Number(d)), month: String(Number(m)), year: y };
+      }
+      return { day: "", month: "", year: "" };
+    },
+  );
 
   const years: number[] = [];
   for (let y = maxYear; y >= minYear; y -= 1) {
     years.push(y);
   }
   const daysInMonth =
-    year && month ? new Date(Number(year), Number(month), 0).getDate() : 31;
+    parts.year && parts.month
+      ? new Date(Number(parts.year), Number(parts.month), 0).getDate()
+      : 31;
 
-  function emit(nextDay: string, nextMonth: string, nextYear: string) {
-    if (nextDay && nextMonth && nextYear) {
+  function update(next: { day: string; month: string; year: string }) {
+    setParts(next);
+    if (next.day && next.month && next.year) {
       onChange(
-        `${nextYear}-${nextMonth.padStart(2, "0")}-${nextDay.padStart(2, "0")}`,
+        `${next.year}-${next.month.padStart(2, "0")}-${next.day.padStart(2, "0")}`,
       );
     } else {
-      // Keep a partial marker so required validation still blocks submit.
+      // Not yet complete: clear the emitted ISO value so required validation
+      // still blocks submit, but keep the user's partial selections visible.
       onChange("");
     }
   }
@@ -152,10 +165,10 @@ function DateField({
       <div className="mt-1.5 grid grid-cols-3 gap-2">
         <select
           aria-label={`${label} day`}
-          value={day ? String(Number(day)) : ""}
+          value={parts.day}
           required={required}
           className={selectClass}
-          onChange={(event) => emit(event.target.value, month, year)}
+          onChange={(event) => update({ ...parts, day: event.target.value })}
         >
           <option value="">Day</option>
           {Array.from({ length: daysInMonth }, (_, i) => i + 1).map((d) => (
@@ -166,10 +179,10 @@ function DateField({
         </select>
         <select
           aria-label={`${label} month`}
-          value={month ? String(Number(month)) : ""}
+          value={parts.month}
           required={required}
           className={selectClass}
-          onChange={(event) => emit(day, event.target.value, year)}
+          onChange={(event) => update({ ...parts, month: event.target.value })}
         >
           <option value="">Month</option>
           {MONTHS.map((name, i) => (
@@ -180,10 +193,10 @@ function DateField({
         </select>
         <select
           aria-label={`${label} year`}
-          value={year}
+          value={parts.year}
           required={required}
           className={selectClass}
-          onChange={(event) => emit(day, month, event.target.value)}
+          onChange={(event) => update({ ...parts, year: event.target.value })}
         >
           <option value="">Year</option>
           {years.map((y) => (
