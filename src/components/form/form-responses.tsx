@@ -15,6 +15,10 @@ function isImage(fileName: string): boolean {
   return /\.(jpe?g|png|webp|gif|heic|heif)$/i.test(fileName);
 }
 
+function isPdf(fileName: string): boolean {
+  return /\.pdf$/i.test(fileName);
+}
+
 export function FormResponses({ submissions }: { submissions: IntakeSubmission[] }) {
   const [merging, setMerging] = useState<IntakeSubmission | null>(null);
   const count = submissions.length;
@@ -86,7 +90,7 @@ export function FormResponses({ submissions }: { submissions: IntakeSubmission[]
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                   {person.documents.map((doc) => (
                     <figure key={doc.file_id} className="overflow-hidden rounded-xl border border-stone-200">
-                      <div className="flex aspect-[3/4] items-center justify-center bg-stone-100">
+                      <div className="relative aspect-[3/4] bg-stone-100">
                         {isImage(doc.file_name) ? (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img
@@ -95,16 +99,30 @@ export function FormResponses({ submissions }: { submissions: IntakeSubmission[]
                             loading="lazy"
                             className="h-full w-full object-cover"
                           />
+                        ) : isPdf(doc.file_name) ? (
+                          <iframe
+                            src={`/api/staff-intake/file/${doc.file_id}#toolbar=0&navpanes=0`}
+                            title={doc.label}
+                            className="h-full w-full"
+                          />
                         ) : (
                           <a
                             href={`/api/staff-intake/file/${doc.file_id}`}
                             target="_blank"
                             rel="noreferrer"
-                            className="px-3 text-center text-xs font-medium text-stone-600 underline"
+                            className="flex h-full w-full items-center justify-center px-3 text-center text-xs font-medium text-stone-600 underline"
                           >
                             Open {doc.label}
                           </a>
                         )}
+                        <a
+                          href={`/api/staff-intake/file/${doc.file_id}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="absolute right-1.5 top-1.5 rounded-md bg-white/90 px-2 py-0.5 text-[10px] font-medium text-stone-700 shadow-sm hover:bg-white"
+                        >
+                          Open
+                        </a>
                       </div>
                       <figcaption className="truncate px-2 py-1.5 text-center text-xs text-stone-600">
                         {doc.label}

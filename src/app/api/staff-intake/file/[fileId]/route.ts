@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/service";
 import { getDriveClient } from "@/lib/google-drive";
 
 export const runtime = "nodejs";
@@ -20,15 +21,21 @@ export async function GET(
 ): Promise<Response> {
   const { fileId } = await ctx.params;
 
-  // Must be signed in.
+  // Must be signed in (auth-scoped client).
   const supabase = await createClient();
   const { data: claims } = await supabase.auth.getClaims();
   if (typeof claims?.claims?.sub !== "string") {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // The file id must belong to a recorded submission.
-  const { data: match } = await supabase
+  // The file id must belong to a recorded submission. Use the service client
+  // for this lookup because the submissions table is RLS-locked to the service
+  // role (authenticated users have no row access).
+  const service = createServiceClient();
+  if (!service) {
+    return NextResponse.json({ error: "Server not configured" }, { status: 500 });
+  }
+  const { data: match } = await service
     .from("staff_intake_submissions")
     .select("id")
     .filter("documents", "cs", JSON.stringify([{ file_id: fileId }]))
