@@ -18,6 +18,7 @@ import {
   sameLocationName,
   type LocationReference,
 } from "@/lib/locations";
+import { SectionTabs } from "@/components/section-tabs";
 import { PrivacySettings } from "@/components/dashboard-visibility";
 import { usePrivacy } from "@/components/privacy-provider";
 import { TeamAccess } from "@/components/team-access";
@@ -29,11 +30,11 @@ import { useLocations } from "@/components/use-locations";
 import { normalizeEventName, sameEventName, type EventDefinition } from "@/lib/events";
 
 const settingsTabs = [
-  { id: "directory", label: "Directory Lookups" },
-  { id: "locations", label: "Locations" },
-  { id: "events", label: "Events" },
-  { id: "team", label: "Team Access" },
-  { id: "privacy", label: "Privacy" },
+  { id: "directory", label: "Directory Lookups", icon: "M4 5a2 2 0 0 1 2-2h14v16H6a2 2 0 0 0-2 2zM4 21V5M8 7h8M8 11h6", group: "data" },
+  { id: "locations", label: "Locations", icon: "M12 21s-7-6.2-7-12a7 7 0 0 1 14 0c0 5.8-7 12-7 12zM12 11.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z", group: "data" },
+  { id: "events", label: "Events", icon: "M5 5h14a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zM16 3v4M8 3v4M4 10h16", group: "data" },
+  { id: "team", label: "Team Access", icon: "M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM2 21v-1a6 6 0 0 1 12 0v1M16 3.1a4 4 0 0 1 0 7.8M22 21v-1a6 6 0 0 0-4-5.6", group: "access" },
+  { id: "privacy", label: "Privacy", icon: "M6 11h12a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1v-8a1 1 0 0 1 1-1zM8 11V7a4 4 0 0 1 8 0v4", group: "access" },
 ] as const;
 const directoryTabs = [
   { id: "country", label: "Country" },
@@ -83,19 +84,13 @@ export function SettingsScreen({ initialTab = "directory" }: { initialTab?: Sett
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 py-5 md:px-6">
-      <div className="flex shrink-0 gap-6 border-b border-stone-200" role="tablist" aria-label="Settings">
-        {visibleTabs.map((tab) => (
-          <TabButton
-            key={tab.id}
-            id={`settings-tab-${tab.id}`}
-            controls={`settings-panel-${tab.id}`}
-            selected={settingsTab === tab.id}
-            onClick={() => setSettingsTab(tab.id)}
-          >
-            {tab.label}
-          </TabButton>
-        ))}
-      </div>
+      <SectionTabs
+        label="Settings"
+        idPrefix="settings"
+        active={settingsTab}
+        tabs={visibleTabs}
+        onSelect={(id) => setSettingsTab(id as SettingsTab)}
+      />
 
       {settingsTab === "privacy" && privacy.snapshot.isOwner ? (
         <div
@@ -1765,37 +1760,5 @@ function GripIcon() {
         d="M4 2.5a1 1 0 1 1-2 0 1 1 0 0 1 2 0Zm0 4.5a1 1 0 1 1-2 0 1 1 0 0 1 2 0Zm-1 5.5a1 1 0 1 0 0-2 1 1 0 0 0 0 2Zm6-10a1 1 0 1 1-2 0 1 1 0 0 1 2 0Zm-1 5.5a1 1 0 1 0 0-2 1 1 0 0 0 0 2Zm1 3.5a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"
       />
     </svg>
-  );
-}
-
-function TabButton({
-  id,
-  controls,
-  selected,
-  onClick,
-  children,
-}: {
-  id: string;
-  controls: string;
-  selected: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      id={id}
-      type="button"
-      role="tab"
-      aria-selected={selected}
-      aria-controls={controls}
-      className={`-mb-px border-b-2 pb-2 text-sm ${
-        selected
-          ? "border-stone-950 font-medium text-stone-950"
-          : "border-transparent text-stone-500 hover:text-stone-950"
-      }`}
-      onClick={onClick}
-    >
-      {children}
-    </button>
   );
 }

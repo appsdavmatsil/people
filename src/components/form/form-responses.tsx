@@ -58,11 +58,14 @@ export function FormResponses({ submissions }: { submissions: IntakeSubmission[]
   }, [employees]);
 
   async function deleteSubmission(person: IntakeSubmission) {
-    if (!window.confirm(`Delete ${person.full_name}'s submission record? The Drive files will be kept.`)) return;
+    if (!window.confirm(`Delete ${person.full_name}'s submission record? Their Drive folder will be moved to ARCHIVE.`)) return;
     setDeletingId(person.id);
     const response = await fetch(`/api/staff-intake/${person.id}`, { method: "DELETE" });
-    if (response.ok) setRecords((current) => current.filter((item) => item.id !== person.id));
-    else window.alert("The submission record could not be deleted.");
+    if (response.ok) {
+      setRecords((current) => current.filter((item) => item.id !== person.id));
+      const result = (await response.json()) as { archiveError?: boolean };
+      if (result.archiveError) window.alert("The record was deleted, but its Drive folder could not be moved to ARCHIVE.");
+    } else window.alert("The submission record could not be deleted.");
     setDeletingId(null);
   }
 

@@ -171,3 +171,38 @@ export async function uploadFile(
     webViewLink: created.data.webViewLink ?? null,
   };
 }
+
+export const ARCHIVE_FOLDER_NAME = "ARCHIVE";
+
+/**
+ * Moves a folder into the ARCHIVE folder under the root folder, creating
+ * ARCHIVE if needed. Does nothing if the folder is already there.
+ */
+export async function moveFolderToArchive(
+  drive: drive_v3.Drive,
+  config: DriveConfig,
+  folderId: string,
+): Promise<void> {
+  const archiveId = await findOrCreateFolder(drive, config, ARCHIVE_FOLDER_NAME, config.rootFolderId);
+  if (folderId === archiveId) {
+    return;
+  }
+
+  const current = await drive.files.get({
+    fileId: folderId,
+    fields: "parents",
+    supportsAllDrives: true,
+  });
+  const parents = current.data.parents ?? [];
+  if (parents.includes(archiveId)) {
+    return;
+  }
+
+  await drive.files.update({
+    fileId: folderId,
+    addParents: archiveId,
+    removeParents: parents.join(","),
+    fields: "id",
+    supportsAllDrives: true,
+  });
+}

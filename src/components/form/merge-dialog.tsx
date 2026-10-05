@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useStaffDirectory } from "@/components/use-staff-directory";
 import type { IntakeDocumentRecord, IntakeSubmission } from "@/lib/staff-intake-records";
 import { splitFullName, type StaffEmployee } from "@/lib/staff";
+import { nameScore, nameTokens } from "@/lib/name-match";
 
 // Fields that can be merged from a submission onto an employee record.
 const MERGE_FIELDS: {
@@ -24,40 +25,24 @@ const MERGE_FIELDS: {
   { key: "visaExpiry", label: "Visa expiry", from: (s) => s.visa_expiry },
 ];
 
-function nameTokens(name: string): string[] {
-  return name
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .split(/[^a-z]+/)
-    .filter(Boolean);
-}
-
-// Share of the submitted name's words found in the employee's name (0–1).
-function nameScore(submitted: string[], employeeName: string): number {
-  if (!submitted.length) return 0;
-  const candidate = nameTokens(employeeName);
-  const matched = submitted.filter((token) =>
-    candidate.some((c) => c === token || (Math.min(c.length, token.length) >= 3 && (c.startsWith(token) || token.startsWith(c)))),
-  ).length;
-  return matched / submitted.length;
-}
-
 function isImage(fileName: string): boolean {
   return /\.(jpe?g|png|webp|gif|heic|heif)$/i.test(fileName);
 }
 
 export function MergeDialog({
   submission,
+  employee,
   onClose,
 }: {
   submission: IntakeSubmission;
+  /** Preselects the employee to merge onto. */
+  employee?: StaffEmployee;
   onClose: () => void;
 }) {
   const { employees, update } = useStaffDirectory();
-  const [search, setSearch] = useState("");
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [nameValue, setNameValue] = useState("");
+  const [search, setSearch] = useState(employee?.fullName ?? "");
+  const [selectedId, setSelectedId] = useState<string | null>(employee?.id ?? null);
+  const [nameValue, setNameValue] = useState(employee?.fullName ?? "");
   const [open, setOpen] = useState(true);
   const [done, setDone] = useState(false);
   const [preview, setPreview] = useState<IntakeDocumentRecord | null>(null);
