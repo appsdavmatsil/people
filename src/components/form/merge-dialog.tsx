@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useStaffDirectory } from "@/components/use-staff-directory";
-import type { IntakeSubmission } from "@/lib/staff-intake-records";
+import type { IntakeDocumentRecord, IntakeSubmission } from "@/lib/staff-intake-records";
 import type { StaffEmployee } from "@/lib/staff";
 
 // Fields that can be merged from a submission onto an employee record.
@@ -24,6 +24,10 @@ const MERGE_FIELDS: {
   { key: "visaExpiry", label: "Visa expiry", from: (s) => s.visa_expiry },
 ];
 
+function isImage(fileName: string): boolean {
+  return /\.(jpe?g|png|webp|gif|heic|heif)$/i.test(fileName);
+}
+
 export function MergeDialog({
   submission,
   onClose,
@@ -36,6 +40,7 @@ export function MergeDialog({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [open, setOpen] = useState(true);
   const [done, setDone] = useState(false);
+  const [preview, setPreview] = useState<IntakeDocumentRecord | null>(null);
 
   // Which fields to apply (all on by default, only those with a value).
   const applicable = useMemo(
@@ -74,6 +79,12 @@ export function MergeDialog({
           }
         }
         next.importedAt = new Date().toISOString();
+        next.documents = submission.documents.map((document) => ({
+          label: document.label,
+          fileId: document.file_id,
+          fileName: document.file_name,
+          webViewLink: document.web_view_link,
+        }));
         return next;
       }),
     );
@@ -92,7 +103,7 @@ export function MergeDialog({
         }
       }}
     >
-      <div className="max-h-[calc(100dvh-2rem)] w-[min(100%,34rem)] overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-xl">
+      <div className="max-h-[calc(100dvh-2rem)] w-[min(100%,58rem)] overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-xl">
         <div className="flex items-center justify-between border-b border-stone-200 px-5 py-3">
           <h2 className="text-base font-semibold text-stone-950">
             Merge “{submission.full_name}”
@@ -165,30 +176,45 @@ export function MergeDialog({
               </ul>
             ) : (
               <>
-                <p className="mt-3 text-xs text-stone-500">
-                  Choose which fields to copy onto <strong>{selected.fullName}</strong>.
-                  Uncheck anything that looks like a mistake.
-                </p>
-                <div className="mt-2 space-y-1.5">
+                <p className="mt-3 text-xs text-stone-500">Choose each value to import. Unchecked rows keep the current employee value.</p>
+                <div className="mt-2 overflow-hidden rounded-xl border border-stone-200">
+                  <div className="grid grid-cols-[2rem_9rem_1fr_1fr] gap-3 bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">
+                    <span />
+                    <span>Field</span>
+                    <span>Current value</span>
+                    <span>Importing value</span>
+                  </div>
                   {applicable.map((f) => (
                     <label
                       key={f.key}
-                      className="flex items-center justify-between gap-3 rounded-lg border border-stone-200 px-3 py-2 text-sm"
+                      className="grid grid-cols-[2rem_9rem_1fr_1fr] items-center gap-3 border-t border-stone-100 px-3 py-2 text-sm hover:bg-stone-50"
                     >
-                      <span className="flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          checked={checked[f.key] ?? false}
-                          onChange={(e) =>
-                            setChecked((c) => ({ ...c, [f.key]: e.target.checked }))
-                          }
-                        />
-                        <span className="text-stone-700">{f.label}</span>
-                      </span>
-                      <span className="truncate text-xs text-stone-500">{f.from(submission)}</span>
+                      <input type="checkbox" checked={checked[f.key] ?? false} onChange={(e) => setChecked((c) => ({ ...c, [f.key]: e.target.checked }))} />
+                      <span className="font-medium text-stone-700">{f.label}</span>
+                      <span className="truncate text-stone-500">{String(selected[f.key] ?? "—") || "—"}</span>
+                      <span className="truncate font-medium text-stone-950">{f.from(submission) || "—"}</span>
                     </label>
                   ))}
                 </div>
+
+                {submission.documents.length ? (
+                  <div className="mt-4">
+                    <h3 className="text-sm font-semibold text-stone-950">Importing documents</h3>
+                    <div className="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-5">
+                      {submission.documents.map((document) => (
+                        <button key={document.file_id} type="button" onClick={() => setPreview(document)} className="overflow-hidden rounded-lg border border-stone-200 bg-stone-50 text-left hover:ring-2 hover:ring-[#063f3b]">
+                          {isImage(document.file_name) ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={`/api/staff-intake/file/${document.file_id}?thumb=1`} alt={document.label} className="aspect-square w-full object-cover" />
+                          ) : (
+                            <span className="flex aspect-square items-center justify-center px-2 text-center text-xs font-medium text-stone-500">Preview document</span>
+                          )}
+                          <span className="block truncate px-2 py-1 text-xs text-stone-600">{document.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
 
                 <div className="mt-4 flex justify-end gap-2">
                   <button
@@ -211,6 +237,19 @@ export function MergeDialog({
           </div>
         )}
       </div>
+      {preview ? (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-stone-950/70 p-4" onClick={() => setPreview(null)}>
+          <div className="max-h-[90dvh] w-[min(100%,56rem)] overflow-hidden rounded-2xl bg-white" onClick={(event) => event.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-stone-200 px-4 py-3"><span className="font-medium">{preview.label}</span><button type="button" onClick={() => setPreview(null)} aria-label="Close preview">✕</button></div>
+            {isImage(preview.file_name) ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={`/api/staff-intake/file/${preview.file_id}`} alt={preview.label} className="mx-auto max-h-[80dvh] w-auto object-contain" />
+            ) : (
+              <iframe src={`/api/staff-intake/file/${preview.file_id}`} title={preview.label} className="h-[80dvh] w-full" />
+            )}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

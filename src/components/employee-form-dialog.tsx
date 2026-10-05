@@ -14,6 +14,7 @@ import {
   splitFullName,
   splitSalary,
   sumSalary,
+  type StaffDocument,
   type StaffEmployee,
 } from "@/lib/staff";
 
@@ -26,15 +27,28 @@ const primaryButtonClass =
 
 const currentOption = "__current__";
 
+function whatsappMessageUrl(value: string) {
+  const digits = value.replace(/\D/g, "");
+  return digits ? `https://wa.me/${digits}` : "";
+}
+
 const emptyForm = {
   fullName: "",
   firstName: "",
   lastName: "",
   photo: null as string | null,
   nationality: "",
+  email: "",
+  phone: "",
+  whatsapp: "",
   dateOfBirth: "",
   joiningDate: "",
   terminationDate: "",
+  passportNumber: "",
+  passportExpiry: "",
+  emiratesIdNumber: "",
+  emiratesIdExpiry: "",
+  visaExpiry: "",
   positionId: "",
   position: "",
   venueId: "",
@@ -44,17 +58,13 @@ const emptyForm = {
   salary: "",
 };
 
-export type EmployeeFormSeed = Partial<
-  Pick<
-    typeof emptyForm,
-    "positionId" | "position" | "venueId" | "venue" | "basicSalary" | "allowances" | "salary"
-  >
->;
+export type EmployeeFormSeed = Partial<typeof emptyForm>;
 
 export type EmployeeFormRequest = {
   token: number;
   employee: StaffEmployee | null;
   seed?: EmployeeFormSeed;
+  documents?: StaffDocument[];
   description?: string;
 };
 
@@ -212,12 +222,22 @@ export function EmployeeFormDialog({
       lastName: form.lastName.trim(),
       photo: form.photo,
       nationality: form.nationality.trim(),
+      email: form.email.trim(),
+      phone: form.phone.trim(),
+      whatsapp: form.whatsapp.trim(),
       dateOfBirth: form.dateOfBirth,
       joiningDate: form.joiningDate,
       terminationDate: form.terminationDate,
+      passportNumber: form.passportNumber.trim(),
+      passportExpiry: form.passportExpiry,
+      emiratesIdNumber: form.emiratesIdNumber.trim(),
+      emiratesIdExpiry: form.emiratesIdExpiry,
+      visaExpiry: form.visaExpiry,
       position: form.position.trim(),
       venue: form.venue.trim(),
       archived: previous?.archived,
+      importedAt: previous?.importedAt,
+      documents: previous?.documents ?? request?.documents,
       ...resolvePay(
         parseMoneyInput(form.basicSalary),
         parseMoneyInput(form.allowances),
@@ -344,6 +364,59 @@ export function EmployeeFormDialog({
             />
           </label>
 
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="block text-sm font-medium text-stone-800">
+              Email
+              <input
+                type="email"
+                value={form.email}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, email: event.target.value }))
+                }
+                autoComplete="email"
+                className={fieldClass}
+              />
+            </label>
+            <label className="block text-sm font-medium text-stone-800">
+              Phone number
+              <input
+                type="tel"
+                value={form.phone}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, phone: event.target.value }))
+                }
+                autoComplete="tel"
+                className={fieldClass}
+              />
+            </label>
+          </div>
+
+          <label className="block text-sm font-medium text-stone-800">
+            WhatsApp phone number
+            <span className="relative block">
+              <input
+                type="tel"
+                value={form.whatsapp}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, whatsapp: event.target.value }))
+                }
+                className={`${fieldClass} pr-11`}
+              />
+              {whatsappMessageUrl(form.whatsapp) ? (
+                <a
+                  href={whatsappMessageUrl(form.whatsapp)}
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label={`Message ${form.fullName || "employee"} on WhatsApp`}
+                  title="Open WhatsApp message"
+                  className="absolute right-2 bottom-1.5 inline-flex size-8 items-center justify-center rounded-full text-[#128c7e] hover:bg-[#128c7e]/10 focus:outline-none focus:ring-2 focus:ring-[#128c7e]/30"
+                >
+                  <WhatsAppIcon />
+                </a>
+              ) : null}
+            </span>
+          </label>
+
           <div className="grid gap-4 sm:grid-cols-3">
             <label className="block text-sm font-medium text-stone-800">
               Date of birth
@@ -381,6 +454,65 @@ export function EmployeeFormDialog({
                 className={fieldClass}
               />
             </label>
+          </div>
+
+          <div className="border-t border-stone-200 pt-4">
+            <h3 className="text-sm font-semibold text-stone-950">Identity documents</h3>
+            <div className="mt-3 grid gap-4 sm:grid-cols-2">
+              <label className="block text-sm font-medium text-stone-800">
+                Passport number
+                <input
+                  value={form.passportNumber}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, passportNumber: event.target.value }))
+                  }
+                  className={fieldClass}
+                />
+              </label>
+              <label className="block text-sm font-medium text-stone-800">
+                Passport expiry date
+                <input
+                  type="date"
+                  value={form.passportExpiry}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, passportExpiry: event.target.value }))
+                  }
+                  className={fieldClass}
+                />
+              </label>
+              <label className="block text-sm font-medium text-stone-800">
+                Emirates ID number
+                <input
+                  value={form.emiratesIdNumber}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, emiratesIdNumber: event.target.value }))
+                  }
+                  className={fieldClass}
+                />
+              </label>
+              <label className="block text-sm font-medium text-stone-800">
+                Emirates ID expiry date
+                <input
+                  type="date"
+                  value={form.emiratesIdExpiry}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, emiratesIdExpiry: event.target.value }))
+                  }
+                  className={fieldClass}
+                />
+              </label>
+              <label className="block text-sm font-medium text-stone-800 sm:col-span-2">
+                Residence visa expiry date
+                <input
+                  type="date"
+                  value={form.visaExpiry}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, visaExpiry: event.target.value }))
+                  }
+                  className={fieldClass}
+                />
+              </label>
+            </div>
           </div>
 
           <label className="block text-sm font-medium text-stone-800">
@@ -511,6 +643,21 @@ export function EmployeeFormDialog({
               : "Current salary is basic salary plus allowances. Entering a current salary splits it into 60% basic salary and 40% allowances."}
           </p>
 
+          {(request?.employee?.documents ?? request?.documents)?.length ? (
+            <div className="border-t border-stone-200 pt-4">
+              <h3 className="text-sm font-semibold text-stone-950">Merged employee documents</h3>
+              <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+                {(request.employee?.documents ?? request.documents ?? []).map((document) => (
+                  <a key={document.fileId} href={`/api/staff-intake/file/${document.fileId}`} target="_blank" rel="noreferrer" className="group overflow-hidden rounded-xl border border-stone-200 bg-stone-50">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={`/api/staff-intake/file/${document.fileId}?thumb=1`} alt={document.label} className="aspect-[4/3] w-full object-cover" />
+                    <span className="block truncate px-2 py-1.5 text-center text-xs font-medium text-stone-600 group-hover:text-stone-950">{document.label}</span>
+                  </a>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
           {formError ? <p className="text-sm text-red-700">{formError}</p> : null}
         </div>
 
@@ -549,9 +696,17 @@ function formFromEmployee(
     lastName: employee.lastName,
     photo: employee.photo,
     nationality: employee.nationality,
+    email: employee.email ?? "",
+    phone: employee.phone ?? "",
+    whatsapp: employee.whatsapp ?? "",
     dateOfBirth: employee.dateOfBirth,
     joiningDate: employee.joiningDate,
     terminationDate: employee.terminationDate ?? "",
+    passportNumber: employee.passportNumber ?? "",
+    passportExpiry: employee.passportExpiry ?? "",
+    emiratesIdNumber: employee.emiratesIdNumber ?? "",
+    emiratesIdExpiry: employee.emiratesIdExpiry ?? "",
+    visaExpiry: employee.visaExpiry ?? "",
     positionId: position?.id ?? "",
     position: employee.position,
     venueId: venue?.id ?? "",
@@ -690,6 +845,14 @@ function UserIcon() {
         strokeWidth="1.4"
         strokeLinecap="round"
       />
+    </svg>
+  );
+}
+
+function WhatsAppIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className="size-5 fill-current">
+      <path d="M12.04 2a9.84 9.84 0 0 0-8.52 14.76L2 22l5.38-1.41A9.96 9.96 0 0 0 12.04 22 9.98 9.98 0 0 0 12.04 2Zm0 18.18a8.1 8.1 0 0 1-4.13-1.13l-.3-.18-3.19.84.85-3.1-.2-.32a8.12 8.12 0 1 1 6.97 3.89Zm4.45-6.08c-.24-.12-1.44-.71-1.66-.79-.22-.08-.38-.12-.55.12-.16.24-.63.79-.77.95-.14.16-.28.18-.53.06-.24-.12-1.03-.38-1.96-1.21a7.35 7.35 0 0 1-1.36-1.69c-.14-.24-.01-.37.11-.49.11-.11.24-.28.36-.42.12-.14.16-.24.24-.4.08-.16.04-.3-.02-.42-.06-.12-.55-1.32-.75-1.81-.2-.48-.4-.41-.55-.42h-.46c-.16 0-.42.06-.65.3-.22.24-.85.83-.85 2.03 0 1.19.87 2.35.99 2.51.12.16 1.71 2.61 4.14 3.66.58.25 1.03.4 1.38.51.58.18 1.11.16 1.53.1.47-.07 1.44-.59 1.64-1.16.2-.57.2-1.06.14-1.16-.06-.1-.22-.16-.46-.28Z" />
     </svg>
   );
 }

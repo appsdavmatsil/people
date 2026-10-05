@@ -16,6 +16,7 @@ import {
   ColumnSortFilterHeaders,
 } from "@/components/table-column-controls";
 import { useDirectoryLookups } from "@/components/use-directory-lookups";
+import { useLocations } from "@/components/use-locations";
 import { usePromotions } from "@/components/use-promotions";
 import { useStaffDirectory } from "@/components/use-staff-directory";
 import { downloadWorkbook } from "@/lib/download-workbook";
@@ -27,6 +28,7 @@ import {
   todayIso,
   type StaffPromotion,
 } from "@/lib/promotions";
+import { sameLocationName } from "@/lib/locations";
 import {
   formatDate,
   formatSalary,
@@ -62,6 +64,7 @@ type Notice = {
 
 const promotionColumns = [
   { key: "staffName", label: "Staff member" },
+  { key: "currentVenue", label: "Current venue" },
   { key: "currentPosition", label: "Current position" },
   { key: "currentSalary", label: "Current salary" },
   { key: "newPosition", label: "New position" },
@@ -70,9 +73,11 @@ const promotionColumns = [
 ] as const;
 
 type PromotionColumnKey = (typeof promotionColumns)[number]["key"];
+type PromotionRow = StaffPromotion & { currentVenue: string };
 
 export function Promotions() {
   const { lookups } = useDirectoryLookups();
+  const { locations } = useLocations();
   const { employees, update: updateEmployees } = useStaffDirectory();
   const { promotions, update } = usePromotions();
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -113,10 +118,26 @@ export function Promotions() {
     () => promotions.filter((promotion) => showArchived || !isArchived(promotion)),
     [promotions, showArchived],
   );
+  const listedRows = useMemo(() => {
+    const venueByStaffId = new Map(
+      employees.map((employee) => {
+        const location = locations.find(
+          (item) =>
+            sameLocationName(item.nickname, employee.venue) ||
+            sameLocationName(item.venueName, employee.venue),
+        );
+        return [employee.id, location?.nickname ?? employee.venue];
+      }),
+    );
+    return listed.map((promotion) => ({
+      ...promotion,
+      currentVenue: venueByStaffId.get(promotion.staffId) ?? "",
+    }));
+  }, [employees, listed, locations]);
   const filtersActive = promotionColumns.some((column) => filters[column.key].trim());
   const rows = useMemo(
-    () => sortPromotions(filterPromotions(listed, filters), sortKey, sortDirection),
-    [listed, filters, sortKey, sortDirection],
+    () => sortPromotions(filterPromotions(listedRows, filters), sortKey, sortDirection),
+    [listedRows, filters, sortKey, sortDirection],
   );
 
   useEffect(() => {
@@ -499,7 +520,7 @@ export function Promotions() {
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-3 py-8 text-center text-stone-500">
+                <td colSpan={8} className="px-3 py-8 text-center text-stone-500">
                   {listed.length === 0
                     ? promotions.length === 0
                       ? "No promotions yet. Record one, or import a spreadsheet."
@@ -524,6 +545,9 @@ export function Promotions() {
                       </span>
                       <span>{promotion.staffName}</span>
                     </span>
+                  </td>
+                  <td className="border-b border-stone-100 px-3 py-2 font-medium text-stone-700">
+                    {promotion.currentVenue || "—"}
                   </td>
                   <td className="border-b border-stone-100 px-3 py-2 text-stone-700">
                     {promotion.currentPosition || "—"}
@@ -732,7 +756,7 @@ export function Promotions() {
   );
 }
 
-function promotionCell(promotion: StaffPromotion, key: PromotionColumnKey) {
+function promotionCell(promotion: PromotionRow, key: PromotionColumnKey) {
   if (key === "currentSalary") {
     return promotion.currentSalary == null ? "" : formatSalary(promotion.currentSalary);
   }
@@ -749,7 +773,7 @@ function promotionCell(promotion: StaffPromotion, key: PromotionColumnKey) {
 }
 
 function filterPromotions(
-  promotions: StaffPromotion[],
+  promotions: PromotionRow[],
   filters: Record<PromotionColumnKey, string>,
 ) {
   return promotions.filter((promotion) =>
@@ -776,7 +800,7 @@ function filterPromotions(
 }
 
 function sortPromotions(
-  promotions: StaffPromotion[],
+  promotions: PromotionRow[],
   key: PromotionColumnKey,
   direction: SortDirection,
 ) {
@@ -801,7 +825,7 @@ function sortPromotions(
   });
 }
 
-function comparePromotions(left: StaffPromotion, right: StaffPromotion, key: PromotionColumnKey) {
+function comparePromotions(left: PromotionRow, right: PromotionRow, key: PromotionColumnKey) {
   if (key === "currentSalary" || key === "newSalary") {
     const leftValue = left[key];
     const rightValue = right[key];

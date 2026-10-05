@@ -37,7 +37,8 @@ import {
 import { venueNickname } from "@/lib/locations";
 import { buildHiringWorkbook, importHiringWorkbook } from "@/lib/hiring-workbook";
 import { type OutsourcedPerson } from "@/lib/outsourced";
-import { formatSalary, splitSalary, type SortDirection, type StaffEmployee } from "@/lib/staff";
+import { formatSalary, splitFullName, splitSalary, type SortDirection, type StaffEmployee } from "@/lib/staff";
+import type { IntakeSubmission } from "@/lib/staff-intake-records";
 
 const fieldClass =
   "mt-1.5 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-950 outline-none focus:border-stone-950";
@@ -84,7 +85,7 @@ const hiringColumns = [
 
 type HiringColumnKey = (typeof hiringColumns)[number]["key"];
 
-export function HiringPositions() {
+export function HiringPositions({ submissions = [] }: { submissions?: IntakeSubmission[] }) {
   const { lookups } = useDirectoryLookups();
   const { locations } = useLocations();
   const { roles, update } = useHiring();
@@ -93,6 +94,7 @@ export function HiringPositions() {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const kindRef = useRef<HTMLDialogElement>(null);
   const outsourcedRef = useRef<HTMLDialogElement>(null);
+  const intakeRef = useRef<HTMLDialogElement>(null);
   const importRef = useRef<HTMLInputElement>(null);
   const formToken = useRef(0);
   const keepHire = useRef(false);
@@ -110,6 +112,8 @@ export function HiringPositions() {
   const [employeeRequest, setEmployeeRequest] = useState<EmployeeFormRequest | null>(null);
   const [outsourcedForm, setOutsourcedForm] = useState(emptyOutsourcedForm);
   const [outsourcedError, setOutsourcedError] = useState("");
+  const [intakeSearch, setIntakeSearch] = useState("");
+  const [selectedSubmissionId, setSelectedSubmissionId] = useState("");
   const positionGroups = useMemo(
     () =>
       lookups.departments
@@ -303,6 +307,54 @@ export function HiringPositions() {
       venueId: venue?.id ?? "",
       venue: venue?.venueName || role.venue,
     });
+    setOutsourcedError("");
+    outsourcedRef.current?.showModal();
+  }
+
+  function openIntakeImport() {
+    keepHire.current = true;
+    kindRef.current?.close();
+    setIntakeSearch("");
+    setSelectedSubmissionId(submissions[0]?.id ?? "");
+    intakeRef.current?.showModal();
+  }
+
+  function importSubmission(kind: "in-house" | "outsourced") {
+    const submission = submissions.find((item) => item.id === selectedSubmissionId);
+    const role = hireRole;
+    if (!submission || !role) return;
+    intakeRef.current?.close();
+    if (kind === "in-house") {
+      const name = splitFullName(submission.full_name);
+      formToken.current += 1;
+      setEmployeeRequest({
+        token: formToken.current,
+        employee: null,
+        seed: {
+          ...seedFromRole(role),
+          fullName: submission.full_name,
+          firstName: name.firstName,
+          lastName: name.lastName,
+          nationality: submission.nationality ?? "",
+          email: submission.email,
+          phone: submission.phone ?? "",
+          whatsapp: submission.whatsapp ?? "",
+          dateOfBirth: submission.date_of_birth ?? "",
+          joiningDate: submission.joining_date ?? "",
+          passportNumber: submission.passport_number ?? "",
+          passportExpiry: submission.passport_expiry ?? "",
+          emiratesIdNumber: submission.emirates_id_number ?? "",
+          emiratesIdExpiry: submission.emirates_id_expiry ?? "",
+          visaExpiry: submission.visa_expiry ?? "",
+        },
+        documents: submission.documents.map((document) => ({ label: document.label, fileId: document.file_id, fileName: document.file_name, webViewLink: document.web_view_link })),
+        description: `Imported from the details form and replacing the ${role.position} hiring card.`,
+      });
+      return;
+    }
+    const position = lookups.positions.find((item) => sameText(item.name, role.position));
+    const venue = locations.find((item) => sameText(item.venueName, role.venue) || sameText(item.nickname, role.venue));
+    setOutsourcedForm({ fullName: submission.full_name, company: "", positionId: position?.id ?? "", position: role.position, venueId: venue?.id ?? "", venue: venue?.venueName || role.venue });
     setOutsourcedError("");
     outsourcedRef.current?.showModal();
   }
@@ -796,10 +848,24 @@ export function HiringPositions() {
           <button type="button" className={secondaryButtonClass} onClick={() => chooseHireKind("outsourced")}>
             Outsourced
           </button>
+          <button type="button" className={secondaryButtonClass} onClick={openIntakeImport}>
+            Details form
+          </button>
           <button type="button" className={primaryButtonClass} onClick={() => chooseHireKind("in-house")}>
             In-house
           </button>
         </div>
+      </dialog>
+
+      <dialog ref={intakeRef} aria-labelledby="intake-import-title" className="m-auto h-fit max-h-[calc(100dvh-2rem)] w-[min(100%-2rem,42rem)] overflow-hidden rounded-2xl border border-stone-200 bg-white p-0 text-stone-950 shadow-xl backdrop:bg-stone-950/40">
+        <div className="border-b border-stone-200 px-5 py-4"><h2 id="intake-import-title" className="font-semibold">Import from details collection form</h2><p className="mt-1 text-sm text-stone-500">Search and select a submitted person.</p></div>
+        <div className="space-y-3 px-5 py-4">
+          <input value={intakeSearch} onChange={(event) => setIntakeSearch(event.target.value)} placeholder="Search name, email, or phone…" autoFocus className={fieldClass} />
+          <select value={selectedSubmissionId} onChange={(event) => setSelectedSubmissionId(event.target.value)} size={8} className="w-full rounded-xl border border-stone-300 bg-white p-2 text-sm">
+            {submissions.filter((item) => { const query=intakeSearch.trim().toLowerCase(); return !query || `${item.full_name} ${item.email} ${item.phone ?? ""}`.toLowerCase().includes(query); }).map((item) => <option key={item.id} value={item.id}>{item.full_name} — {item.email}</option>)}
+          </select>
+        </div>
+        <div className="flex justify-end gap-2 border-t border-stone-200 px-5 py-4"><button type="button" className={secondaryButtonClass} onClick={() => intakeRef.current?.close()}>Cancel</button><button type="button" disabled={!selectedSubmissionId} className={secondaryButtonClass} onClick={() => importSubmission("outsourced")}>Outsourced</button><button type="button" disabled={!selectedSubmissionId} className={primaryButtonClass} onClick={() => importSubmission("in-house")}>In-house</button></div>
       </dialog>
 
       <EmployeeFormDialog request={employeeRequest} onSave={saveHiredEmployee} />

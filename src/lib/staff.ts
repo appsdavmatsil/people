@@ -25,6 +25,15 @@ export type StaffEmployee = {
   visaExpiry?: string;
   /** ISO timestamp when document data was last merged from a submission. */
   importedAt?: string;
+  /** Documents attached to the most recently merged details-form submission. */
+  documents?: StaffDocument[];
+};
+
+export type StaffDocument = {
+  label: string;
+  fileId: string;
+  fileName: string;
+  webViewLink: string | null;
 };
 
 export const staffColumns = [

@@ -40,11 +40,11 @@ export default async function StaffDocumentsPage() {
       ) : (
         <div className="space-y-6">
           {submissions.map((person) => (
-            <section
+            <details
               key={person.id}
               className="overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm"
             >
-              <header className="flex flex-wrap items-center justify-between gap-2 border-b border-stone-200 bg-stone-50 px-5 py-3">
+              <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2 bg-stone-50 px-5 py-3 marker:hidden hover:bg-stone-100">
                 <div>
                   <h2 className="text-base font-semibold text-stone-950">
                     {person.full_name}
@@ -53,20 +53,18 @@ export default async function StaffDocumentsPage() {
                     Submitted {new Date(person.created_at).toLocaleString("en-GB")}
                   </p>
                 </div>
-                {person.drive_folder_id ? (
-                  <a
-                    href={`https://drive.google.com/drive/folders/${person.drive_folder_id}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex h-8 items-center rounded-lg border border-stone-300 bg-white px-3 text-xs font-medium text-stone-800 hover:bg-stone-100"
-                  >
-                    Open Drive folder
-                  </a>
-                ) : null}
-              </header>
+                <span className="inline-flex items-center gap-2 text-xs font-medium text-stone-600">
+                  Show details <span aria-hidden="true">⌄</span>
+                </span>
+              </summary>
 
-              <div className="grid gap-5 px-5 py-4 lg:grid-cols-[320px_1fr]">
+              <div className="grid gap-5 border-t border-stone-200 px-5 py-4 lg:grid-cols-[320px_1fr]">
                 <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm lg:grid-cols-1 lg:gap-y-2">
+                  {person.drive_folder_id ? (
+                    <div className="col-span-full mb-2">
+                      <a href={`https://drive.google.com/drive/folders/${person.drive_folder_id}`} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center rounded-lg border border-stone-300 bg-white px-3 text-xs font-medium text-stone-800 hover:bg-stone-100">Open Drive folder</a>
+                    </div>
+                  ) : null}
                   <Detail label="Email" value={person.email} />
                   <Detail label="Date of birth" value={formatDate(person.date_of_birth)} />
                   <Detail label="Phone" value={person.phone ?? "—"} />
@@ -113,7 +111,7 @@ export default async function StaffDocumentsPage() {
                   ))}
                 </div>
               </div>
-            </section>
+            </details>
           ))}
         </div>
       )}

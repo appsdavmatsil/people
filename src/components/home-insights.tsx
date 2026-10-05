@@ -36,6 +36,7 @@ export function HomeInsights() {
   const { snapshot } = usePrivacy();
   const [profileEmployee, setProfileEmployee] = useState<StaffEmployee | null>(null);
   const [joiningYear, setJoiningYear] = useState<string | null>(null);
+  const [staffGraph, setStaffGraph] = useState<"positions" | "promotions">("positions");
   const venues = chartVenues(locations, boardIds);
   const [salaryDepartment, setSalaryDepartment] = useDepartment(lookups.departments);
   const [promotionDepartment, setPromotionDepartment] = useDepartment(lookups.departments);
@@ -63,6 +64,7 @@ export function HomeInsights() {
   const salaryTotal = salary.reduce((sum, point) => sum + point.salary, 0);
   const promotionTotal = promotionPoints.reduce((sum, point) => sum + point.count, 0);
   const joiningYears = joiningYearsByStaff(employees);
+  const joiningTotal = joiningYears.reduce((sum, point) => sum + point.count, 0);
   const positionTotal = positions.total;
   const workforceTotal = workforce.reduce((sum, share) => sum + share.total, 0);
   const celebrations = celebrationLists(employees);
@@ -92,24 +94,26 @@ export function HomeInsights() {
         <WorkforceChart shares={workforce} />
       </InsightCard>
       <InsightCard
-        title="Positions"
-        figure={String(positionTotal)}
-        figureLabel="staff"
-        departmentId={positionDepartment}
+        title={staffGraph === "positions" ? "Positions" : "Promotions"}
+        figure={String(staffGraph === "positions" ? positionTotal : promotionTotal)}
+        figureLabel={staffGraph === "positions" ? "staff" : promotionTotal === 1 ? "promotion" : "promotions"}
+        departmentId={staffGraph === "positions" ? positionDepartment : promotionDepartment}
         departments={lookups.departments}
-        onDepartment={setPositionDepartment}
+        onDepartment={staffGraph === "positions" ? setPositionDepartment : setPromotionDepartment}
+        headerContent={<GraphPicker value={staffGraph} onChange={setStaffGraph} />}
       >
-        <PositionChart share={positions} hasVenues={venues.length > 0} />
+        {staffGraph === "positions" ? <PositionChart share={positions} hasVenues={venues.length > 0} /> : <PromotionRing points={promotionPoints} total={promotionTotal} />}
       </InsightCard>
       <InsightCard
-        title="Promotions"
-        figure={String(promotionTotal)}
-        figureLabel={promotionTotal === 1 ? "promotion" : "promotions"}
-        departmentId={promotionDepartment}
+        title="Joining years"
+        figure={String(joiningTotal)}
+        figureLabel="staff"
+        departmentId=""
         departments={lookups.departments}
-        onDepartment={setPromotionDepartment}
+        onDepartment={() => undefined}
+        hideDepartment
       >
-        <div className="grid h-full min-h-0 grid-cols-2 gap-3"><PromotionRing points={promotionPoints} total={promotionTotal} compact /><JoiningYearsRing points={joiningYears} onSelect={setJoiningYear} /></div>
+        <JoiningYearsRing points={joiningYears} onSelect={setJoiningYear} expanded />
       </InsightCard>
       <CelebrationCard
         title="Work celebrations"
@@ -179,7 +183,7 @@ export function HomeInsights() {
 }
 
 function sectionSymbol(title: string) {
-  return ({ "Staff and salary": "◔", Workforce: "◉", Positions: "◌", Promotions: "↗", "Work celebrations": "✦", "Birthday celebrations": "♢" } as Record<string, string>)[title] ?? "•";
+  return ({ "Staff and salary": "◔", Workforce: "◉", Positions: "◌", Promotions: "↗", "Joining years": "◎", "Work celebrations": "✦", "Birthday celebrations": "♢" } as Record<string, string>)[title] ?? "•";
 }
 
 type Celebration = {
@@ -381,6 +385,29 @@ function useDepartment(departments: LookupDepartment[]) {
   return [value, setId] as const;
 }
 
+function GraphPicker({
+  value,
+  onChange,
+}: {
+  value: "positions" | "promotions";
+  onChange: (value: "positions" | "promotions") => void;
+}) {
+  return (
+    <label className="relative block">
+      <span className="sr-only">Visible staff graph</span>
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value as "positions" | "promotions")}
+        className="h-7 cursor-pointer appearance-none rounded-full border border-stone-200 bg-white pr-7 pl-3 text-[11px] font-medium text-stone-700 outline-none hover:bg-stone-50 focus:ring-1 focus:ring-stone-300"
+      >
+        <option value="positions">Positions</option>
+        <option value="promotions">Promotions</option>
+      </select>
+      <ChevronIcon />
+    </label>
+  );
+}
+
 function InsightCard({
   title,
   figure,
@@ -389,6 +416,7 @@ function InsightCard({
   departments,
   onDepartment,
   headerContent,
+  hideDepartment = false,
   children,
 }: {
   title: string;
@@ -398,6 +426,7 @@ function InsightCard({
   departments: LookupDepartment[];
   onDepartment: (departmentId: string) => void;
   headerContent?: React.ReactNode;
+  hideDepartment?: boolean;
   children: React.ReactNode;
 }) {
   const selectId = `${title.toLowerCase().replace(/\s+/g, "-")}-department`;
@@ -414,29 +443,33 @@ function InsightCard({
               </span>
               <span className="text-xs text-stone-400">{figureLabel}</span>
             </p>
-            {headerContent}
           </div>
         </div>
       </div>
-      <label htmlFor={selectId} className="absolute top-3.5 right-3.5 z-10">
-        <span className="sr-only">Department for {title}</span>
-        <span className="relative block">
-          <select
-            id={selectId}
-            value={departmentId}
-            onChange={(event) => onDepartment(event.target.value)}
-            className="h-7 max-w-36 cursor-pointer appearance-none truncate rounded-full bg-stone-100/80 pr-6 pl-2.5 text-[11px] text-stone-500 outline-none hover:bg-stone-100 hover:text-stone-800 focus:bg-white focus:text-stone-900 focus:ring-1 focus:ring-stone-300"
-          >
-            <option value="">All departments</option>
-            {departments.map((department) => (
-              <option key={department.id} value={department.id}>
-                {department.name}
-              </option>
-            ))}
-          </select>
-          <ChevronIcon />
-        </span>
-      </label>
+      <div className="absolute top-3.5 right-3.5 z-10 flex items-center gap-2">
+        {headerContent}
+        {!hideDepartment ? (
+          <label htmlFor={selectId}>
+            <span className="sr-only">Department for {title}</span>
+            <span className="relative block">
+              <select
+                id={selectId}
+                value={departmentId}
+                onChange={(event) => onDepartment(event.target.value)}
+                className="h-7 max-w-36 cursor-pointer appearance-none truncate rounded-full bg-stone-100/80 pr-6 pl-2.5 text-[11px] text-stone-500 outline-none hover:bg-stone-100 hover:text-stone-800 focus:bg-white focus:text-stone-900 focus:ring-1 focus:ring-stone-300"
+              >
+                <option value="">All departments</option>
+                {departments.map((department) => (
+                  <option key={department.id} value={department.id}>
+                    {department.name}
+                  </option>
+                ))}
+              </select>
+              <ChevronIcon />
+            </span>
+          </label>
+        ) : null}
+      </div>
       <div className="flex min-h-0 flex-1 flex-col px-4 pt-2 pb-4">{children}</div>
     </section>
   );
@@ -767,10 +800,36 @@ function PromotionRing({ points, total, compact = false }: { points: PromotionPo
   );
 }
 
-function JoiningYearsRing({ points, onSelect }: { points: { year: string; count: number }[]; onSelect: (year: string) => void }) {
+function JoiningYearsRing({ points, onSelect, expanded = false }: { points: { year: string; count: number }[]; onSelect: (year: string) => void; expanded?: boolean }) {
   const total = points.reduce((sum, point) => sum + point.count, 0);
   const slices = points.map((point, index) => ({ key: point.year, label: point.year, value: point.count, color: ["#1c1917", "#a8a29e", "#c2410c", "#0f3026", "#a91d2a"][index % 5], detail: "Joining year" }));
-  return <div className="flex h-full min-h-0 items-center gap-2 overflow-hidden"><Ring slices={slices} total={total} venue="Joining years" className="size-24 shrink-0" /><div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden"><p className="mb-1 shrink-0 text-xs font-medium text-stone-700">Joining years</p><ul className="min-h-0 flex-1 space-y-0.5 overflow-y-scroll pr-1 [scrollbar-gutter:stable]">{points.map((point)=><li key={point.year}><button type="button" onClick={() => onSelect(point.year)} className="flex w-full justify-between gap-2 rounded px-1 py-0.5 text-[11px] text-stone-600 hover:bg-stone-100 hover:text-stone-950"><span>{point.year}</span><b>{point.count}</b></button></li>)}</ul></div></div>;
+  return (
+    <div className={`flex h-full min-h-0 items-center overflow-hidden ${expanded ? "justify-center gap-10 px-6" : "gap-2"}`}>
+      <Ring
+        slices={slices}
+        total={total}
+        venue="Joining years"
+        className={`${expanded ? "size-48" : "size-24"} shrink-0`}
+      />
+      <div className={`flex h-full min-h-0 min-w-0 flex-col overflow-hidden ${expanded ? "w-40 flex-none justify-center py-2" : "flex-1"}`}>
+        <p className={`mb-1 shrink-0 text-xs font-medium text-stone-700 ${expanded ? "text-center" : ""}`}>Joining years</p>
+        <ul className="min-h-0 flex-1 space-y-0.5 overflow-y-scroll pr-1 [scrollbar-gutter:stable]">
+          {points.map((point) => (
+            <li key={point.year}>
+              <button
+                type="button"
+                onClick={() => onSelect(point.year)}
+                className={`grid w-full grid-cols-[3.5rem_2.5rem] justify-center gap-2 rounded px-1 py-0.5 text-stone-600 hover:bg-stone-100 hover:text-stone-950 ${expanded ? "text-xs" : "text-[11px]"}`}
+              >
+                <span className="text-right">{point.year}</span>
+                <b className="text-left">{point.count}</b>
+              </button>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
 }
 
 function joiningYearsByStaff(employees: StaffEmployee[]) { const counts = new Map<string, number>(); for (const employee of employees) { if (employee.archived || !employee.joiningDate) continue; const year = employee.joiningDate.slice(0,4); if (/^\d{4}$/.test(year)) counts.set(year, (counts.get(year) ?? 0) + 1); } return [...counts].map(([year,count])=>({year,count})).sort((a,b)=>b.year.localeCompare(a.year)); }

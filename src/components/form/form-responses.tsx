@@ -19,10 +19,21 @@ const th = "whitespace-nowrap px-3 py-2 text-left text-xs font-semibold text-sto
 const td = "whitespace-nowrap px-3 py-2 text-sm text-stone-900 align-middle";
 
 export function FormResponses({ submissions }: { submissions: IntakeSubmission[] }) {
+  const [records, setRecords] = useState(submissions);
   const [merging, setMerging] = useState<IntakeSubmission | null>(null);
   const [preview, setPreview] = useState<IntakeDocumentRecord | null>(null);
-  const count = submissions.length;
-  const list = useMemo(() => submissions, [submissions]);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const count = records.length;
+  const list = useMemo(() => records, [records]);
+
+  async function deleteSubmission(person: IntakeSubmission) {
+    if (!window.confirm(`Delete ${person.full_name}'s submission record? The Drive files will be kept.`)) return;
+    setDeletingId(person.id);
+    const response = await fetch(`/api/staff-intake/${person.id}`, { method: "DELETE" });
+    if (response.ok) setRecords((current) => current.filter((item) => item.id !== person.id));
+    else window.alert("The submission record could not be deleted.");
+    setDeletingId(null);
+  }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -119,6 +130,9 @@ export function FormResponses({ submissions }: { submissions: IntakeSubmission[]
                         className="inline-flex h-7 items-center rounded-lg bg-[#063f3b] px-2.5 text-xs font-semibold text-white hover:bg-[#052f2c]"
                       >
                         Merge
+                      </button>
+                      <button type="button" disabled={deletingId === person.id} onClick={() => void deleteSubmission(person)} className="inline-flex h-7 items-center rounded-lg border border-red-200 bg-white px-2 text-xs font-medium text-red-700 hover:bg-red-50 disabled:opacity-50">
+                        {deletingId === person.id ? "Deleting…" : "Delete"}
                       </button>
                     </div>
                   </td>
