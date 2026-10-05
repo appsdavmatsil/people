@@ -14,8 +14,6 @@ import { profileAvatarEvent, profileAvatarKey } from "@/lib/profile-avatar";
 const sidebarCollapsedKey = "people-sidebar-collapsed";
 const zoomKey = "people.zoom";
 const zoomLevels = [0.8, 0.9, 1, 1.1, 1.25, 1.5];
-const mobileNavCompactRange = 80;
-const mobileNavMinimumScale = 0.76;
 const pullRefreshThreshold = 38;
 
 export function AppShell({
@@ -32,27 +30,16 @@ export function AppShell({
   const pathname = usePathname();
   const current = pageForPath(pathname);
   const [collapsed, setCollapsed] = useState(false);
-  const [mobileNavCompact, setMobileNavCompact] = useState(0);
   const [pullDistance, setPullDistance] = useState(0);
   const [pulling, setPulling] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const shellRef = useRef<HTMLDivElement>(null);
   const pullStartRef = useRef<{ x: number; y: number } | null>(null);
   const pullDistanceRef = useRef(0);
-  const mobileNavCompactRef = useRef(0);
-  const lastScrollTopRef = useRef(0);
-  const scrollTargetRef = useRef<EventTarget | null>(null);
 
   useEffect(() => {
     setCollapsed(window.localStorage.getItem(sidebarCollapsedKey) === "1");
   }, []);
-
-  useEffect(() => {
-    mobileNavCompactRef.current = 0;
-    lastScrollTopRef.current = 0;
-    scrollTargetRef.current = null;
-    setMobileNavCompact(0);
-  }, [pathname]);
 
   useEffect(() => {
     const shell = shellRef.current;
@@ -142,37 +129,6 @@ export function AppShell({
   }, [userId]);
 
   useEffect(() => {
-    function onScroll(event: Event) {
-      const target = event.target === document ? document.scrollingElement : event.target;
-      if (!(target instanceof HTMLElement)) return;
-
-      if (scrollTargetRef.current !== target) {
-        scrollTargetRef.current = target;
-        lastScrollTopRef.current = 0;
-      }
-
-      const top = target.scrollTop;
-      const delta = top - lastScrollTopRef.current;
-      lastScrollTopRef.current = top;
-
-      const next =
-        top <= 0
-          ? 0
-          : Math.min(
-              1,
-              Math.max(0, mobileNavCompactRef.current + delta / mobileNavCompactRange),
-            );
-
-      if (Math.abs(next - mobileNavCompactRef.current) < 0.002) return;
-      mobileNavCompactRef.current = next;
-      setMobileNavCompact(next);
-    }
-
-    document.addEventListener("scroll", onScroll, true);
-    return () => document.removeEventListener("scroll", onScroll, true);
-  }, []);
-
-  useEffect(() => {
     const viewport = window.visualViewport;
     if (!viewport) return;
 
@@ -203,11 +159,6 @@ export function AppShell({
       return next;
     });
   }
-
-  const fixedMobileNav = pathname === "/events" || pathname === "/profile";
-  const mobileNavScale = fixedMobileNav
-    ? 1
-    : 1 - mobileNavCompact * (1 - mobileNavMinimumScale);
 
   return (
     <div ref={shellRef} className="flex h-dvh min-h-0 flex-1 overflow-hidden">
@@ -293,7 +244,7 @@ export function AppShell({
       </aside>
 
       <div
-        className={`flex min-h-0 min-w-0 flex-1 flex-col pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-0 ${
+        className={`flex min-h-0 min-w-0 flex-1 flex-col pb-[calc(3rem+env(safe-area-inset-bottom))] md:pb-0 ${
           pulling ? "" : "transition-transform duration-300 ease-out"
         } ${
           collapsed ? "md:pl-14" : "md:pl-52"
@@ -314,47 +265,37 @@ export function AppShell({
           </main>
         </PrivacyProvider>
       </div>
-      <div className="pointer-events-none fixed inset-x-0 bottom-[max(10px,env(safe-area-inset-bottom))] z-30 flex justify-center px-4 md:hidden">
-        <nav
-          aria-label="Mobile pages"
-          className="pointer-events-auto w-full max-w-md rounded-full border border-black/[0.06] bg-white/[0.94] p-1.5 shadow-[0_8px_28px_rgb(0_0_0/0.10),0_1px_3px_rgb(0_0_0/0.05)] backdrop-blur-[20px] backdrop-saturate-[160%]"
-          style={{
-            transform: `scale(${mobileNavScale})`,
-            transformOrigin: "50% 100%",
-            transition:
-              mobileNavCompact === 0 || mobileNavCompact === 1
-                ? "transform 180ms ease-out"
-                : undefined,
-          }}
-        >
-          <div className="grid grid-cols-5 gap-0.5">
-            {pages.map((page) => {
-              const active = isAppPage(pathname, page.href);
-              const Icon = pageIcons[page.href];
+      <nav
+        aria-label="Mobile pages"
+        className="fixed inset-x-0 bottom-0 z-30 border-t border-black/[0.08] bg-white/[0.94] pb-[env(safe-area-inset-bottom)] backdrop-blur-[20px] backdrop-saturate-[160%] md:hidden"
+      >
+        <div className="flex h-12 items-stretch">
+          {pages.map((page) => {
+            const active = isAppPage(pathname, page.href);
+            const Icon = pageIcons[page.href];
 
-              return (
-                <Link
-                  key={page.href}
-                  href={page.href}
-                  aria-current={active ? "page" : undefined}
-                  aria-label={page.title}
-                  title={page.title}
-                  className={`flex min-h-[3.25rem] min-w-0 items-center justify-center rounded-full px-1 py-1 transition-[background-color,color,transform] duration-200 active:scale-95 ${
-                    active
-                      ? "bg-black/[0.10] text-black [&_svg]:stroke-[2.25]"
-                      : "text-black/75 [&_svg]:stroke-[1.85]"
-                  }`}
-                >
-                  <span className="grid size-8 place-items-center [&_svg]:size-6">
-                    <Icon />
-                  </span>
-                  <span className="sr-only">{page.title}</span>
-                </Link>
-              );
-            })}
-          </div>
-        </nav>
-      </div>
+            return (
+              <Link
+                key={page.href}
+                href={page.href}
+                aria-current={active ? "page" : undefined}
+                aria-label={page.title}
+                title={page.title}
+                className={`flex min-w-0 flex-1 items-center justify-center transition-colors duration-200 active:opacity-60 ${
+                  active
+                    ? "text-black [&_svg]:stroke-[2.25]"
+                    : "text-black/45 [&_svg]:stroke-[1.85]"
+                }`}
+              >
+                <span className="grid size-7 place-items-center [&_svg]:size-6">
+                  <Icon />
+                </span>
+                <span className="sr-only">{page.title}</span>
+              </Link>
+            );
+          })}
+        </div>
+      </nav>
     </div>
   );
 }
