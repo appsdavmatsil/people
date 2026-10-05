@@ -25,6 +25,8 @@ export type StaffEmployee = {
   visaExpiry?: string;
   /** ISO timestamp when document data was last merged from a submission. */
   importedAt?: string;
+  /** Id of the details-form submission most recently merged onto this employee. */
+  intakeSubmissionId?: string;
   /** Documents attached to the most recently merged details-form submission. */
   documents?: StaffDocument[];
 };

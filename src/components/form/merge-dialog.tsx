@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useStaffDirectory } from "@/components/use-staff-directory";
 import type { IntakeDocumentRecord, IntakeSubmission } from "@/lib/staff-intake-records";
-import type { StaffEmployee } from "@/lib/staff";
+import { splitFullName, type StaffEmployee } from "@/lib/staff";
 
 // Fields that can be merged from a submission onto an employee record.
 const MERGE_FIELDS: {
@@ -24,6 +24,25 @@ const MERGE_FIELDS: {
   { key: "visaExpiry", label: "Visa expiry", from: (s) => s.visa_expiry },
 ];
 
+function nameTokens(name: string): string[] {
+  return name
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .split(/[^a-z]+/)
+    .filter(Boolean);
+}
+
+// Share of the submitted name's words found in the employee's name (0–1).
+function nameScore(submitted: string[], employeeName: string): number {
+  if (!submitted.length) return 0;
+  const candidate = nameTokens(employeeName);
+  const matched = submitted.filter((token) =>
+    candidate.some((c) => c === token || (Math.min(c.length, token.length) >= 3 && (c.startsWith(token) || token.startsWith(c)))),
+  ).length;
+  return matched / submitted.length;
+}
+
 function isImage(fileName: string): boolean {
   return /\.(jpe?g|png|webp|gif|heic|heif)$/i.test(fileName);
 }
@@ -38,6 +57,7 @@ export function MergeDialog({
   const { employees, update } = useStaffDirectory();
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [nameValue, setNameValue] = useState("");
   const [open, setOpen] = useState(true);
   const [done, setDone] = useState(false);
   const [preview, setPreview] = useState<IntakeDocumentRecord | null>(null);
@@ -54,12 +74,28 @@ export function MergeDialog({
     Object.fromEntries(applicable.map((f) => [f.key, true])),
   );
 
+  // Best-matching employee for the submitted name (or the same email).
+  const suggested = useMemo(() => {
+    const submitted = nameTokens(submission.full_name);
+    const email = submission.email.trim().toLowerCase();
+    let best: { employee: StaffEmployee; score: number } | null = null;
+    for (const e of employees) {
+      if (e.archived) continue;
+      const score = nameScore(submitted, e.fullName) + (email && e.email?.trim().toLowerCase() === email ? 1 : 0);
+      if (score >= 0.5 && (!best || score > best.score)) best = { employee: e, score };
+    }
+    return best?.employee ?? null;
+  }, [employees, submission]);
+
   const matches = useMemo(() => {
     const q = search.trim().toLowerCase();
     const active = employees.filter((e) => !e.archived);
-    if (!q) return active.slice(0, 25);
+    if (!q) {
+      const rest = active.filter((e) => e !== suggested);
+      return (suggested ? [suggested, ...rest] : rest).slice(0, 25);
+    }
     return active.filter((e) => e.fullName.toLowerCase().includes(q)).slice(0, 25);
-  }, [employees, search]);
+  }, [employees, search, suggested]);
 
   const selected = employees.find((e) => e.id === selectedId) ?? null;
 
@@ -69,6 +105,13 @@ export function MergeDialog({
       current.map((e) => {
         if (e.id !== selected.id) return e;
         const next: StaffEmployee = { ...e };
+        const name = nameValue.trim().replace(/\s+/g, " ");
+        if (name && name !== e.fullName) {
+          const parts = splitFullName(name);
+          next.fullName = name;
+          next.firstName = parts.firstName;
+          next.lastName = parts.lastName;
+        }
         for (const f of applicable) {
           if (checked[f.key]) {
             const v = f.from(submission);
@@ -79,6 +122,7 @@ export function MergeDialog({
           }
         }
         next.importedAt = new Date().toISOString();
+        next.intakeSubmissionId = submission.id;
         next.documents = submission.documents.map((document) => ({
           label: document.label,
           fileId: document.file_id,
@@ -163,11 +207,17 @@ export function MergeDialog({
                         type="button"
                         onClick={() => {
                           setSelectedId(e.id);
+                          setNameValue(e.fullName);
                           setSearch(e.fullName);
                         }}
-                        className="flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-stone-50"
+                        className={`flex w-full items-center justify-between px-3 py-2 text-left text-sm ${e === suggested ? "bg-emerald-50 hover:bg-emerald-100/70" : "hover:bg-stone-50"}`}
                       >
-                        <span className="font-medium text-stone-900">{e.fullName}</span>
+                        <span className="flex items-center gap-2 font-medium text-stone-900">
+                          {e.fullName}
+                          {e === suggested ? (
+                            <span className="rounded-full bg-[#063f3b] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">Suggested</span>
+                          ) : null}
+                        </span>
                         <span className="text-xs text-stone-500">{e.position}</span>
                       </button>
                     </li>
@@ -176,6 +226,38 @@ export function MergeDialog({
               </ul>
             ) : (
               <>
+                <div className="mt-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-sm font-medium text-stone-800">Employee name</span>
+                    <div className="inline-flex rounded-lg border border-stone-300 p-0.5 text-xs font-medium">
+                      {[
+                        { label: "Keep current", value: selected.fullName },
+                        { label: "Use submitted", value: submission.full_name.trim() },
+                      ].map((option) => (
+                        <button
+                          key={option.label}
+                          type="button"
+                          onClick={() => setNameValue(option.value)}
+                          title={option.value}
+                          className={`rounded-md px-2.5 py-1 ${nameValue === option.value ? "bg-[#063f3b] text-white" : "text-stone-600 hover:bg-stone-100"}`}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <input
+                    value={nameValue}
+                    onChange={(e) => setNameValue(e.target.value)}
+                    placeholder={selected.fullName}
+                    className="mt-1.5 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm outline-none focus:border-stone-950"
+                  />
+                  <p className="mt-1 text-xs text-stone-500">
+                    Current: <span className="text-stone-700">{selected.fullName}</span> · Submitted:{" "}
+                    <span className="text-stone-700">{submission.full_name}</span>
+                  </p>
+                </div>
+
                 <p className="mt-3 text-xs text-stone-500">Choose each value to import. Unchecked rows keep the current employee value.</p>
                 <div className="mt-2 overflow-hidden rounded-xl border border-stone-200">
                   <div className="grid grid-cols-[2rem_9rem_1fr_1fr] gap-3 bg-stone-50 px-3 py-2 text-xs font-semibold text-stone-500">
