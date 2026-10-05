@@ -8,7 +8,7 @@ import {
   savePlacements,
   type StaffPlacement,
 } from "@/lib/staff-placements";
-import type { StaffEmployee } from "@/lib/staff";
+import { profilePhotoUrl, type StaffEmployee } from "@/lib/staff";
 
 export const staffDirectoryKey = "people.staff-directory";
 export const staffDirectoryEvent = "people-staff-directory";
@@ -134,7 +134,10 @@ function parseStoredStaff(raw: string | null) {
       if (!isStaffEmployee(item)) {
         continue;
       }
-      employees.push(item);
+      // Employees merged from the details form use its profile photo when
+      // they have none of their own.
+      const formPhoto = item.photo ? null : profilePhotoUrl(item.documents);
+      employees.push(formPhoto ? { ...item, photo: formPhoto } : item);
     }
 
     if (parsed.length > 0 && employees.length === 0) {

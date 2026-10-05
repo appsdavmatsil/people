@@ -24,6 +24,10 @@ export type IntakeSubmission = {
   visa_expiry: string | null;
   drive_folder_id: string | null;
   documents: IntakeDocumentRecord[];
+  /** 6-digit code HR gives the employee so they can update this submission. */
+  edit_code: string | null;
+  /** Set when the employee last updated this submission themselves. */
+  updated_at: string | null;
 };
 
 /**

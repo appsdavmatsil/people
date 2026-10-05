@@ -206,3 +206,30 @@ export async function moveFolderToArchive(
     supportsAllDrives: true,
   });
 }
+
+/**
+ * Replaces a file's contents with a new version (Drive keeps the old one in
+ * its version history) and renames it. The file id stays the same, so links,
+ * thumbnails and merged employee documents keep pointing at it.
+ */
+export async function replaceFile(
+  drive: drive_v3.Drive,
+  fileId: string,
+  fileName: string,
+  mimeType: string,
+  body: Buffer,
+): Promise<UploadedFile> {
+  const updated = await drive.files.update({
+    fileId,
+    requestBody: { name: fileName, mimeType },
+    media: { mimeType, body: Readable.from(body) },
+    fields: "id, name, webViewLink",
+    supportsAllDrives: true,
+  });
+
+  return {
+    id: updated.data.id ?? fileId,
+    name: updated.data.name ?? fileName,
+    webViewLink: updated.data.webViewLink ?? null,
+  };
+}

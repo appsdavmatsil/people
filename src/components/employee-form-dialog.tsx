@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { DocThumb } from "@/components/form/doc-thumb";
 import { DialogHeading, PencilIcon, PlusIcon } from "@/components/directory-actions";
 import { CountrySelect } from "@/components/country-select";
 import { useDirectoryLookups } from "@/components/use-directory-lookups";
@@ -456,65 +457,6 @@ export function EmployeeFormDialog({
             </label>
           </div>
 
-          <div className="border-t border-stone-200 pt-4">
-            <h3 className="text-sm font-semibold text-stone-950">Identity documents</h3>
-            <div className="mt-3 grid gap-4 sm:grid-cols-2">
-              <label className="block text-sm font-medium text-stone-800">
-                Passport number
-                <input
-                  value={form.passportNumber}
-                  onChange={(event) =>
-                    setForm((current) => ({ ...current, passportNumber: event.target.value }))
-                  }
-                  className={fieldClass}
-                />
-              </label>
-              <label className="block text-sm font-medium text-stone-800">
-                Passport expiry date
-                <input
-                  type="date"
-                  value={form.passportExpiry}
-                  onChange={(event) =>
-                    setForm((current) => ({ ...current, passportExpiry: event.target.value }))
-                  }
-                  className={fieldClass}
-                />
-              </label>
-              <label className="block text-sm font-medium text-stone-800">
-                Emirates ID number
-                <input
-                  value={form.emiratesIdNumber}
-                  onChange={(event) =>
-                    setForm((current) => ({ ...current, emiratesIdNumber: event.target.value }))
-                  }
-                  className={fieldClass}
-                />
-              </label>
-              <label className="block text-sm font-medium text-stone-800">
-                Emirates ID expiry date
-                <input
-                  type="date"
-                  value={form.emiratesIdExpiry}
-                  onChange={(event) =>
-                    setForm((current) => ({ ...current, emiratesIdExpiry: event.target.value }))
-                  }
-                  className={fieldClass}
-                />
-              </label>
-              <label className="block text-sm font-medium text-stone-800 sm:col-span-2">
-                Residence visa expiry date
-                <input
-                  type="date"
-                  value={form.visaExpiry}
-                  onChange={(event) =>
-                    setForm((current) => ({ ...current, visaExpiry: event.target.value }))
-                  }
-                  className={fieldClass}
-                />
-              </label>
-            </div>
-          </div>
-
           <label className="block text-sm font-medium text-stone-800">
             Current position
             {positionGroups.length > 0 ? (
@@ -643,14 +585,72 @@ export function EmployeeFormDialog({
               : "Current salary is basic salary plus allowances. Entering a current salary splits it into 60% basic salary and 40% allowances."}
           </p>
 
+          <div className="rounded-xl border border-stone-200 bg-stone-100 p-4">
+            <h3 className="text-sm font-semibold text-stone-950">Identity documents</h3>
+            <div className="mt-3 grid gap-4 sm:grid-cols-2">
+              <label className="block text-sm font-medium text-stone-800">
+                Passport number
+                <input
+                  value={form.passportNumber}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, passportNumber: event.target.value }))
+                  }
+                  className={fieldClass}
+                />
+              </label>
+              <label className="block text-sm font-medium text-stone-800">
+                Passport expiry date
+                <input
+                  type="date"
+                  value={form.passportExpiry}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, passportExpiry: event.target.value }))
+                  }
+                  className={fieldClass}
+                />
+              </label>
+              <label className="block text-sm font-medium text-stone-800">
+                Emirates ID number
+                <input
+                  value={form.emiratesIdNumber}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, emiratesIdNumber: event.target.value }))
+                  }
+                  className={fieldClass}
+                />
+              </label>
+              <label className="block text-sm font-medium text-stone-800">
+                Emirates ID expiry date
+                <input
+                  type="date"
+                  value={form.emiratesIdExpiry}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, emiratesIdExpiry: event.target.value }))
+                  }
+                  className={fieldClass}
+                />
+              </label>
+              <label className="block text-sm font-medium text-stone-800 sm:col-span-2">
+                Residence visa expiry date
+                <input
+                  type="date"
+                  value={form.visaExpiry}
+                  onChange={(event) =>
+                    setForm((current) => ({ ...current, visaExpiry: event.target.value }))
+                  }
+                  className={fieldClass}
+                />
+              </label>
+            </div>
+          </div>
+
           {(request?.employee?.documents ?? request?.documents)?.length ? (
             <div className="border-t border-stone-200 pt-4">
               <h3 className="text-sm font-semibold text-stone-950">Merged employee documents</h3>
               <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
                 {(request.employee?.documents ?? request.documents ?? []).map((document) => (
                   <a key={document.fileId} href={`/api/staff-intake/file/${document.fileId}`} target="_blank" rel="noreferrer" className="group overflow-hidden rounded-xl border border-stone-200 bg-stone-50">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={`/api/staff-intake/file/${document.fileId}?thumb=1`} alt={document.label} className="aspect-[4/3] w-full object-cover" />
+                    <DocThumb fileId={document.fileId} label={document.label} className="aspect-[4/3] w-full object-cover" />
                     <span className="block truncate px-2 py-1.5 text-center text-xs font-medium text-stone-600 group-hover:text-stone-950">{document.label}</span>
                   </a>
                 ))}

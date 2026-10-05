@@ -7,6 +7,8 @@ import type { StaffEmployee } from "@/lib/staff";
 import { useStaffDirectory } from "@/components/use-staff-directory";
 import { namesMatch } from "@/lib/name-match";
 import { MergeDialog } from "@/components/form/merge-dialog";
+import { SnapshotButton } from "@/components/snapshot-button";
+import { formatSubmittedAt } from "@/lib/submitted-at";
 
 type Status = "missing" | "submitted" | "merged";
 
@@ -20,6 +22,24 @@ const statusPill: Record<Status, { label: string; className: string }> = {
 
 const th = "whitespace-nowrap px-3 py-2 text-left text-xs font-semibold text-stone-500";
 const td = "whitespace-nowrap px-3 py-2 text-sm text-stone-900 align-middle";
+
+// Snapshots can leave out the Code column (cells marked data-snapshot-code).
+const CODES_OPTION = { label: "codes", selector: "[data-snapshot-code]" };
+
+/** Edit code an employee uses to update their submission on the public form. */
+function CodeCell({ code }: { code: string | null }) {
+  return (
+    <td className={`${td} text-right`} data-snapshot-code>
+      {code ? (
+        <span className="rounded-md bg-stone-100 px-2 py-0.5 font-mono text-sm font-semibold tracking-widest text-stone-900">
+          {code}
+        </span>
+      ) : (
+        <span className="text-stone-300">—</span>
+      )}
+    </td>
+  );
+}
 
 export function MissingResponses({ submissions }: { submissions: IntakeSubmission[] }) {
   const { employees } = useStaffDirectory();
@@ -40,10 +60,12 @@ export function MissingResponses({ submissions }: { submissions: IntakeSubmissio
     }
 
     // Merged employees carry import data; otherwise look for a matching
-    // submission (the newest one, as submissions come newest first).
+    // submission (the newest one, as submissions come newest first). The linked
+    // submission also supplies the employee's edit code.
     function statusOf(e: StaffEmployee): { status: Status; submission?: IntakeSubmission } {
-      if (e.intakeSubmissionId || e.importedAt) return { status: "merged" };
-      const submission = submissions.find((s) => matches(s, e));
+      const submission =
+        submissions.find((s) => s.id === e.intakeSubmissionId) ?? submissions.find((s) => matches(s, e));
+      if (e.intakeSubmissionId || e.importedAt) return { status: "merged", submission };
       return submission ? { status: "submitted", submission } : { status: "missing" };
     }
 
@@ -73,6 +95,7 @@ export function MissingResponses({ submissions }: { submissions: IntakeSubmissio
     };
   }, [employees, submissions]);
 
+  const today = new Date().toISOString().slice(0, 10);
   const totalMissing = venues.reduce((sum, v) => sum + v.missing, 0);
   const total = venues.reduce((sum, v) => sum + v.rows.length, 0);
 
@@ -82,7 +105,8 @@ export function MissingResponses({ submissions }: { submissions: IntakeSubmissio
         <div>
           <h1 className="text-lg font-semibold text-stone-950">Missing Responses</h1>
           <p className="text-sm text-stone-500">
-            Active employees by venue. Missing first; merged employees are highlighted in green.
+            Active employees by venue. Missing first; merged employees are highlighted in green. Codes let
+            staff update their own submission on the form.
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -105,11 +129,14 @@ export function MissingResponses({ submissions }: { submissions: IntakeSubmissio
 
       {unmatched.length ? (
         <section className="mb-5 overflow-hidden rounded-xl border border-amber-200 bg-white">
-          <div className="flex items-baseline justify-between border-b border-amber-200 bg-amber-50 px-3 py-2">
+          <div className="flex items-center justify-between gap-3 border-b border-amber-200 bg-amber-50 px-3 py-2">
             <h2 className="text-sm font-semibold text-amber-900">Unmatched submissions</h2>
-            <span className="text-xs text-amber-800">
-              {unmatched.length} not linked to any employee · merge them from Form Responses
-            </span>
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-amber-800">
+                {unmatched.length} not linked to any employee · merge them from Form Responses
+              </span>
+              <SnapshotButton fileName={`Unmatched submissions ${today}`} optional={CODES_OPTION} />
+            </div>
           </div>
           <table className="w-full border-collapse text-sm">
             <thead>
@@ -117,6 +144,7 @@ export function MissingResponses({ submissions }: { submissions: IntakeSubmissio
                 <th className={th}>Submitted name</th>
                 <th className={th}>Email</th>
                 <th className={th}>Submitted</th>
+                <th className={`${th} text-right`} data-snapshot-code>Code</th>
               </tr>
             </thead>
             <tbody>
@@ -124,7 +152,8 @@ export function MissingResponses({ submissions }: { submissions: IntakeSubmissio
                 <tr key={s.id} className="border-b border-stone-100 last:border-b-0 hover:bg-stone-50/60">
                   <td className={`${td} font-medium text-stone-950`}>{s.full_name}</td>
                   <td className={`${td} text-stone-600`}>{s.email || "—"}</td>
-                  <td className={`${td} text-stone-600`}>{new Date(s.created_at).toLocaleDateString("en-GB")}</td>
+                  <td className={`${td} text-stone-600`}>{formatSubmittedAt(s.created_at)}</td>
+                  <CodeCell code={s.edit_code} />
                 </tr>
               ))}
             </tbody>
@@ -140,11 +169,14 @@ export function MissingResponses({ submissions }: { submissions: IntakeSubmissio
         <div className="space-y-5">
           {venues.map(({ venue, rows, missing }) => (
             <section key={venue} className="overflow-hidden rounded-xl border border-stone-200 bg-white">
-              <div className="flex items-baseline justify-between border-b border-stone-200 bg-stone-50 px-3 py-2">
+              <div className="flex items-center justify-between gap-3 border-b border-stone-200 bg-stone-50 px-3 py-2">
                 <h2 className="text-sm font-semibold text-stone-950">{venue}</h2>
-                <span className="text-xs text-stone-500">
-                  {missing} of {rows.length} missing
-                </span>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-stone-500">
+                    {missing} of {rows.length} missing
+                  </span>
+                  <SnapshotButton fileName={`Missing responses - ${venue} ${today}`} optional={CODES_OPTION} />
+                </div>
               </div>
               <table className="w-full border-collapse text-sm">
                 <thead>
@@ -152,6 +184,7 @@ export function MissingResponses({ submissions }: { submissions: IntakeSubmissio
                     <th className={th}>Name</th>
                     <th className={th}>Position</th>
                     <th className={th}>Status</th>
+                    <th className={`${th} text-right`} data-snapshot-code>Code</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -167,9 +200,10 @@ export function MissingResponses({ submissions }: { submissions: IntakeSubmissio
                           <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${statusPill[status].className}`}>
                             {statusPill[status].label}
                           </span>
-                          {submission ? (
+                          {status === "submitted" && submission ? (
                             <button
                               type="button"
+                              data-snapshot-ignore
                               onClick={() => setMerging({ submission, employee })}
                               title={`Merge ${submission.full_name}'s submission onto ${employee.fullName}`}
                               className="inline-flex h-6 items-center gap-1 rounded-lg bg-[#063f3b] px-2 text-xs font-semibold text-white hover:bg-[#052f2c]"
@@ -182,6 +216,7 @@ export function MissingResponses({ submissions }: { submissions: IntakeSubmissio
                           ) : null}
                         </div>
                       </td>
+                      <CodeCell code={submission?.edit_code ?? null} />
                     </tr>
                   ))}
                 </tbody>

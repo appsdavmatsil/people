@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { listIntakeSubmissions } from "@/lib/staff-intake-records";
+import { DocThumb } from "@/components/form/doc-thumb";
 
 export const metadata: Metadata = {
   title: "Staff Documents",
@@ -13,10 +14,6 @@ function formatDate(iso: string | null): string {
   if (!match) return iso;
   const [, y, m, d] = match;
   return `${d}/${m}/${y}`;
-}
-
-function isImage(fileName: string): boolean {
-  return /\.(jpe?g|png|webp|gif|heic|heif)$/i.test(fileName);
 }
 
 export default async function StaffDocumentsPage() {
@@ -85,24 +82,15 @@ export default async function StaffDocumentsPage() {
                       className="overflow-hidden rounded-xl border border-stone-200"
                     >
                       <div className="flex aspect-[3/4] items-center justify-center bg-stone-100">
-                        {isImage(doc.file_name) ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img
-                            src={`/api/staff-intake/file/${doc.file_id}`}
-                            alt={doc.label}
-                            loading="lazy"
-                            className="h-full w-full object-cover"
-                          />
-                        ) : (
-                          <a
-                            href={`/api/staff-intake/file/${doc.file_id}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="px-3 text-center text-xs font-medium text-stone-600 underline"
-                          >
-                            Open {doc.label}
-                          </a>
-                        )}
+                        <a
+                          href={`/api/staff-intake/file/${doc.file_id}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          title={`Open ${doc.label}`}
+                          className="block h-full w-full"
+                        >
+                          <DocThumb fileId={doc.file_id} label={doc.label} size={800} className="h-full w-full object-cover" />
+                        </a>
                       </div>
                       <figcaption className="truncate px-2 py-1.5 text-center text-xs text-stone-600">
                         {doc.label}

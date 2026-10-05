@@ -17,12 +17,35 @@ export function nameTokens(name: string): string[] {
   return tokens;
 }
 
-// Same word, a shortened form of it, or a one-letter spelling difference at
-// the end of a long word ("ruparathne" / "ruparathna").
+// Same word, a shortened form of it, or a one-letter typo in a long word
+// ("ruparathne" / "ruparathna", "silva" / "silvva").
 function wordsMatch(a: string, b: string): boolean {
   if (a === b) return true;
   if (Math.min(a.length, b.length) >= 3 && (a.startsWith(b) || b.startsWith(a))) return true;
-  return a.length >= 5 && a.length === b.length && a.slice(0, -1) === b.slice(0, -1);
+  return Math.min(a.length, b.length) >= 5 && withinOneEdit(a, b);
+}
+
+// True when one insertion, deletion or substitution turns a into b.
+function withinOneEdit(a: string, b: string): boolean {
+  if (Math.abs(a.length - b.length) > 1) return false;
+  let i = 0;
+  let j = 0;
+  let edits = 0;
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) {
+      i++;
+      j++;
+      continue;
+    }
+    if (++edits > 1) return false;
+    if (a.length > b.length) i++;
+    else if (b.length > a.length) j++;
+    else {
+      i++;
+      j++;
+    }
+  }
+  return edits + (a.length - i) + (b.length - j) <= 1;
 }
 
 // Share of the submitted name's words found in the employee's name (0–1).

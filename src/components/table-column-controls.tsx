@@ -85,7 +85,7 @@ export function blankColumnFilters<K extends string>(columns: readonly { key: K 
   return Object.fromEntries(columns.map((column) => [column.key, ""])) as Record<K, string>;
 }
 
-function SortArrows({
+export function SortArrows({
   active,
   direction,
 }: {

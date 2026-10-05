@@ -338,3 +338,24 @@ function blankLast(leftBlank: boolean, rightBlank: boolean) {
 
   return leftBlank ? 1 : -1;
 }
+
+/** Drive file id of the profile photo among merged form documents, if any. */
+export function profilePhotoFileId(documents: { label: string; fileId: string }[] | undefined): string | null {
+  return documents?.find((document) => /profile|photo|picture|headshot/i.test(document.label))?.fileId ?? null;
+}
+
+/** Thumbnail URL of the profile photo among merged form documents, if any. */
+export function profilePhotoUrl(documents: { label: string; fileId: string }[] | undefined): string | null {
+  const fileId = profilePhotoFileId(documents);
+  return fileId ? `/api/staff-intake/file/${fileId}?thumb=1` : null;
+}
+
+/** True when a YYYY-MM-DD date is before today (local time). */
+export function isExpired(iso: string | null | undefined): boolean {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso ?? "");
+  if (!match) return false;
+  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return date < today;
+}

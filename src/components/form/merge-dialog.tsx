@@ -3,14 +3,18 @@
 import { useMemo, useState } from "react";
 import { useStaffDirectory } from "@/components/use-staff-directory";
 import type { IntakeDocumentRecord, IntakeSubmission } from "@/lib/staff-intake-records";
-import { splitFullName, type StaffEmployee } from "@/lib/staff";
+import { isExpired, profilePhotoFileId, splitFullName, type StaffEmployee } from "@/lib/staff";
 import { nameScore, nameTokens } from "@/lib/name-match";
+import { DocPreview, DocThumb } from "@/components/form/doc-thumb";
+import { ExpiredTag } from "@/components/form/expired-tag";
 
 // Fields that can be merged from a submission onto an employee record.
 const MERGE_FIELDS: {
   key: keyof StaffEmployee;
   label: string;
   from: (s: IntakeSubmission) => string | null | undefined;
+  /** Expiry dates are flagged when already past. */
+  expiry?: boolean;
 }[] = [
   { key: "email", label: "Email", from: (s) => s.email },
   { key: "phone", label: "Phone", from: (s) => s.phone },
@@ -19,15 +23,11 @@ const MERGE_FIELDS: {
   { key: "nationality", label: "Nationality", from: (s) => s.nationality },
   { key: "joiningDate", label: "Joining date", from: (s) => s.joining_date },
   { key: "passportNumber", label: "Passport number", from: (s) => s.passport_number },
-  { key: "passportExpiry", label: "Passport expiry", from: (s) => s.passport_expiry },
+  { key: "passportExpiry", label: "Passport expiry", from: (s) => s.passport_expiry, expiry: true },
   { key: "emiratesIdNumber", label: "Emirates ID number", from: (s) => s.emirates_id_number },
-  { key: "emiratesIdExpiry", label: "Emirates ID expiry", from: (s) => s.emirates_id_expiry },
-  { key: "visaExpiry", label: "Visa expiry", from: (s) => s.visa_expiry },
+  { key: "emiratesIdExpiry", label: "Emirates ID expiry", from: (s) => s.emirates_id_expiry, expiry: true },
+  { key: "visaExpiry", label: "Visa expiry", from: (s) => s.visa_expiry, expiry: true },
 ];
-
-function isImage(fileName: string): boolean {
-  return /\.(jpe?g|png|webp|gif|heic|heif)$/i.test(fileName);
-}
 
 export function MergeDialog({
   submission,
@@ -58,6 +58,11 @@ export function MergeDialog({
   const [checked, setChecked] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(applicable.map((f) => [f.key, true])),
   );
+  const formPhotoId = useMemo(
+    () => profilePhotoFileId(submission.documents.map((d) => ({ label: d.label, fileId: d.file_id }))),
+    [submission],
+  );
+  const [usePhoto, setUsePhoto] = useState(true);
 
   // Best-matching employee for the submitted name (or the same email).
   const suggested = useMemo(() => {
@@ -106,6 +111,7 @@ export function MergeDialog({
             }
           }
         }
+        if (formPhotoId && usePhoto) next.photo = `/api/staff-intake/file/${formPhotoId}?thumb=1`;
         next.importedAt = new Date().toISOString();
         next.intakeSubmissionId = submission.id;
         next.documents = submission.documents.map((document) => ({
@@ -251,17 +257,46 @@ export function MergeDialog({
                     <span>Current value</span>
                     <span>Importing value</span>
                   </div>
-                  {applicable.map((f) => (
-                    <label
-                      key={f.key}
-                      className="grid grid-cols-[2rem_9rem_1fr_1fr] items-center gap-3 border-t border-stone-100 px-3 py-2 text-sm hover:bg-stone-50"
-                    >
-                      <input type="checkbox" checked={checked[f.key] ?? false} onChange={(e) => setChecked((c) => ({ ...c, [f.key]: e.target.checked }))} />
-                      <span className="font-medium text-stone-700">{f.label}</span>
-                      <span className="truncate text-stone-500">{String(selected[f.key] ?? "—") || "—"}</span>
-                      <span className="truncate font-medium text-stone-950">{f.from(submission) || "—"}</span>
+                  {formPhotoId ? (
+                    <label className="grid grid-cols-[2rem_9rem_1fr_1fr] items-center gap-3 border-t border-stone-100 px-3 py-2 text-sm hover:bg-stone-50">
+                      <input type="checkbox" checked={usePhoto} onChange={(e) => setUsePhoto(e.target.checked)} />
+                      <span className="font-medium text-stone-700">Profile picture</span>
+                      <span className="flex items-center">
+                        {selected.photo ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={selected.photo} alt="" className="size-9 rounded-full object-cover" />
+                        ) : (
+                          <span className="text-stone-500">—</span>
+                        )}
+                      </span>
+                      <span className="flex items-center">
+                        <DocThumb fileId={formPhotoId} label="Profile picture" version={submission.updated_at} className="size-9 rounded-full object-cover" />
+                      </span>
                     </label>
-                  ))}
+                  ) : null}
+                  {applicable.map((f) => {
+                    const current = String(selected[f.key] ?? "");
+                    const importing = f.from(submission) ?? "";
+                    const currentExpired = Boolean(f.expiry && isExpired(current));
+                    const importingExpired = Boolean(f.expiry && isExpired(importing));
+                    return (
+                      <label
+                        key={f.key}
+                        className={`grid grid-cols-[2rem_9rem_1fr_1fr] items-center gap-3 border-t border-stone-100 px-3 py-2 text-sm ${importingExpired ? "bg-red-50 hover:bg-red-100/70" : "hover:bg-stone-50"}`}
+                      >
+                        <input type="checkbox" checked={checked[f.key] ?? false} onChange={(e) => setChecked((c) => ({ ...c, [f.key]: e.target.checked }))} />
+                        <span className="font-medium text-stone-700">{f.label}</span>
+                        <span className={`flex min-w-0 items-center ${currentExpired ? "text-red-700" : "text-stone-500"}`}>
+                          <span className="truncate">{current || "—"}</span>
+                          {currentExpired ? <ExpiredTag /> : null}
+                        </span>
+                        <span className={`flex min-w-0 items-center font-medium ${importingExpired ? "text-red-700" : "text-stone-950"}`}>
+                          <span className="truncate">{importing || "—"}</span>
+                          {importingExpired ? <ExpiredTag /> : null}
+                        </span>
+                      </label>
+                    );
+                  })}
                 </div>
 
                 {submission.documents.length ? (
@@ -270,12 +305,7 @@ export function MergeDialog({
                     <div className="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-5">
                       {submission.documents.map((document) => (
                         <button key={document.file_id} type="button" onClick={() => setPreview(document)} className="overflow-hidden rounded-lg border border-stone-200 bg-stone-50 text-left hover:ring-2 hover:ring-[#063f3b]">
-                          {isImage(document.file_name) ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img src={`/api/staff-intake/file/${document.file_id}?thumb=1`} alt={document.label} className="aspect-square w-full object-cover" />
-                          ) : (
-                            <span className="flex aspect-square items-center justify-center px-2 text-center text-xs font-medium text-stone-500">Preview document</span>
-                          )}
+                          <DocThumb fileId={document.file_id} label={document.label} version={submission.updated_at} className="aspect-square w-full object-cover" />
                           <span className="block truncate px-2 py-1 text-xs text-stone-600">{document.label}</span>
                         </button>
                       ))}
@@ -308,12 +338,7 @@ export function MergeDialog({
         <div className="fixed inset-0 z-[60] flex items-center justify-center bg-stone-950/70 p-4" onClick={() => setPreview(null)}>
           <div className="max-h-[90dvh] w-[min(100%,56rem)] overflow-hidden rounded-2xl bg-white" onClick={(event) => event.stopPropagation()}>
             <div className="flex items-center justify-between border-b border-stone-200 px-4 py-3"><span className="font-medium">{preview.label}</span><button type="button" onClick={() => setPreview(null)} aria-label="Close preview">✕</button></div>
-            {isImage(preview.file_name) ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={`/api/staff-intake/file/${preview.file_id}`} alt={preview.label} className="mx-auto max-h-[80dvh] w-auto object-contain" />
-            ) : (
-              <iframe src={`/api/staff-intake/file/${preview.file_id}`} title={preview.label} className="h-[80dvh] w-full" />
-            )}
+            <DocPreview fileId={preview.file_id} fileName={preview.file_name} label={preview.label} version={submission.updated_at} />
           </div>
         </div>
       ) : null}

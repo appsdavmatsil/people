@@ -1,12 +1,8 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/service";
-import {
-  buildFileName,
-  buildFolderName,
-  normalizeIsoDate,
-  todayIso,
-} from "@/lib/staff-intake";
-import { loadFormConfig, type ConfigTextField } from "@/lib/form-config";
+import { buildFolderName, todayIso } from "@/lib/staff-intake";
+import { loadFormConfig } from "@/lib/form-config";
+import { collectTextFields, collectUploads, columnsFromValues } from "@/lib/staff-intake-submit";
 import {
   findOrCreateFolder,
   getDriveClient,
@@ -18,10 +14,6 @@ import {
 // Allow large multipart uploads and ensure Node runtime (googleapis needs it).
 export const runtime = "nodejs";
 export const maxDuration = 60;
-
-const MAX_FILE_BYTES = 15 * 1024 * 1024; // 15 MB per file
-const ALLOWED_MIME_PREFIXES = ["image/"];
-const ALLOWED_MIME_EXACT = ["application/pdf"];
 
 /**
  * Diagnostic endpoint. Reports which env vars are configured and whether the
@@ -51,48 +43,6 @@ export async function GET(): Promise<NextResponse> {
 }
 
 
-type FieldValues = Record<string, string>;
-
-function isAllowedMime(mime: string): boolean {
-  return (
-    ALLOWED_MIME_PREFIXES.some((prefix) => mime.startsWith(prefix)) ||
-    ALLOWED_MIME_EXACT.includes(mime)
-  );
-}
-
-function collectTextFields(
-  form: FormData,
-  textFields: ConfigTextField[],
-): { values: FieldValues; error?: string } {
-  const values: FieldValues = {};
-
-  for (const field of textFields) {
-    const raw = form.get(field.name);
-    const value = typeof raw === "string" ? raw.trim() : "";
-
-    if (field.required && !value) {
-      return { values, error: `${field.label} is required.` };
-    }
-
-    if (value && field.type === "date") {
-      const normalized = normalizeIsoDate(value);
-      if (!normalized) {
-        return { values, error: `${field.label} is not a valid date.` };
-      }
-      values[field.name] = normalized;
-      continue;
-    }
-
-    if (value && field.type === "email" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
-      return { values, error: "Enter a valid email address." };
-    }
-
-    values[field.name] = value;
-  }
-
-  return { values };
-}
-
 export async function POST(request: Request): Promise<NextResponse> {
   let form: FormData;
   try {
@@ -115,49 +65,15 @@ export async function POST(request: Request): Promise<NextResponse> {
   const uploadDate = todayIso();
 
   // Validate files before touching Google Drive.
-  type PendingUpload = {
-    label: string;
-    fileName: string;
-    mimeType: string;
-    buffer: Buffer;
-  };
-  const pending: PendingUpload[] = [];
-
-  for (const doc of config.documents) {
-    const entry = form.get(doc.field);
-
-    if (!(entry instanceof File) || entry.size === 0) {
-      if (doc.required) {
-        return NextResponse.json({ error: `${doc.label} is required.` }, { status: 400 });
-      }
-      continue;
-    }
-
-    if (entry.size > MAX_FILE_BYTES) {
-      return NextResponse.json(
-        { error: `${doc.label} is too large (max 15 MB).` },
-        { status: 400 },
-      );
-    }
-
-    if (!isAllowedMime(entry.type)) {
-      return NextResponse.json(
-        { error: `${doc.label} must be an image or PDF.` },
-        { status: 400 },
-      );
-    }
-
-    const date = doc.dateField ? values[doc.dateField] : uploadDate;
-    const fileName = buildFileName(
-      doc.label,
-      fullName,
-      date,
-      entry.name,
-      entry.type,
-      config.naming.filePattern,
-    );
-    const buffer = Buffer.from(await entry.arrayBuffer());
-    pending.push({ label: doc.label, fileName, mimeType: entry.type, buffer });
+  const { uploads: pending, error: uploadError } = await collectUploads(
+    form,
+    config,
+    values,
+    uploadDate,
+    (doc) => doc.required,
+  );
+  if (uploadError) {
+    return NextResponse.json({ error: uploadError }, { status: 400 });
   }
 
   // Upload to Google Drive.
@@ -182,10 +98,10 @@ export async function POST(request: Request): Promise<NextResponse> {
         item.mimeType,
         item.buffer,
       );
-      uploaded.push({ ...result, label: item.label });
+      uploaded.push({ ...result, label: item.doc.label });
     }
-  } catch (uploadError) {
-    console.error("Staff intake Drive upload failed:", uploadError);
+  } catch (driveError) {
+    console.error("Staff intake Drive upload failed:", driveError);
     return NextResponse.json(
       { error: "Could not upload your documents. Please try again or contact HR." },
       { status: 502 },
@@ -197,19 +113,9 @@ export async function POST(request: Request): Promise<NextResponse> {
   try {
     const supabase = createServiceClient();
     if (supabase) {
-      await supabase.from("staff_intake_submissions").insert({
+      const { error: insertError } = await supabase.from("staff_intake_submissions").insert({
+        ...columnsFromValues(values),
         full_name: fullName,
-        email: values.email,
-        date_of_birth: values.dateOfBirth,
-        phone: values.phone,
-        whatsapp: values.whatsapp,
-        joining_date: values.joiningDate,
-        nationality: values.nationality,
-        passport_number: values.passportNumber,
-        passport_expiry: values.passportExpiry,
-        emirates_id_number: values.emiratesIdNumber,
-        emirates_id_expiry: values.emiratesIdExpiry,
-        visa_expiry: values.visaExpiry,
         drive_folder_id: folderId,
         data: values,
         documents: uploaded.map((file) => ({
@@ -219,6 +125,7 @@ export async function POST(request: Request): Promise<NextResponse> {
           web_view_link: file.webViewLink,
         })),
       });
+      if (insertError) throw insertError;
     }
   } catch (recordError) {
     console.error("Staff intake record write failed:", recordError);
