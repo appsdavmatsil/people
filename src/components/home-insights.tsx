@@ -166,7 +166,7 @@ export function HomeInsights() {
                   <button type="button" aria-label="Close" className="flex size-8 items-center justify-center rounded-lg text-stone-500 hover:bg-stone-100" onClick={() => setJoiningYear(null)}>×</button>
                 </div>
                 <ul className="min-h-0 flex-1 divide-y divide-stone-100 overflow-y-auto px-2 py-2">
-                  {employees.filter((employee) => !employee.archived && employee.joiningDate.startsWith(joiningYear)).sort((a,b) => a.fullName.localeCompare(b.fullName)).map((employee) => (
+                  {employees.filter((employee) => !employee.archived && employee.joiningDate.startsWith(joiningYear)).sort((a,b) => b.joiningDate.localeCompare(a.joiningDate) || a.fullName.localeCompare(b.fullName)).map((employee) => (
                     <li key={employee.id} className="flex items-center gap-3 rounded-xl px-3 py-2.5 hover:bg-stone-50">
                       <EmployeeAvatar employee={{name: employee.fullName, photo: employee.photo}} onOpen={() => { setJoiningYear(null); setProfileEmployee(employee); }} />
                       <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium text-stone-950">{employee.fullName}</span><span className="block truncate text-xs text-stone-500">{employee.position || "Position not set"} · {employee.venue || "Venue not set"} · {formatDate(employee.joiningDate)}</span></span>

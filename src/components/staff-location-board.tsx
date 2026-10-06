@@ -4532,7 +4532,7 @@ function Initials({
     initials(name)
   );
   const className =
-    "flex size-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-stone-900 text-[11px] font-medium text-white";
+    "flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-stone-900 text-xs font-medium text-white";
 
   if (!onOpen) {
     return <span className={className}>{face}</span>;
