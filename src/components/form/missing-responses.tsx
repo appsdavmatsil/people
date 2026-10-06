@@ -21,8 +21,8 @@ const statusPill: Record<Status, { label: string; className: string }> = {
   merged: { label: "Merged", className: "bg-[#063f3b] text-white" },
 };
 
-const th = "whitespace-nowrap px-3 py-2 text-left text-xs font-semibold text-stone-500";
-const td = "whitespace-nowrap px-3 py-2 text-sm text-stone-900 align-middle";
+const th = "px-2.5 py-2 text-left text-xs font-semibold text-stone-500 md:whitespace-nowrap md:px-3";
+const td = "px-2.5 py-2 text-sm text-stone-900 align-middle md:whitespace-nowrap md:px-3";
 
 // Snapshots can leave out the Code column (cells marked data-snapshot-code).
 const CODES_OPTION = { label: "codes", selector: "[data-snapshot-code]" };
@@ -30,9 +30,9 @@ const CODES_OPTION = { label: "codes", selector: "[data-snapshot-code]" };
 /** Edit code an employee uses to update their submission on the public form. */
 function CodeCell({ code }: { code: string | null }) {
   return (
-    <td className={`${td} text-right`} data-snapshot-code>
+    <td className={`${td} whitespace-nowrap text-right`} data-snapshot-code>
       {code ? (
-        <span className="rounded-md bg-stone-100 px-2 py-0.5 font-mono text-sm font-semibold tracking-widest text-stone-900">
+        <span className="rounded-md bg-stone-100 px-1.5 py-0.5 font-mono text-xs font-semibold tracking-wider text-stone-900 md:px-2 md:text-sm md:tracking-widest">
           {code}
         </span>
       ) : (
@@ -102,8 +102,8 @@ export function MissingResponses({ submissions }: { submissions: IntakeSubmissio
   const total = venues.reduce((sum, v) => sum + v.rows.length, 0);
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto pb-10">
-      <div className="mb-4 flex items-baseline justify-between">
+    <div className="min-h-0 flex-1 overflow-y-auto pb-32 md:pb-10">
+      <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-baseline md:justify-between">
         <div>
           <h1 className="text-lg font-semibold text-stone-950">Missing Responses</h1>
           <p className="text-sm text-stone-500">
@@ -111,7 +111,7 @@ export function MissingResponses({ submissions }: { submissions: IntakeSubmissio
             staff update their own submission on the form.
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex shrink-0 items-center justify-between gap-3">
           <p className="text-sm text-stone-500">
             {totalMissing} of {total} missing
           </p>
@@ -131,7 +131,7 @@ export function MissingResponses({ submissions }: { submissions: IntakeSubmissio
 
       {unmatched.length ? (
         <section className="mb-5 overflow-hidden rounded-xl border border-amber-200 bg-white">
-          <div className="flex items-center justify-between gap-3 border-b border-amber-200 bg-amber-50 px-3 py-2">
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-amber-200 bg-amber-50 px-3 py-2">
             <h2 className="text-sm font-semibold text-amber-900">Unmatched submissions</h2>
             <div className="flex items-center gap-3">
               <span className="text-xs text-amber-800">
@@ -140,7 +140,7 @@ export function MissingResponses({ submissions }: { submissions: IntakeSubmissio
               <SnapshotButton fileName={`Unmatched submissions ${today}`} optional={CODES_OPTION} />
             </div>
           </div>
-          <table className="w-full border-collapse text-sm">
+          <div className="overflow-x-auto"><table className="w-full border-collapse text-sm">
             <thead>
               <tr className="border-b border-stone-200">
                 <th className={th}>Submitted name</th>
@@ -154,14 +154,14 @@ export function MissingResponses({ submissions }: { submissions: IntakeSubmissio
               {unmatched.map((s) => (
                 <tr key={s.id} className="border-b border-stone-100 last:border-b-0 hover:bg-stone-50/60">
                   <td className={`${td} font-medium text-stone-950`}>{s.full_name}</td>
-                  <td className={`${td} text-stone-600`}>{s.email || "—"}</td>
-                  <td className={`${td} text-stone-600`}>{formatSubmittedAt(s.created_at)}</td>
-                  <td className={`${td} text-right`} data-snapshot-ignore><button type="button" onClick={()=>setCreating({submission:s,request:employeeRequestFromSubmission(s)})} className="inline-flex h-7 items-center rounded-lg bg-stone-950 px-2.5 text-xs font-semibold text-white hover:bg-stone-800">Create employee</button></td>
+                  <td className={`${td} break-all text-stone-600`}>{s.email || "—"}</td>
+                  <td className={`${td} whitespace-nowrap text-stone-600`}>{formatSubmittedAt(s.created_at)}</td>
+                  <td className={`${td} text-right`} data-snapshot-ignore><button type="button" onClick={()=>setCreating({submission:s,request:employeeRequestFromSubmission(s)})} className="inline-flex h-7 items-center whitespace-nowrap rounded-lg bg-stone-950 px-2.5 text-xs font-semibold text-white hover:bg-stone-800">Create employee</button></td>
                   <CodeCell code={s.edit_code} />
                 </tr>
               ))}
             </tbody>
-          </table>
+          </table></div>
         </section>
       ) : null}
 
@@ -173,7 +173,7 @@ export function MissingResponses({ submissions }: { submissions: IntakeSubmissio
         <div className="space-y-5">
           {venues.map(({ venue, rows, missing }) => (
             <section key={venue} className="overflow-hidden rounded-xl border border-stone-200 bg-white">
-              <div className="flex items-center justify-between gap-3 border-b border-stone-200 bg-stone-50 px-3 py-2">
+              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-stone-200 bg-stone-50 px-3 py-2">
                 <h2 className="text-sm font-semibold text-stone-950">{venue}</h2>
                 <div className="flex items-center gap-3">
                   <span className="text-xs text-stone-500">
@@ -182,11 +182,11 @@ export function MissingResponses({ submissions }: { submissions: IntakeSubmissio
                   <SnapshotButton fileName={`Missing responses - ${venue} ${today}`} optional={CODES_OPTION} />
                 </div>
               </div>
-              <table className="w-full border-collapse text-sm">
+              <div className="overflow-x-auto"><table className="w-full border-collapse text-sm">
                 <thead>
                   <tr className="border-b border-stone-200">
                     <th className={th}>Name</th>
-                    <th className={th}>Position</th>
+                    <th className={`${th} hidden md:table-cell`}>Position</th>
                     <th className={th}>Status</th>
                     <th className={`${th} text-right`} data-snapshot-code>Code</th>
                   </tr>
@@ -197,11 +197,14 @@ export function MissingResponses({ submissions }: { submissions: IntakeSubmissio
                       key={employee.id}
                       className={`border-b border-stone-100 last:border-b-0 ${status === "merged" ? "bg-emerald-50 hover:bg-emerald-100/70" : "hover:bg-stone-50/60"}`}
                     >
-                      <td className={`${td} font-medium text-stone-950`}>{employee.fullName}</td>
-                      <td className={`${td} text-stone-600`}>{employee.position || "—"}</td>
+                      <td className={`${td} font-medium text-stone-950`}>
+                        {employee.fullName}
+                        <span className="block text-xs font-normal text-stone-500 md:hidden">{employee.position || "—"}</span>
+                      </td>
+                      <td className={`${td} hidden text-stone-600 md:table-cell`}>{employee.position || "—"}</td>
                       <td className={td}>
-                        <div className="flex items-center gap-2">
-                          <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${statusPill[status].className}`}>
+                        <div className="flex flex-wrap items-center gap-1.5 md:flex-nowrap md:gap-2">
+                          <span className={`inline-flex whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ${statusPill[status].className}`}>
                             {statusPill[status].label}
                           </span>
                           {status === "submitted" && submission ? (
@@ -210,7 +213,7 @@ export function MissingResponses({ submissions }: { submissions: IntakeSubmissio
                               data-snapshot-ignore
                               onClick={() => setMerging({ submission, employee })}
                               title={`Merge ${submission.full_name}'s submission onto ${employee.fullName}`}
-                              className="inline-flex h-6 items-center gap-1 rounded-lg bg-[#063f3b] px-2 text-xs font-semibold text-white hover:bg-[#052f2c]"
+                              className="inline-flex h-6 shrink-0 items-center gap-1 rounded-lg bg-[#063f3b] px-2 text-xs font-semibold text-white hover:bg-[#052f2c]"
                             >
                               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="size-3.5" aria-hidden="true">
                                 <path d="M6 3v6a6 6 0 0 0 6 6h6M6 21v-6M15 12l3 3-3 3" />
@@ -224,7 +227,7 @@ export function MissingResponses({ submissions }: { submissions: IntakeSubmissio
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </table></div>
             </section>
           ))}
         </div>

@@ -191,6 +191,17 @@ export function AppShell({
     if (!viewport) return;
 
     function syncVisualViewport() {
+      // iOS 26 standalone web apps report a layout viewport shorter than the
+      // screen, which lifts h-dvh layouts and bottom-fixed bars off the bottom edge.
+      const standalone =
+        window.matchMedia("(display-mode: standalone)").matches ||
+        (navigator as Navigator & { standalone?: boolean }).standalone === true;
+      const portrait = window.innerHeight >= window.innerWidth;
+      const screenHeight = portrait
+        ? Math.max(window.screen.width, window.screen.height)
+        : Math.min(window.screen.width, window.screen.height);
+      const gap = standalone ? Math.min(Math.max(0, screenHeight - window.innerHeight), 160) : 0;
+      document.documentElement.style.setProperty("--viewport-gap", `${gap}px`);
       document.documentElement.style.setProperty(
         "--visual-viewport-height",
         `${viewport?.height ?? window.innerHeight}px`,
@@ -204,7 +215,9 @@ export function AppShell({
     syncVisualViewport();
     viewport.addEventListener("resize", syncVisualViewport);
     viewport.addEventListener("scroll", syncVisualViewport);
+    window.addEventListener("orientationchange", syncVisualViewport);
     return () => {
+      window.removeEventListener("orientationchange", syncVisualViewport);
       viewport.removeEventListener("resize", syncVisualViewport);
       viewport.removeEventListener("scroll", syncVisualViewport);
     };
@@ -224,7 +237,7 @@ export function AppShell({
     : 1 - mobileNavCompact * (1 - mobileNavMinimumScale);
 
   return (
-    <div ref={shellRef} className="flex h-dvh min-h-0 flex-1 overflow-hidden">
+    <div ref={shellRef} className="flex h-[calc(100dvh+var(--viewport-gap,0px))] min-h-0 flex-1 overflow-hidden">
       <div
         aria-hidden="true"
         className={`pointer-events-none fixed left-1/2 z-50 grid size-9 -translate-x-1/2 place-items-center rounded-full border border-white/60 bg-white/90 text-stone-700 shadow-lg backdrop-blur-xl transition-opacity duration-150 md:hidden ${
@@ -338,7 +351,7 @@ export function AppShell({
           </main>
         </PrivacyProvider>
       </div>
-      <div className="pointer-events-none fixed inset-x-0 bottom-[max(10px,env(safe-area-inset-bottom))] z-30 flex justify-center px-4 md:hidden">
+      <div className="pointer-events-none fixed inset-x-0 bottom-[calc(max(10px,env(safe-area-inset-bottom))-var(--viewport-gap,0px))] z-30 flex justify-center px-4 md:hidden">
         <nav
           aria-label="Mobile pages"
           className="pointer-events-auto w-full max-w-md rounded-full border border-black/[0.06] bg-white/[0.94] p-1.5 shadow-[0_8px_28px_rgb(0_0_0/0.10),0_1px_3px_rgb(0_0_0/0.05)] backdrop-blur-[20px] backdrop-saturate-[160%]"
