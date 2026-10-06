@@ -405,7 +405,7 @@ function GraphPicker({
       <select
         value={value}
         onChange={(event) => onChange(event.target.value as "positions" | "promotions")}
-        className="h-7 cursor-pointer appearance-none rounded-full border border-stone-200 bg-white pr-7 pl-3 text-[11px] font-medium text-stone-700 outline-none hover:bg-stone-50 focus:ring-1 focus:ring-stone-300"
+        className="h-8 cursor-pointer appearance-none rounded-full border border-stone-200 md:h-7 bg-white pr-7 pl-3 text-[11px] font-medium text-stone-700 outline-none hover:bg-stone-50 focus:ring-1 focus:ring-stone-300"
       >
         <option value="positions">Positions</option>
         <option value="promotions">Promotions</option>
@@ -440,7 +440,7 @@ function InsightCard({
 
   return (
     <section className="relative flex min-h-80 flex-col overflow-hidden rounded-[1.35rem] bg-white shadow-[0_1px_1px_rgba(28,25,23,0.04),0_18px_40px_-28px_rgba(28,25,23,0.45)] ring-1 ring-stone-900/6 lg:min-h-0">
-      <div className="flex items-start justify-between gap-3 px-5 pt-4 pr-40">
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-3 gap-y-3 px-5 pt-4 md:block md:pr-40">
         <div className="min-w-0">
           <h2 className="flex items-center gap-2 text-[13px] font-medium text-stone-500"><span className="text-stone-700"><SectionIcon title={title}/></span>{title}</h2>
           <div className="mt-1 flex min-w-0 items-center gap-4 whitespace-nowrap">
@@ -452,18 +452,17 @@ function InsightCard({
             </p>
           </div>
         </div>
-      </div>
-      <div className="absolute top-3.5 right-3.5 z-10 flex items-center gap-2">
-        {headerContent}
+        <div className="contents md:absolute md:top-3.5 md:right-3.5 md:z-10 md:flex md:items-center md:gap-2">
+        {headerContent ? <div className="col-span-2 row-start-2 flex items-center md:contents">{headerContent}</div> : null}
         {!hideDepartment ? (
-          <label htmlFor={selectId}>
+          <label htmlFor={selectId} className="col-start-2 row-start-1">
             <span className="sr-only">Department for {title}</span>
             <span className="relative block">
               <select
                 id={selectId}
                 value={departmentId}
                 onChange={(event) => onDepartment(event.target.value)}
-                className="h-7 max-w-36 cursor-pointer appearance-none truncate rounded-full bg-stone-100/80 pr-6 pl-2.5 text-[11px] text-stone-500 outline-none hover:bg-stone-100 hover:text-stone-800 focus:bg-white focus:text-stone-900 focus:ring-1 focus:ring-stone-300"
+                className="h-8 max-w-40 cursor-pointer appearance-none truncate rounded-full bg-stone-100/80 md:h-7 md:max-w-36 pr-6 pl-2.5 text-[11px] text-stone-500 outline-none hover:bg-stone-100 hover:text-stone-800 focus:bg-white focus:text-stone-900 focus:ring-1 focus:ring-stone-300"
               >
                 <option value="">All departments</option>
                 {departments.map((department) => (
@@ -476,6 +475,7 @@ function InsightCard({
             </span>
           </label>
         ) : null}
+        </div>
       </div>
       <div className="flex min-h-0 flex-1 flex-col px-4 pt-2 pb-4">{children}</div>
     </section>
@@ -632,7 +632,7 @@ function StaffSalaryChart({ points }: { points: StaffSalaryPoint[] }) {
 
 function StaffSalaryLegend() {
   return (
-    <div className="flex min-w-0 items-center gap-3 text-[10px] text-stone-400">
+    <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-stone-400 md:flex-nowrap md:text-[10px]">
       <span className="inline-flex items-center gap-1.5"><span className="size-2 rounded-[3px] bg-stone-800" />Salary</span>
       <span className="inline-flex items-center gap-1.5"><span className="h-1.5 w-3 rounded-full bg-orange-500/80" />Staff</span>
       <span className="inline-flex items-center gap-1.5"><span className="w-3 border-t border-dashed border-stone-400" />Average salary</span>
@@ -678,7 +678,7 @@ function WorkforceRow({
   const percents = percentShares(share.slices, share.total);
 
   return (
-    <div className="grid min-h-0 flex-1 grid-cols-[minmax(7rem,0.8fr)_minmax(5rem,1.6fr)_2rem] items-center gap-3 border-b border-stone-100 py-0.5 last:border-b-0">
+    <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_1.75rem] items-center gap-3 md:grid-cols-[minmax(7rem,0.8fr)_minmax(5rem,1.6fr)_2rem] border-b border-stone-100 py-0.5 last:border-b-0">
       <p className="min-w-0 truncate text-[11px] font-medium text-stone-950">
         {share.venue.label}
         <span className="ml-1.5 font-normal text-stone-400">{share.venue.name}</span>
@@ -709,7 +709,7 @@ function WorkforceSummary({ shares }: { shares: VenueShare[] }) {
   }));
 
   return (
-    <div className="flex min-w-0 items-center gap-3 text-[10px] text-stone-500">
+    <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-stone-500 md:flex-nowrap md:text-[10px]">
       {categories.map((category) => (
         <span key={category.key} className="inline-flex items-center gap-1 whitespace-nowrap">
           <span className="size-1.5 rounded-full" style={{ backgroundColor: category.color }} />

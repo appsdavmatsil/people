@@ -8,8 +8,12 @@ export function PwaRegistration() {
       return;
     }
 
+    const { hostname } = window.location;
     const localDevelopment =
-      window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+      process.env.NODE_ENV !== "production" ||
+      hostname === "localhost" ||
+      hostname.endsWith(".localhost") ||
+      hostname === "127.0.0.1";
     if (localDevelopment) {
       void navigator.serviceWorker.getRegistrations().then((registrations) =>
         Promise.all(
@@ -39,7 +43,8 @@ export function PwaRegistration() {
     function register() {
       void navigator.serviceWorker
         .register("/sw.js", { scope: "/", updateViaCache: "none" })
-        .then((registration) => registration.update());
+        .then((registration) => registration.update())
+        .catch(() => undefined);
     }
 
     navigator.serviceWorker.addEventListener("controllerchange", onControllerChange);

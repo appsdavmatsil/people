@@ -351,7 +351,7 @@ export function AppShell({
                 : undefined,
           }}
         >
-          <div className="grid grid-cols-5 gap-0.5">
+          <div className="grid gap-0.5" style={{ gridTemplateColumns: `repeat(${pages.length}, minmax(0, 1fr))` }}>
             {pages.map((page) => {
               const active = isAppPage(pathname, page.href);
               const Icon = pageIcons[page.href];
@@ -363,13 +363,13 @@ export function AppShell({
                   aria-current={active ? "page" : undefined}
                   aria-label={page.title}
                   title={page.title}
-                  className={`flex min-h-[3.25rem] min-w-0 items-center justify-center rounded-full px-1 py-1 transition-[background-color,color,transform] duration-200 active:scale-95 ${
+                  className={`flex min-h-12 min-w-0 items-center justify-center rounded-full px-0.5 py-1 transition-[background-color,color,transform] duration-200 active:scale-95 ${
                     active
                       ? "bg-black/[0.10] text-black [&_svg]:stroke-[2.25]"
                       : "text-black/75 [&_svg]:stroke-[1.85]"
                   }`}
                 >
-                  <span className="grid size-8 place-items-center [&_svg]:size-6">
+                  <span className="grid size-7 place-items-center [&_svg]:size-[22px]">
                     <Icon />
                   </span>
                   <span className="sr-only">{page.title}</span>
