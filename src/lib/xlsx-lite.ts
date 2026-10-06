@@ -5,6 +5,7 @@ const decoder = new TextDecoder();
 export type SheetCell = {
   text: string;
   number: number | null;
+  style?: "title" | "subtitle" | "header" | "body" | "money" | "section";
 };
 
 type ZipEntry = {
@@ -83,15 +84,26 @@ function sheetXml(rows: SheetCell[][], lastRow: number) {
 
 function cellXml(cell: SheetCell, columnIndex: number, rowNumber: number) {
   const ref = `${columnName(columnIndex)}${rowNumber}`;
+  const style = cellStyle(cell);
   if (cell.number != null && cell.text === "") {
-    return `<c r="${ref}" s="2"><v>${formatNumber(cell.number)}</v></c>`;
+    return `<c r="${ref}" s="${style}"><v>${formatNumber(cell.number)}</v></c>`;
   }
 
   if (!cell.text) {
-    return "";
+    return cell.style ? `<c r="${ref}" s="${style}"/>` : "";
   }
 
-  return `<c r="${ref}" t="inlineStr" s="1"><is><t xml:space="preserve">${escapeXml(cell.text)}</t></is></c>`;
+  return `<c r="${ref}" t="inlineStr" s="${style}"><is><t xml:space="preserve">${escapeXml(cell.text)}</t></is></c>`;
+}
+
+function cellStyle(cell: SheetCell) {
+  if (cell.style === "title") return 3;
+  if (cell.style === "subtitle") return 4;
+  if (cell.style === "header") return 5;
+  if (cell.style === "body") return 6;
+  if (cell.style === "money") return 7;
+  if (cell.style === "section") return 8;
+  return cell.number != null && cell.text === "" ? 2 : 1;
 }
 
 function formatNumber(value: number) {
@@ -429,17 +441,32 @@ const workbookRelsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 
 const stylesXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-  <fonts count="1"><font><sz val="11"/><name val="Calibri"/><family val="2"/></font></fonts>
-  <fills count="2">
+  <fonts count="5">
+    <font><sz val="11"/><name val="Arial"/><family val="2"/></font>
+    <font><b/><sz val="16"/><color rgb="FF1C1917"/><name val="Arial"/><family val="2"/></font>
+    <font><i/><sz val="10"/><color rgb="FF78716C"/><name val="Arial"/><family val="2"/></font>
+    <font><b/><sz val="10"/><color rgb="FFFFFFFF"/><name val="Arial"/><family val="2"/></font>
+    <font><b/><sz val="11"/><color rgb="FF1C1917"/><name val="Arial"/><family val="2"/></font>
+  </fonts>
+  <fills count="5">
     <fill><patternFill patternType="none"/></fill>
     <fill><patternFill patternType="gray125"/></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FF292524"/><bgColor indexed="64"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFF5F5F4"/><bgColor indexed="64"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FFE7E5E4"/><bgColor indexed="64"/></patternFill></fill>
   </fills>
-  <borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>
+  <borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"><color rgb="FFD6D3D1"/></left><right style="thin"><color rgb="FFD6D3D1"/></right><top style="thin"><color rgb="FFD6D3D1"/></top><bottom style="thin"><color rgb="FFD6D3D1"/></bottom><diagonal/></border></borders>
   <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-  <cellXfs count="3">
+  <cellXfs count="9">
     <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
     <xf numFmtId="49" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
     <xf numFmtId="4" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
+    <xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/>
+    <xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"/>
+    <xf numFmtId="0" fontId="3" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"><alignment horizontal="center" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1"><alignment vertical="center"/></xf>
+    <xf numFmtId="4" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1"><alignment horizontal="right" vertical="center"/></xf>
+    <xf numFmtId="0" fontId="4" fillId="4" borderId="0" xfId="0" applyFont="1" applyFill="1"/>
   </cellXfs>
   <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
 </styleSheet>`;

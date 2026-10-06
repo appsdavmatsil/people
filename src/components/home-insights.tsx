@@ -182,8 +182,15 @@ export function HomeInsights() {
   );
 }
 
-function sectionSymbol(title: string) {
-  return ({ "Staff and salary": "◔", Workforce: "◉", Positions: "◌", Promotions: "↗", "Joining years": "◎", "Work celebrations": "✦", "Birthday celebrations": "♢" } as Record<string, string>)[title] ?? "•";
+function SectionIcon({ title }: { title: string }) {
+  const common = { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, className: "size-[18px] shrink-0" };
+  if (title === "Positions") return <svg {...common}><circle cx="8" cy="8" r="3"/><path d="M3 19c.5-3.6 2.2-5.5 5-5.5s4.5 1.9 5 5.5M16 7h5M16 12h5M16 17h5"/></svg>;
+  if (title === "Joining years") return <svg {...common}><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4M17 3v4M3 10h18M8 14h3v3H8z"/></svg>;
+  if (title === "Work celebrations") return <svg {...common}><path d="M8 7V5.5A1.5 1.5 0 0 1 9.5 4h5A1.5 1.5 0 0 1 16 5.5V7M4 8h16v11H4zM4 12h16M10 12v2h4v-2"/></svg>;
+  if (title === "Birthday celebrations") return <svg {...common}><path d="M5 11h14v9H5zM4 11h16M8 11V8h8v3M12 8V5"/><path d="M12 5c-1.2-1-.8-2.2 0-3 .8.8 1.2 2 0 3Z"/></svg>;
+  if (title === "Promotions") return <svg {...common}><path d="M5 17 17 5M10 5h7v7"/></svg>;
+  if (title === "Staff and salary") return <svg {...common}><circle cx="12" cy="12" r="8"/><path d="M14.5 9.5c-.4-.7-1.2-1-2.3-1-1.3 0-2.2.6-2.2 1.5 0 2.4 5 1 5 3.5 0 1-.9 1.7-2.5 1.7-1.2 0-2.2-.4-2.8-1.2M12.5 7v10"/></svg>;
+  return <svg {...common}><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></svg>;
 }
 
 type Celebration = {
@@ -211,7 +218,7 @@ function CelebrationCard({
   return (
     <section className="flex min-h-44 flex-col overflow-hidden rounded-[1.35rem] bg-white px-5 py-4 shadow-[0_1px_1px_rgba(28,25,23,0.04),0_18px_40px_-28px_rgba(28,25,23,0.45)] ring-1 ring-stone-900/6 lg:min-h-0">
       <div className="flex items-baseline justify-between gap-3">
-        <h2 className="flex items-center gap-1.5 text-[13px] font-medium text-stone-500"><span className="text-base leading-none text-stone-700">{sectionSymbol(title)}</span>{title}</h2>
+        <h2 className="flex items-center gap-2 text-[13px] font-medium text-stone-500"><span className="text-stone-700"><SectionIcon title={title}/></span>{title}</h2>
         <span className="rounded-full bg-stone-100 px-2 py-0.5 text-[11px] font-semibold text-stone-600 tabular-nums">
           {celebrations.length}
         </span>
@@ -435,7 +442,7 @@ function InsightCard({
     <section className="relative flex min-h-80 flex-col overflow-hidden rounded-[1.35rem] bg-white shadow-[0_1px_1px_rgba(28,25,23,0.04),0_18px_40px_-28px_rgba(28,25,23,0.45)] ring-1 ring-stone-900/6 lg:min-h-0">
       <div className="flex items-start justify-between gap-3 px-5 pt-4 pr-40">
         <div className="min-w-0">
-          <h2 className="flex items-center gap-1.5 text-[13px] font-medium text-stone-500"><span className="text-base leading-none text-stone-700">{sectionSymbol(title)}</span>{title}</h2>
+          <h2 className="flex items-center gap-2 text-[13px] font-medium text-stone-500"><span className="text-stone-700"><SectionIcon title={title}/></span>{title}</h2>
           <div className="mt-1 flex min-w-0 items-center gap-4 whitespace-nowrap">
             <p className="flex shrink-0 items-baseline gap-2">
               <span className="text-[1.7rem] leading-none font-semibold tracking-tight text-stone-950 tabular-nums">
@@ -804,25 +811,26 @@ function JoiningYearsRing({ points, onSelect, expanded = false }: { points: { ye
   const total = points.reduce((sum, point) => sum + point.count, 0);
   const slices = points.map((point, index) => ({ key: point.year, label: point.year, value: point.count, color: ["#1c1917", "#a8a29e", "#c2410c", "#0f3026", "#a91d2a"][index % 5], detail: "Joining year" }));
   return (
-    <div className={`flex h-full min-h-0 items-center overflow-hidden ${expanded ? "justify-center gap-10 px-6" : "gap-2"}`}>
+    <div className={`flex h-full min-h-0 items-center overflow-hidden ${expanded ? "gap-7 px-5" : "gap-2"}`}>
       <Ring
         slices={slices}
         total={total}
         venue="Joining years"
-        className={`${expanded ? "size-48" : "size-24"} shrink-0`}
+        className={`${expanded ? "aspect-square h-full max-h-56 min-h-0 w-auto max-w-[46%]" : "size-24"} shrink-0`}
+        strokeWidth={expanded ? 24 : 13}
       />
-      <div className={`flex h-full min-h-0 min-w-0 flex-col overflow-hidden ${expanded ? "w-40 flex-none justify-center py-2" : "flex-1"}`}>
-        <p className={`mb-1 shrink-0 text-xs font-medium text-stone-700 ${expanded ? "text-center" : ""}`}>Joining years</p>
-        <ul className="min-h-0 flex-1 space-y-0.5 overflow-y-scroll pr-1 [scrollbar-gutter:stable]">
+      <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden py-2">
+        <ul className="flex min-h-0 flex-1 flex-col justify-center gap-1 overflow-y-auto pr-1 [scrollbar-gutter:stable]">
           {points.map((point) => (
             <li key={point.year}>
               <button
                 type="button"
                 onClick={() => onSelect(point.year)}
-                className={`grid w-full grid-cols-[3.5rem_2.5rem] justify-center gap-2 rounded px-1 py-0.5 text-stone-600 hover:bg-stone-100 hover:text-stone-950 ${expanded ? "text-xs" : "text-[11px]"}`}
+                className={`grid w-full grid-cols-[3.5rem_minmax(2rem,1fr)_2rem] items-center gap-2 rounded px-1.5 py-1 text-stone-600 hover:bg-stone-100 hover:text-stone-950 ${expanded ? "text-xs" : "text-[11px]"}`}
               >
-                <span className="text-right">{point.year}</span>
-                <b className="text-left">{point.count}</b>
+                <span className="font-medium text-stone-800">{point.year}</span>
+                <span className="h-1.5 overflow-hidden rounded-full bg-stone-100"><span className="block h-full rounded-full bg-stone-800" style={{width:`${total ? Math.max(5, point.count / total * 100) : 0}%`}} /></span>
+                <b className="text-right tabular-nums">{point.count}</b>
               </button>
             </li>
           ))}
