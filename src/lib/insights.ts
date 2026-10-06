@@ -1,6 +1,6 @@
 import { sameName, type DirectoryLookups } from "@/lib/directory-lookups";
 import type { HiringRole } from "@/lib/hiring";
-import { sameLocationName, type LocationReference } from "@/lib/locations";
+import { locationMatches, type LocationReference } from "@/lib/locations";
 import type { OutsourcedPerson } from "@/lib/outsourced";
 import type { StaffPromotion } from "@/lib/promotions";
 import { roundMoney, type StaffEmployee } from "@/lib/staff";
@@ -10,6 +10,7 @@ export type ChartVenue = {
   label: string;
   name: string;
   color: string;
+  aliases?: string[];
 };
 
 export type StaffSalaryPoint = {
@@ -57,6 +58,7 @@ export function chartVenues(locations: LocationReference[], boardIds: string[] |
     label: location.nickname,
     name: location.venueName,
     color: location.color || "#44403c",
+    aliases: location.aliases,
   }));
 }
 
@@ -298,11 +300,18 @@ function findVenue(venueName: string, venues: ChartVenue[]) {
     return null;
   }
 
-  return (
-    venues.find(
-      (venue) => sameLocationName(venue.name, cleaned) || sameLocationName(venue.label, cleaned),
-    ) ?? null
-  );
+  return venues.find((venue) =>
+    locationMatches(
+      {
+        id: venue.id,
+        nickname: venue.label,
+        venueName: venue.name,
+        color: venue.color,
+        aliases: venue.aliases,
+      },
+      cleaned,
+    ),
+  ) ?? null;
 }
 
 function positionDepartmentId(positionName: string, lookups: DirectoryLookups) {

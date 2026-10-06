@@ -10,6 +10,7 @@ export type LocationReference = {
   nickname: string;
   venueName: string;
   color: string;
+  aliases?: string[];
 };
 
 /** Header colors sampled from each venue's brand file. */
@@ -134,6 +135,12 @@ export function sameLocationName(left: string, right: string) {
   return normalizeLocationName(left).toLowerCase() === normalizeLocationName(right).toLowerCase();
 }
 
+export function locationMatches(location: LocationReference, value: string) {
+  return [location.nickname, location.venueName, ...(location.aliases ?? [])].some((name) =>
+    sameLocationName(name, value),
+  );
+}
+
 export function venueNickname(
   venue: string,
   locations: { nickname: string; venueName: string }[],
@@ -190,7 +197,19 @@ function normalizeLocations(value: unknown): LocationReference[] {
 
     const id = typeof item.id === "string" && item.id.trim() ? item.id : crypto.randomUUID();
     const color = normalizeLocationColor(typeof item.color === "string" ? item.color : "", nickname);
-    locations.push({ id, nickname, venueName, color });
+    const seed = seedLocations.find((location) => location.id === id);
+    const aliases = [
+      ...(Array.isArray(item.aliases) ? item.aliases.filter((alias): alias is string => typeof alias === "string") : []),
+      ...(seed ? [seed.nickname, seed.venueName] : []),
+    ]
+      .map(normalizeLocationName)
+      .filter((alias, index, all) =>
+        alias &&
+        !sameLocationName(alias, nickname) &&
+        !sameLocationName(alias, venueName) &&
+        all.findIndex((item) => sameLocationName(item, alias)) === index,
+      );
+    locations.push({ id, nickname, venueName, color, aliases });
   }
 
   return locations;

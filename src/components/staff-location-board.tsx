@@ -37,7 +37,7 @@ import {
   type StaffPromotion,
 } from "@/lib/promotions";
 import { type OutsourcedPerson } from "@/lib/outsourced";
-import { sameLocationName, type LocationReference } from "@/lib/locations";
+import { locationMatches, sameLocationName, type LocationReference } from "@/lib/locations";
 import { featureIsProtected, salaryHidden } from "@/lib/privacy";
 import {
   formatDate,
@@ -2039,9 +2039,7 @@ function PlacementBoard({
       return false;
     }
 
-    return (
-      sameLocationName(venue, location.venueName) || sameLocationName(venue, location.nickname)
-    );
+    return locationMatches(location, venue);
   }
 
   function hiringAt(locationId: string | null) {
@@ -5436,10 +5434,7 @@ function locationIdForVenue(venue: string, locations: LocationReference[]) {
     return null;
   }
 
-  const match = locations.find(
-    (location) =>
-      sameLocationName(location.venueName, cleaned) || sameLocationName(location.nickname, cleaned),
-  );
+  const match = locations.find((location) => locationMatches(location, cleaned));
   return match?.id ?? null;
 }
 
@@ -5604,10 +5599,7 @@ function boardItemId(item: BoardItem) {
 }
 
 function locationIdForRole(role: HiringRole, locations: LocationReference[]) {
-  const match = locations.find(
-    (location) =>
-      sameLocationName(role.venue, location.venueName) || sameLocationName(role.venue, location.nickname),
-  );
+  const match = locations.find((location) => locationMatches(location, role.venue));
   return match?.id ?? null;
 }
 

@@ -7,6 +7,7 @@ import type { StaffEmployee } from "@/lib/staff";
 import { useStaffDirectory } from "@/components/use-staff-directory";
 import { namesMatch } from "@/lib/name-match";
 import { MergeDialog } from "@/components/form/merge-dialog";
+import { EmployeeFormDialog, type EmployeeFormRequest } from "@/components/employee-form-dialog";
 import { SnapshotButton } from "@/components/snapshot-button";
 import { formatSubmittedAt } from "@/lib/submitted-at";
 
@@ -42,11 +43,12 @@ function CodeCell({ code }: { code: string | null }) {
 }
 
 export function MissingResponses({ submissions }: { submissions: IntakeSubmission[] }) {
-  const { employees } = useStaffDirectory();
+  const { employees, update } = useStaffDirectory();
 
   const router = useRouter();
   const [refreshing, startRefresh] = useTransition();
   const [merging, setMerging] = useState<{ submission: IntakeSubmission; employee: StaffEmployee } | null>(null);
+  const [creating, setCreating] = useState<{ submission: IntakeSubmission; request: EmployeeFormRequest } | null>(null);
 
   const { venues, unmatched } = useMemo(() => {
     function matches(s: IntakeSubmission, e: StaffEmployee): boolean {
@@ -133,7 +135,7 @@ export function MissingResponses({ submissions }: { submissions: IntakeSubmissio
             <h2 className="text-sm font-semibold text-amber-900">Unmatched submissions</h2>
             <div className="flex items-center gap-3">
               <span className="text-xs text-amber-800">
-                {unmatched.length} not linked to any employee · merge them from Form Responses
+                {unmatched.length} not linked to any employee
               </span>
               <SnapshotButton fileName={`Unmatched submissions ${today}`} optional={CODES_OPTION} />
             </div>
@@ -144,6 +146,7 @@ export function MissingResponses({ submissions }: { submissions: IntakeSubmissio
                 <th className={th}>Submitted name</th>
                 <th className={th}>Email</th>
                 <th className={th}>Submitted</th>
+                <th className={`${th} text-right`} data-snapshot-ignore>Action</th>
                 <th className={`${th} text-right`} data-snapshot-code>Code</th>
               </tr>
             </thead>
@@ -153,6 +156,7 @@ export function MissingResponses({ submissions }: { submissions: IntakeSubmissio
                   <td className={`${td} font-medium text-stone-950`}>{s.full_name}</td>
                   <td className={`${td} text-stone-600`}>{s.email || "—"}</td>
                   <td className={`${td} text-stone-600`}>{formatSubmittedAt(s.created_at)}</td>
+                  <td className={`${td} text-right`} data-snapshot-ignore><button type="button" onClick={()=>setCreating({submission:s,request:employeeRequestFromSubmission(s)})} className="inline-flex h-7 items-center rounded-lg bg-stone-950 px-2.5 text-xs font-semibold text-white hover:bg-stone-800">Create employee</button></td>
                   <CodeCell code={s.edit_code} />
                 </tr>
               ))}
@@ -232,6 +236,9 @@ export function MissingResponses({ submissions }: { submissions: IntakeSubmissio
           onClose={() => setMerging(null)}
         />
       ) : null}
+      <EmployeeFormDialog request={creating?.request??null} onSave={(employee)=>{const submission=creating?.submission;if(!submission)return;update((current)=>[...current,{...employee,intakeSubmissionId:submission.id,importedAt:new Date().toISOString(),documents:submission.documents.map((document)=>({label:document.label,fileId:document.file_id,fileName:document.file_name,webViewLink:document.web_view_link}))}]);setCreating(null);}} />
     </div>
   );
 }
+
+function employeeRequestFromSubmission(submission:IntakeSubmission):EmployeeFormRequest {const names=submission.full_name.trim().split(/\s+/);return{token:Date.now(),employee:null,description:"Complete the role, venue and salary, then save this submitted person to the directory.",seed:{fullName:submission.full_name,firstName:names[0]??"",lastName:names.slice(1).join(" "),nationality:submission.nationality??"",email:submission.email,phone:submission.phone??"",whatsapp:submission.whatsapp??"",dateOfBirth:submission.date_of_birth??"",joiningDate:submission.joining_date??"",passportNumber:submission.passport_number??"",passportExpiry:submission.passport_expiry??"",emiratesIdNumber:submission.emirates_id_number??"",emiratesIdExpiry:submission.emirates_id_expiry??"",visaExpiry:submission.visa_expiry??""},documents:submission.documents.map((document)=>({label:document.label,fileId:document.file_id,fileName:document.file_name,webViewLink:document.web_view_link}))};}

@@ -15,6 +15,7 @@ import {
   defaultLocationColor,
   normalizeLocationColor,
   normalizeLocationName,
+  locationMatches,
   sameLocationName,
   type LocationReference,
 } from "@/lib/locations";
@@ -27,6 +28,7 @@ import { useOutsourced } from "@/components/use-outsourced";
 import { useStaffDirectory } from "@/components/use-staff-directory";
 import { useEvents } from "@/components/use-events";
 import { useLocations } from "@/components/use-locations";
+import { useHiring } from "@/components/use-hiring";
 import { normalizeEventName, sameEventName, type EventDefinition } from "@/lib/events";
 
 const settingsTabs = [
@@ -57,6 +59,9 @@ const colorInputClass =
 export function SettingsScreen({ initialTab = "directory" }: { initialTab?: SettingsTab }) {
   const { lookups, update } = useDirectoryLookups();
   const { locations, update: updateLocations } = useLocations();
+  const { update: updateEmployees } = useStaffDirectory();
+  const { update: updateOutsourced } = useOutsourced();
+  const { update: updateHiring } = useHiring();
   const { events, update: updateEvents } = useEvents();
   const privacy = usePrivacy();
   const [settingsTab, setSettingsTab] = useState<SettingsTab>(initialTab);
@@ -135,7 +140,17 @@ export function SettingsScreen({ initialTab = "directory" }: { initialTab?: Sett
             Nicknames stand in for venue names. Saved in this browser.
           </p>
           <div className="mt-4 min-h-0 flex-1 overflow-auto">
-            <LocationsPanel locations={locations} update={updateLocations} />
+            <LocationsPanel
+              locations={locations}
+              update={updateLocations}
+              onRename={(previous, next) => {
+                const replaceVenue = <T extends { venue: string }>(item: T) =>
+                  locationMatches(previous, item.venue) ? { ...item, venue: next.venueName } : item;
+                updateEmployees((current) => current.map(replaceVenue));
+                updateOutsourced((current) => current.map(replaceVenue));
+                updateHiring((current) => current.map(replaceVenue));
+              }}
+            />
           </div>
         </div>
       ) : (
@@ -199,9 +214,11 @@ export function SettingsScreen({ initialTab = "directory" }: { initialTab?: Sett
 function LocationsPanel({
   locations,
   update,
+  onRename,
 }: {
   locations: LocationReference[];
   update: (next: LocationReference[]) => void;
+  onRename: (previous: LocationReference, next: LocationReference) => void;
 }) {
   const [nickname, setNickname] = useState("");
   const [venueName, setVenueName] = useState("");
@@ -255,18 +272,19 @@ function LocationsPanel({
       return;
     }
 
+    const nextLocation = {
+      ...location,
+      nickname: cleanedNickname,
+      venueName: cleanedVenue,
+      color: normalizeLocationColor(draftColor, cleanedNickname),
+      aliases: [...(location.aliases ?? []), location.nickname, location.venueName],
+    };
     update(
       locations.map((item) =>
-        item.id === location.id
-          ? {
-              ...item,
-              nickname: cleanedNickname,
-              venueName: cleanedVenue,
-              color: normalizeLocationColor(draftColor, cleanedNickname),
-            }
-          : item,
+        item.id === location.id ? nextLocation : item,
       ),
     );
+    onRename(location, nextLocation);
     setEditingId(null);
     setError("");
   }

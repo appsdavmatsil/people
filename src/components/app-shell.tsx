@@ -3,6 +3,7 @@
 import { Fragment, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import QRCode from "qrcode";
 import { PrivacyGate } from "@/components/privacy-gate";
 import { PrivacyProvider } from "@/components/privacy-provider";
 import { WorkspaceSync } from "@/components/workspace-sync";
@@ -36,6 +37,9 @@ export function AppShell({
   const [pullDistance, setPullDistance] = useState(0);
   const [pulling, setPulling] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [formLinkOpen, setFormLinkOpen] = useState(false);
+  const [formLink, setFormLink] = useState("");
+  const [formQr, setFormQr] = useState("");
   const shellRef = useRef<HTMLDivElement>(null);
   const pullStartRef = useRef<{ x: number; y: number } | null>(null);
   const pullDistanceRef = useRef(0);
@@ -45,7 +49,17 @@ export function AppShell({
 
   useEffect(() => {
     setCollapsed(window.localStorage.getItem(sidebarCollapsedKey) === "1");
+    setFormLink(`${window.location.origin}/staff-details`);
   }, []);
+
+  useEffect(() => {
+    if (!formLinkOpen || !formLink) return;
+    let cancelled = false;
+    void QRCode.toDataURL(formLink, { width: 240, margin: 1, color: { dark: "#1c1917", light: "#ffffff" } }).then((value) => {
+      if (!cancelled) setFormQr(value);
+    });
+    return () => { cancelled = true; };
+  }, [formLink, formLinkOpen]);
 
   useEffect(() => {
     mobileNavCompactRef.current = 0;
@@ -289,6 +303,16 @@ export function AppShell({
               </Fragment>
             );
           })}
+          <button
+            type="button"
+            onClick={() => setFormLinkOpen(true)}
+            aria-label="Public form link"
+            title={collapsed ? "Public form link" : undefined}
+            className="mt-auto mb-2 flex h-10 items-center overflow-hidden rounded-lg text-base whitespace-nowrap text-stone-600 hover:bg-white/70 hover:text-stone-950"
+          >
+            <span className={`grid size-10 shrink-0 place-items-center ${collapsed ? "md:[&_svg]:size-7" : ""}`}><LinkIcon /></span>
+            <span className="overflow-hidden pr-2.5 whitespace-nowrap">Public form link</span>
+          </button>
         </nav>
       </aside>
 
@@ -355,9 +379,21 @@ export function AppShell({
           </div>
         </nav>
       </div>
+      {formLinkOpen ? (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-stone-950/40 p-4" onClick={() => setFormLinkOpen(false)}>
+          <div role="dialog" aria-modal="true" aria-label="Public form link" className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl" onClick={(event) => event.stopPropagation()}>
+            <div className="flex items-start justify-between gap-3"><div><h2 className="font-semibold text-stone-950">Public staff form</h2><p className="mt-1 text-sm text-stone-500">Scan the QR code or share the link.</p></div><button type="button" onClick={() => setFormLinkOpen(false)} className="grid size-8 place-items-center rounded-lg text-stone-500 hover:bg-stone-100" aria-label="Close">×</button></div>
+            <div className="mt-4 flex justify-center rounded-xl border border-stone-200 bg-white p-3">{formQr ? <img src={formQr} alt={`QR code for ${formLink}`} className="size-56 max-w-full" /> : <span className="grid size-56 place-items-center text-sm text-stone-400">Creating QR code…</span>}</div>
+            <p className="mt-3 break-all rounded-lg bg-stone-100 px-3 py-2 text-xs text-stone-700">{formLink}</p>
+            <div className="mt-4 flex justify-end gap-2"><button type="button" onClick={() => void navigator.clipboard.writeText(formLink)} className="h-9 rounded-lg border border-stone-300 px-3 text-sm font-medium">Copy link</button><a href={formLink} target="_blank" rel="noreferrer" className="inline-flex h-9 items-center rounded-lg bg-stone-950 px-3 text-sm font-medium text-white">Open form</a></div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
+
+function LinkIcon(){return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="size-5" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.1 0l2-2a5 5 0 0 0-7.1-7.1l-1.1 1.1"/><path d="M14 11a5 5 0 0 0-7.1 0l-2 2A5 5 0 0 0 12 20.1l1.1-1.1"/></svg>;}
 
 function RefreshIndicatorIcon({
   className = "",
