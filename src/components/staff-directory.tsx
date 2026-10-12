@@ -43,6 +43,7 @@ const directoryColumns = [
   { key: "venue", label: "Current Venue" },
   { key: "joiningDate", label: "Joining Date" },
   { key: "dateOfBirth", label: "DOB" },
+  { key: "ohcExpiry", label: "OHC Expiry" },
 ] as const;
 
 type DirectoryColumnKey = (typeof directoryColumns)[number]["key"];
@@ -56,6 +57,7 @@ function emptyDirectoryFilters(): DirectoryFilters {
     venue: "",
     joiningDate: "",
     dateOfBirth: "",
+    ohcExpiry: "",
   };
 }
 
@@ -493,7 +495,7 @@ function filterDirectory(
               ? `${venueNickname(employee, locations)} ${employee.venue}`.toLowerCase()
               : column.key === "position"
                 ? employee.position.toLowerCase()
-                : employee[column.key].toLowerCase();
+                : (employee[column.key] ?? "").toLowerCase();
 
       return display.includes(query) || raw.includes(query);
     }),
@@ -545,7 +547,7 @@ function compareDirectory(
         ? venueNickname(left, locations)
         : key === "position"
           ? left.position.trim()
-          : left[key].trim();
+          : (left[key] ?? "").trim();
   const rightValue =
     key === "name"
       ? employeeName(right)
@@ -553,7 +555,7 @@ function compareDirectory(
         ? venueNickname(right, locations)
         : key === "position"
           ? right.position.trim()
-          : right[key].trim();
+          : (right[key] ?? "").trim();
 
   if (!leftValue || !rightValue) {
     return { blank: blankLast(!leftValue, !rightValue), value: 0 };

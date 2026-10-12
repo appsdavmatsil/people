@@ -45,6 +45,7 @@ const emptyForm = {
   dateOfBirth: "",
   joiningDate: "",
   terminationDate: "",
+  ohcExpiry: "",
   passportNumber: "",
   passportExpiry: "",
   emiratesIdNumber: "",
@@ -229,6 +230,7 @@ export function EmployeeFormDialog({
       dateOfBirth: form.dateOfBirth,
       joiningDate: form.joiningDate,
       terminationDate: form.terminationDate,
+      ohcExpiry: form.ohcExpiry,
       passportNumber: form.passportNumber.trim(),
       passportExpiry: form.passportExpiry,
       emiratesIdNumber: form.emiratesIdNumber.trim(),
@@ -418,7 +420,7 @@ export function EmployeeFormDialog({
             </span>
           </label>
 
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2">
             <label className="block text-sm font-medium text-stone-800">
               Date of birth
               <input
@@ -451,6 +453,17 @@ export function EmployeeFormDialog({
                 value={form.terminationDate}
                 onChange={(event) =>
                   setForm((current) => ({ ...current, terminationDate: event.target.value }))
+                }
+                className={fieldClass}
+              />
+            </label>
+            <label className="block text-sm font-medium text-stone-800">
+              OHC expiry date
+              <input
+                type="date"
+                value={form.ohcExpiry}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, ohcExpiry: event.target.value }))
                 }
                 className={fieldClass}
               />
@@ -702,6 +715,7 @@ function formFromEmployee(
     dateOfBirth: employee.dateOfBirth,
     joiningDate: employee.joiningDate,
     terminationDate: employee.terminationDate ?? "",
+    ohcExpiry: employee.ohcExpiry ?? "",
     passportNumber: employee.passportNumber ?? "",
     passportExpiry: employee.passportExpiry ?? "",
     emiratesIdNumber: employee.emiratesIdNumber ?? "",

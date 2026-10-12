@@ -8,6 +8,7 @@ export type StaffEmployee = {
   dateOfBirth: string;
   joiningDate: string;
   terminationDate?: string;
+  ohcExpiry?: string;
   position: string;
   venue: string;
   basicSalary: number | null;
@@ -46,6 +47,7 @@ export const staffColumns = [
   { key: "dateOfBirth", label: "Date of birth" },
   { key: "joiningDate", label: "Joining date" },
   { key: "terminationDate", label: "Termination date" },
+  { key: "ohcExpiry", label: "OHC expiry date" },
   { key: "position", label: "Current position" },
   { key: "venue", label: "Current venue" },
   { key: "basicSalary", label: "Basic salary" },
@@ -84,6 +86,9 @@ const headerAliases: Record<string, StaffColumnKey> = {
   "terminated date": "terminationDate",
   "end date": "terminationDate",
   "last working date": "terminationDate",
+  "ohc expiry date": "ohcExpiry",
+  "ohc expiry": "ohcExpiry",
+  ohc: "ohcExpiry",
   "current position": "position",
   position: "position",
   "job title": "position",
@@ -118,6 +123,7 @@ export function emptyFilters(): StaffFilters {
     dateOfBirth: "",
     joiningDate: "",
     terminationDate: "",
+    ohcExpiry: "",
     position: "",
     venue: "",
     basicSalary: "",
@@ -253,7 +259,12 @@ export function staffCellText(employee: StaffEmployee, key: StaffColumnKey) {
     return formatSalary(employee[key]);
   }
 
-  if (key === "dateOfBirth" || key === "joiningDate" || key === "terminationDate") {
+  if (
+    key === "dateOfBirth" ||
+    key === "joiningDate" ||
+    key === "terminationDate" ||
+    key === "ohcExpiry"
+  ) {
     return employee[key] ? formatDate(employee[key]) : "";
   }
 

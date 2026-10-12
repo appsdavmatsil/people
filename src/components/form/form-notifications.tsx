@@ -1,8 +1,11 @@
+"use client";
+
+import { useStaffDirectory } from "@/components/use-staff-directory";
 import type { IntakeSubmission } from "@/lib/staff-intake-records";
 
 type Alert = {
   name: string;
-  kind: "Emirates ID" | "Passport";
+  kind: "Emirates ID" | "Passport" | "OHC";
   expiry: string;
   daysLeft: number;
 };
@@ -23,7 +26,20 @@ function formatDate(iso: string): string {
 }
 
 export function FormNotifications({ submissions }: { submissions: IntakeSubmission[] }) {
+  const { employees } = useStaffDirectory();
   const alerts: Alert[] = [];
+
+  for (const employee of employees) {
+    const ohc = daysUntil(employee.ohcExpiry ?? null);
+    if (!employee.archived && employee.ohcExpiry && ohc !== null && ohc <= 30) {
+      alerts.push({
+        name: employee.fullName,
+        kind: "OHC",
+        expiry: employee.ohcExpiry,
+        daysLeft: ohc,
+      });
+    }
+  }
 
   for (const s of submissions) {
     // Emirates ID: alert within 1 month (30 days).
@@ -45,7 +61,7 @@ export function FormNotifications({ submissions }: { submissions: IntakeSubmissi
       <div className="mb-4">
         <h1 className="text-lg font-semibold text-stone-950">Notifications</h1>
         <p className="text-sm text-stone-500">
-          Upcoming document expiries — Emirates ID within 1 month, Passport within 6 months.
+          Upcoming employee expiries — OHC and Emirates ID within 1 month, Passport within 6 months.
         </p>
       </div>
 

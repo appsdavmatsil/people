@@ -5,7 +5,6 @@ import { FormBuilder } from "@/components/form/form-builder";
 import { DocumentSorting } from "@/components/form/document-sorting";
 import { FormResponses } from "@/components/form/form-responses";
 import { MissingResponses } from "@/components/form/missing-responses";
-import { FormNotifications } from "@/components/form/form-notifications";
 
 export const metadata: Metadata = {
   title: "Form",
@@ -14,7 +13,7 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 // Keep in sync with the tab order in FormSectionNav (first tab is the default).
-const tabs = ["responses", "missing", "notifications", "builder", "sorting"] as const;
+const tabs = ["responses", "missing", "builder", "sorting"] as const;
 type Tab = (typeof tabs)[number];
 
 export default async function FormPage({
@@ -45,5 +44,5 @@ export default async function FormPage({
     return <MissingResponses submissions={submissions} />;
   }
 
-  return <FormNotifications submissions={submissions} />;
+  return <FormResponses submissions={submissions} />;
 }

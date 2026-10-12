@@ -9,6 +9,7 @@ const sections = [
   { id: "/staffdirectory/hiring", href: "/staffdirectory/hiring", label: "Hiring Positions", icon: "M4 7h16a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1zM9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M3 13h18", group: "growth" },
   { id: "/staffdirectory/promotions", href: "/staffdirectory/promotions", label: "Promotions", icon: "M3 17l6-6 4 4 8-8M15 7h6v6", group: "growth" },
   { id: "/staffdirectory/documents", href: "/staffdirectory/documents", label: "Documents", icon: "M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8zM14 3v5h5M9 13h6M9 17h6", group: "records" },
+  { id: "/staffdirectory/notifications", href: "/staffdirectory/notifications", label: "Notifications", icon: "M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0", group: "records" },
 ] as const;
 
 export function StaffSectionNav() {
