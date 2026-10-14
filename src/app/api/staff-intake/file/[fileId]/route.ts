@@ -12,8 +12,8 @@ export const runtime = "nodejs";
  * Access control:
  *   - Requires an authenticated app session (same gate as the rest of /app).
  *   - Only serves file ids that are actually referenced by a row in
- *     staff_intake_submissions, so this cannot be used to read arbitrary Drive
- *     files.
+ *     staff_intake_submissions or by an employee in the Staff Directory, so
+ *     this cannot be used to read arbitrary Drive files.
  *
  * Performance: the Form Responses table requests hundreds of thumbnails at
  * once, so the allowed-id list and thumbnails are cached per server instance,
@@ -36,6 +36,20 @@ async function loadAllowedIds(): Promise<Set<string> | null> {
   for (const row of data ?? []) {
     for (const doc of (row.documents ?? []) as { file_id?: string }[]) {
       if (doc.file_id) ids.add(doc.file_id);
+    }
+  }
+  // Staff Directory employees can also hold documents that are not on any submission.
+  const { data: directories, error: directoryError } = await service
+    .from("workspace_documents")
+    .select("payload")
+    .eq("doc_key", "people.staff-directory");
+  if (directoryError) throw directoryError;
+  for (const row of directories ?? []) {
+    const employees = typeof row.payload === "string" ? JSON.parse(row.payload) : row.payload;
+    for (const employee of Array.isArray(employees) ? employees : []) {
+      for (const doc of (employee?.documents ?? []) as { fileId?: string }[]) {
+        if (doc.fileId) ids.add(doc.fileId);
+      }
     }
   }
   allowed = { ids, at: Date.now() };

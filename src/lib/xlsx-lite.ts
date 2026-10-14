@@ -5,7 +5,7 @@ const decoder = new TextDecoder();
 export type SheetCell = {
   text: string;
   number: number | null;
-  style?: "title" | "subtitle" | "header" | "body" | "money" | "section";
+  style?: "title" | "subtitle" | "header" | "body" | "money" | "section" | "total" | "totalMoney";
 };
 
 type ZipEntry = {
@@ -74,6 +74,7 @@ function sheetXml(rows: SheetCell[][], lastRow: number) {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
   <dimension ref="A1:${lastColumn}${lastRow}"/>
+  <sheetViews><sheetView workbookViewId="0" showGridLines="0"/></sheetViews>
   <cols>
     <col min="1" max="1" width="38" customWidth="1"/>
     <col min="2" max="${columnCount}" width="18" customWidth="1"/>
@@ -103,6 +104,8 @@ function cellStyle(cell: SheetCell) {
   if (cell.style === "body") return 6;
   if (cell.style === "money") return 7;
   if (cell.style === "section") return 8;
+  if (cell.style === "total") return 9;
+  if (cell.style === "totalMoney") return 10;
   return cell.number != null && cell.text === "" ? 2 : 1;
 }
 
@@ -455,9 +458,9 @@ const stylesXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
     <fill><patternFill patternType="solid"><fgColor rgb="FFF5F5F4"/><bgColor indexed="64"/></patternFill></fill>
     <fill><patternFill patternType="solid"><fgColor rgb="FFE7E5E4"/><bgColor indexed="64"/></patternFill></fill>
   </fills>
-  <borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"><color rgb="FFD6D3D1"/></left><right style="thin"><color rgb="FFD6D3D1"/></right><top style="thin"><color rgb="FFD6D3D1"/></top><bottom style="thin"><color rgb="FFD6D3D1"/></bottom><diagonal/></border></borders>
+  <borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="thin"><color rgb="FF000000"/></left><right style="thin"><color rgb="FF000000"/></right><top style="thin"><color rgb="FF000000"/></top><bottom style="thin"><color rgb="FF000000"/></bottom><diagonal/></border></borders>
   <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-  <cellXfs count="9">
+  <cellXfs count="11">
     <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
     <xf numFmtId="49" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
     <xf numFmtId="4" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/>
@@ -467,6 +470,8 @@ const stylesXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
     <xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1"><alignment vertical="center"/></xf>
     <xf numFmtId="4" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1"><alignment horizontal="right" vertical="center"/></xf>
     <xf numFmtId="0" fontId="4" fillId="4" borderId="0" xfId="0" applyFont="1" applyFill="1"/>
+    <xf numFmtId="0" fontId="4" fillId="3" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"><alignment vertical="center"/></xf>
+    <xf numFmtId="4" fontId="4" fillId="3" borderId="1" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1"><alignment horizontal="right" vertical="center"/></xf>
   </cellXfs>
   <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
 </styleSheet>`;
