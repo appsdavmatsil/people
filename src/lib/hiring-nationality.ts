@@ -1,4 +1,4 @@
-import { countryNames, countryFlag } from "@/lib/countries";
+import { countryNames, countryFlag, countryIso } from "@/lib/countries";
 
 // Demonyms / misspellings seen in the migrated maine-forms applications,
 // mapped to the People app's canonical country names (src/lib/countries.ts).
@@ -55,4 +55,26 @@ export function flagFor(nationality: string | null | undefined): string {
     if (f) return f;
   }
   return "🌐";
+}
+
+export const continents = ["Asia", "Africa", "Europe", "Americas", "Oceania", "Other"] as const;
+export type Continent = (typeof continents)[number];
+
+const CONTINENT_CODES: Record<Exclude<Continent, "Other">, string> = {
+  Asia: "AF AM AZ BH BD BT BN KH CN CY GE HK IN ID IR IQ IL JP JO KZ KW KG LA LB MO MY MV MN MM NP KP OM PK PS PH QA SA SG KR LK SY TW TJ TH TL TR TM AE UZ VN YE",
+  Africa: "DZ AO BJ BW BF BI CV CM CF TD KM CG CD CI DJ EG GQ ER SZ ET GA GM GH GN GW KE LS LR LY MG MW ML MR MU YT MA MZ NA NE NG RE RW SH ST SN SC SL SO ZA SS SD TZ TG TN UG EH ZM ZW",
+  Europe: "AX AL AD AT BY BE BA BG HR CZ DK EE FO FI FR DE GI GR GG HU IS IE IM IT JE XK LV LI LT LU MT MD MC ME NL MK NO PL PT RO RU SM RS SK SI ES SE CH UA GB VA",
+  Americas: "AG AR BS BB BZ BO BR CA CL CO CR CU DM DO EC SV GD GT GY HT HN JM MX NI PA PY PE PR KN LC VC SR TT US UY VE",
+  Oceania: "AU FJ KI MH FM NR NZ PW PG WS SB TO TV VU",
+};
+
+const CONTINENT_BY_ISO = new Map(
+  Object.entries(CONTINENT_CODES).flatMap(([continent, codes]) =>
+    codes.split(" ").map((code) => [code, continent as Continent] as const),
+  ),
+);
+
+/** Continent for a canonical country name, or "Other" when unknown. */
+export function continentFor(country: string): Continent {
+  return CONTINENT_BY_ISO.get(countryIso(country)) ?? "Other";
 }

@@ -11,12 +11,14 @@ import type {
 
 const fieldClass =
   "w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-950 outline-none focus:border-stone-950";
+const labelFieldClass =
+  "w-full rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-semibold text-stone-950 outline-none focus:border-stone-950";
 const btn =
   "inline-flex h-9 items-center justify-center rounded-lg border border-stone-300 bg-white px-3 text-sm font-medium text-stone-800 hover:bg-stone-50";
 const primary =
   "inline-flex h-9 items-center justify-center rounded-lg bg-[#063f3b] px-4 text-sm font-semibold text-white hover:bg-[#052f2c] disabled:opacity-60";
 
-const FIELD_TYPES: FieldType[] = ["text", "email", "phone", "date", "textarea", "select", "country"];
+const FIELD_TYPES: FieldType[] = ["text", "email", "phone", "date", "textarea", "select", "radio", "country"];
 
 export function HiringFormBuilder({ config }: { config: FormConfig }) {
   const [fields, setFields] = useState<ConfigTextField[]>(config.textFields);
@@ -43,7 +45,7 @@ export function HiringFormBuilder({ config }: { config: FormConfig }) {
     const n = fields.length + 1;
     setFields((cur) => [
       ...cur,
-      { name: `field${n}`, label: `New field ${n}`, type: "text", required: false },
+      { name: `field${n}`, label: `New field ${n}`, type: "text", required: false, section: cur.at(-1)?.section },
     ]);
   }
 
@@ -115,7 +117,7 @@ export function HiringFormBuilder({ config }: { config: FormConfig }) {
               className="grid grid-cols-1 gap-2 rounded-xl border border-stone-200 bg-white p-3 sm:grid-cols-[1fr_1fr_auto_auto_auto]"
             >
               <input
-                className={fieldClass}
+                className={labelFieldClass}
                 value={f.label}
                 placeholder="Label"
                 onChange={(e) => updateField(i, { label: e.target.value })}
@@ -156,17 +158,11 @@ export function HiringFormBuilder({ config }: { config: FormConfig }) {
                 placeholder="Instruction text shown under the field (optional)"
                 onChange={(e) => updateField(i, { help: e.target.value })}
               />
-              <input
-                className={`${fieldClass} sm:col-span-5`}
-                value={f.section ?? ""}
-                placeholder="Section heading (e.g. Personal Information) — groups fields on the form"
-                onChange={(e) => updateField(i, { section: e.target.value })}
-              />
-              {f.type === "select" && (
+              {(f.type === "select" || f.type === "radio") && (
                 <input
                   className={`${fieldClass} sm:col-span-5`}
                   value={(f.options ?? []).join(", ")}
-                  placeholder="Dropdown options, comma-separated (e.g. Yes, No)"
+                  placeholder={f.type === "radio" ? "Choices, comma-separated — radio questions in a row with the same choices show as one grid" : "Dropdown options, comma-separated (e.g. Yes, No)"}
                   onChange={(e) => updateField(i, { options: e.target.value.split(",").map((o) => o.trim()).filter(Boolean) })}
                 />
               )}

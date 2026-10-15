@@ -1,4 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/service";
+import { normalizeHiringStatus, type HiringStatus } from "@/lib/hiring-status";
 
 export type HiringDocumentRecord = {
   label: string;
@@ -10,7 +11,7 @@ export type HiringDocumentRecord = {
 export type HiringSubmission = {
   id: string;
   created_at: string;
-  status: "new" | "reviewed" | "shortlisted" | "hired";
+  status: HiringStatus;
   full_name: string;
   first_name: string | null;
   last_name: string | null;
@@ -50,5 +51,5 @@ export async function listHiringSubmissions(): Promise<HiringSubmission[]> {
     return [];
   }
 
-  return (data ?? []) as HiringSubmission[];
+  return ((data ?? []) as HiringSubmission[]).map((row) => ({ ...row, status: normalizeHiringStatus(row.status) }));
 }

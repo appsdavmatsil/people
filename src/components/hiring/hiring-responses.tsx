@@ -1,19 +1,17 @@
 "use client";
 
-import { useMemo, useRef, useState, useEffect } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import type { HiringSubmission } from "@/lib/hiring-records";
-import { flagFor, normalizeNationality } from "@/lib/hiring-nationality";
+import { positionRank } from "@/lib/position-rank";
+import { continentFor, continents, flagFor, normalizeNationality } from "@/lib/hiring-nationality";
+import { HIRING_STATUSES, HIRING_STATUS_ACTIVE_STYLE, HIRING_STATUS_LABEL, HIRING_STATUS_MENU_STYLE, HIRING_STATUS_STYLE, normalizeHiringStatus, type HiringStatus } from "@/lib/hiring-status";
 import { updateHiringStatusAction, deleteHiringSubmissionAction } from "@/app/(app)/hiringform/actions";
 
-const STATUS_OPTIONS = ["new", "reviewed", "shortlisted", "hired"] as const;
+const STATUS_OPTIONS = HIRING_STATUSES;
+const DECISION_OPTIONS = HIRING_STATUSES.filter((status) => status !== "new");
 type ViewMode = "grid" | "list";
 
-const STATUS_STYLE: Record<string, string> = {
-  new: "bg-blue-50 text-blue-700 border-blue-200",
-  reviewed: "bg-amber-50 text-amber-700 border-amber-200",
-  shortlisted: "bg-green-50 text-green-700 border-green-200",
-  hired: "bg-emerald-50 text-emerald-700 border-emerald-200",
-};
+const STATUS_STYLE = HIRING_STATUS_STYLE;
 
 function photoOf(s: HiringSubmission): string | null {
   const d = s.documents?.find((d) => /photo/i.test(d.label));
@@ -21,33 +19,49 @@ function photoOf(s: HiringSubmission): string | null {
 }
 
 export function HiringResponses({ submissions }: { submissions: HiringSubmission[] }) {
-  const [records, setRecords] = useState(submissions);
+  const [records, setRecords] = useState(() => submissions.map((s) => ({ ...s, status: normalizeHiringStatus(s.status) })));
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<string>("new");
   const [nationalityFilter, setNationalityFilter] = useState<string>("all");
   const [positionFilter, setPositionFilter] = useState<string>("all");
   const [view, setView] = useState<ViewMode>("grid");
+  const [cardSize, setCardSize] = useState(2);
   const [dupsOnly, setDupsOnly] = useState(false);
-  const [showPos, setShowPos] = useState(false);
+  const [ageRange, setAgeRange] = useState<[number, number] | null>(null);
+  const [experienceFilter, setExperienceFilter] = useState("all");
+  const [salaryFilter, setSalaryFilter] = useState("all");
+  const [visaFilter, setVisaFilter] = useState("all");
   const [detail, setDetail] = useState<HiringSubmission | null>(null);
   const [pendingDelete, setPendingDelete] = useState<HiringSubmission | null>(null);
   const [viewer, setViewer] = useState<{ url: string; label: string } | null>(null);
   const [zoom, setZoom] = useState(1);
-  const posRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const h = (e: MouseEvent) => {
-      if (posRef.current && !posRef.current.contains(e.target as Node)) setShowPos(false);
-    };
-    document.addEventListener("mousedown", h);
-    return () => document.removeEventListener("mousedown", h);
-  }, []);
+  const [menu, setMenu] = useState<{ ids: string[]; x: number; y: number } | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const lastPicked = useRef<string | null>(null);
+  const matchesExtra = useCallback(
+    (r: HiringSubmission) =>
+      withinAge(ageRange, ageOf(r.date_of_birth)) &&
+      inRange(EXPERIENCE_RANGES, experienceFilter, experienceOf(r.experience_years)) &&
+      inRange(SALARY_RANGES, salaryFilter, numberOf(r.salary_expectation)) &&
+      (visaFilter === "all" || visaOf(r) === visaFilter),
+    [ageRange, experienceFilter, salaryFilter, visaFilter],
+  );
+  const ageBounds = useMemo<[number, number]>(() => {
+    const ages = records.map((r) => ageOf(r.date_of_birth)).filter((age): age is number => age !== null && age >= 14 && age <= 80);
+    return ages.length ? [Math.min(...ages), Math.max(...ages)] : [18, 60];
+  }, [records]);
+  const visaOptions = useMemo(
+    () => Array.from(new Set(records.map(visaOf).filter(Boolean))).sort() as string[],
+    [records],
+  );
 
   const counts = useMemo(() => {
-    const c: Record<string, number> = { all: records.length, new: 0, reviewed: 0, shortlisted: 0, hired: 0 };
+    const c: Record<string, number> = { all: records.length, ...Object.fromEntries(HIRING_STATUSES.map((status) => [status, 0])) };
     for (const r of records) c[r.status] = (c[r.status] ?? 0) + 1;
     return c;
   }, [records]);
+
+  const searchIndex = useMemo(() => new Map(records.map((r) => [r.id, searchTextOf(r)])), [records]);
 
   // Base slice for the nationality graph: respects status/position/search but
   // not the nationality filter itself (faceted behaviour).
@@ -57,11 +71,10 @@ export function HiringResponses({ submissions }: { submissions: HiringSubmission
       const matchStatus = statusFilter === "all" || r.status === statusFilter;
       const matchPos = positionFilter === "all" || r.position_applied === positionFilter;
       const matchSearch =
-        q === "" ||
-        `${r.full_name} ${r.email ?? ""} ${r.position_applied ?? ""} ${r.nationality ?? ""}`.toLowerCase().includes(q);
-      return matchStatus && matchPos && matchSearch;
+        q === "" || matchesSearch(searchIndex.get(r.id) ?? "", q);
+      return matchStatus && matchPos && matchSearch && matchesExtra(r);
     });
-  }, [records, search, statusFilter, positionFilter]);
+  }, [records, searchIndex, search, statusFilter, positionFilter, matchesExtra]);
 
   const natCounts = useMemo(() => {
     const m = new Map<string, number>();
@@ -73,6 +86,22 @@ export function HiringResponses({ submissions }: { submissions: HiringSubmission
       .map(([name, count]) => ({ name, count }))
       .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
   }, [natBase]);
+
+  const posCounts = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    const m = new Map<string, number>();
+    for (const r of records) {
+      if (statusFilter !== "all" && r.status !== statusFilter) continue;
+      if (nationalityFilter !== "all" && normalizeNationality(r.nationality) !== nationalityFilter) continue;
+      if (q !== "" && !matchesSearch(searchIndex.get(r.id) ?? "", q)) continue;
+      if (!matchesExtra(r)) continue;
+      const position = r.position_applied?.trim() || "Not specified";
+      m.set(position, (m.get(position) ?? 0) + 1);
+    }
+    return Array.from(m.entries())
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => positionRank(a.name) - positionRank(b.name) || b.count - a.count || a.name.localeCompare(b.name));
+  }, [records, searchIndex, search, statusFilter, nationalityFilter, matchesExtra]);
 
   // Duplicate detection: group applications by normalized email (fallback phone).
   // Lets HR see when the same person has applied more than once.
@@ -98,11 +127,6 @@ export function HiringResponses({ submissions }: { submissions: HiringSubmission
     return { map, keyOf: key };
   }, [records]);
 
-  const allPositions = useMemo(
-    () => Array.from(new Set(records.map((r) => r.position_applied).filter(Boolean))).sort() as string[],
-    [records],
-  );
-
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return records.filter((r) => {
@@ -110,17 +134,72 @@ export function HiringResponses({ submissions }: { submissions: HiringSubmission
       const matchNat = nationalityFilter === "all" || normalizeNationality(r.nationality) === nationalityFilter;
       const matchPos = positionFilter === "all" || r.position_applied === positionFilter;
       const matchSearch =
-        q === "" ||
-        `${r.full_name} ${r.email ?? ""} ${r.position_applied ?? ""} ${r.nationality ?? ""}`.toLowerCase().includes(q);
+        q === "" || matchesSearch(searchIndex.get(r.id) ?? "", q);
       const matchDup = !dupsOnly || dupInfo.map.has(r.id);
-      return matchStatus && matchNat && matchPos && matchSearch && matchDup;
+      return matchStatus && matchNat && matchPos && matchSearch && matchDup && matchesExtra(r);
     });
-  }, [records, search, statusFilter, nationalityFilter, positionFilter, dupsOnly, dupInfo]);
+  }, [records, searchIndex, search, statusFilter, nationalityFilter, positionFilter, dupsOnly, dupInfo, matchesExtra]);
 
-  async function changeStatus(id: string, status: string) {
-    setRecords((prev) => prev.map((r) => (r.id === id ? { ...r, status: status as HiringSubmission["status"] } : r)));
-    if (detail?.id === id) setDetail({ ...detail, status: status as HiringSubmission["status"] });
-    await updateHiringStatusAction(id, status);
+  async function changeStatus(ids: string | string[], status: string) {
+    const targets = new Set(Array.isArray(ids) ? ids : [ids]);
+    const previous = new Map(records.filter((r) => targets.has(r.id)).map((r) => [r.id, r.status]));
+    setRecords((prev) => prev.map((r) => (targets.has(r.id) ? { ...r, status: status as HiringStatus } : r)));
+    setDetail((current) => (current && targets.has(current.id) ? { ...current, status: status as HiringStatus } : current));
+    const result = await updateHiringStatusAction([...targets], status);
+    if (!result.ok) {
+      setRecords((prev) => prev.map((r) => (previous.has(r.id) ? { ...r, status: previous.get(r.id)! } : r)));
+      setDetail((current) => (current && previous.has(current.id) ? { ...current, status: previous.get(current.id)! } : current));
+      window.alert(result.error ?? "Could not update the status.");
+    }
+  }
+
+  const visibleSelected = filtered.filter((r) => selected.has(r.id)).map((r) => r.id);
+
+  const hasSelection = selected.size > 0;
+  const overlayOpen = Boolean(menu || detail || viewer || pendingDelete);
+  useEffect(() => {
+    if (!hasSelection || overlayOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("input, textarea, select, [contenteditable=true]")) return;
+      setSelected(new Set());
+      lastPicked.current = null;
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [hasSelection, overlayOpen]);
+
+  function toggleSelect(id: string, range: boolean) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      const from = range && lastPicked.current ? filtered.findIndex((r) => r.id === lastPicked.current) : -1;
+      const to = filtered.findIndex((r) => r.id === id);
+      if (from >= 0 && to >= 0) {
+        for (const r of filtered.slice(Math.min(from, to), Math.max(from, to) + 1)) next.add(r.id);
+      } else if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+    lastPicked.current = id;
+  }
+
+  function openCard(event: MouseEvent, s: HiringSubmission) {
+    if (event.metaKey || event.ctrlKey || event.shiftKey) {
+      event.preventDefault();
+      toggleSelect(s.id, event.shiftKey);
+    } else {
+      setDetail(s);
+    }
+  }
+
+  function openMenu(event: MouseEvent, id: string) {
+    event.preventDefault();
+    const ids = selected.has(id) ? visibleSelected : [id];
+    setMenu({ ids, x: event.clientX, y: event.clientY });
   }
   async function doDelete(id: string) {
     setRecords((prev) => prev.filter((r) => r.id !== id));
@@ -176,22 +255,37 @@ export function HiringResponses({ submissions }: { submissions: HiringSubmission
     if (cv) window.open(cv.web_view_link ?? cv.file_id, "_blank");
   }
 
-  const activeFilters = [statusFilter !== "all", nationalityFilter !== "all", positionFilter !== "all", search !== ""].filter(Boolean).length;
-  const clearAll = () => { setSearch(""); setStatusFilter("all"); setNationalityFilter("all"); setPositionFilter("all"); };
+  const activeFilters = [statusFilter !== "new", nationalityFilter !== "all", positionFilter !== "all", search !== "", ageRange !== null, experienceFilter !== "all", salaryFilter !== "all", visaFilter !== "all"].filter(Boolean).length;
+  const clearAll = () => { setSearch(""); setStatusFilter("new"); setNationalityFilter("all"); setPositionFilter("all"); setAgeRange(null); setExperienceFilter("all"); setSalaryFilter("all"); setVisaFilter("all"); };
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
+      {menu ? (
+        <StatusMenu
+          x={menu.x}
+          y={menu.y}
+          current={(() => {
+            const statuses = new Set(records.filter((r) => menu.ids.includes(r.id)).map((r) => r.status));
+            return statuses.size === 1 ? [...statuses][0] : null;
+          })()}
+          name={menu.ids.length > 1 ? `${menu.ids.length} candidates selected` : records.find((r) => r.id === menu.ids[0])?.full_name ?? ""}
+          onPick={(status) => { void changeStatus(menu.ids, status); setMenu(null); }}
+          onClose={() => setMenu(null)}
+        />
+      ) : null}
       {/* Status pills */}
       <div className="flex flex-wrap items-center gap-2">
         {(["all", ...STATUS_OPTIONS] as const).map((s) => (
           <button
             key={s}
             onClick={() => setStatusFilter(s)}
-            className={`rounded-full border px-3 py-1 text-xs font-medium capitalize transition-colors ${
-              statusFilter === s ? "border-stone-900 bg-stone-900 text-white" : "border-stone-200 bg-white text-stone-600 hover:border-stone-400"
+            className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+              s === "all"
+                ? statusFilter === s ? "border-stone-900 bg-stone-900 text-white" : "border-stone-200 bg-white text-stone-600 hover:border-stone-400"
+                : statusFilter === s ? HIRING_STATUS_ACTIVE_STYLE[s] : `${STATUS_STYLE[s]} hover:brightness-95`
             }`}
           >
-            {s} <span className="opacity-60">({counts[s] ?? 0})</span>
+            {s === "all" ? "All" : HIRING_STATUS_LABEL[s]} <span className="opacity-60">({counts[s] ?? 0})</span>
           </button>
         ))}
         {dupInfo.map.size > 0 && (
@@ -202,15 +296,20 @@ export function HiringResponses({ submissions }: { submissions: HiringSubmission
             }`}
             title="Applicants who applied more than once (matched by email/phone)"
           >
-            ⚑ Reapplied <span className="opacity-70">({dupInfo.map.size})</span>
+            ⚑ Duplicated <span className="opacity-70">({dupInfo.map.size})</span>
           </button>
         )}
       </div>
 
-      {/* Nationality — compact donut */}
-      {natCounts.length > 0 && (
-        <div className="mt-4">
-          <NationalityDonut
+      {/* Breakdown — position first, then nationality */}
+      {(posCounts.length > 0 || natCounts.length > 0) && (
+        <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+          <PositionBreakdown
+            data={posCounts}
+            active={positionFilter}
+            onPick={(name) => setPositionFilter(positionFilter === name || name === "Not specified" ? "all" : name)}
+          />
+          <NationalityByContinent
             data={natCounts}
             active={nationalityFilter}
             onPick={(name) => setNationalityFilter(nationalityFilter === name ? "all" : name)}
@@ -220,73 +319,111 @@ export function HiringResponses({ submissions }: { submissions: HiringSubmission
 
       {/* Search + view toggle + filters */}
       <div className="mt-4 flex flex-wrap items-center gap-2">
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by name, email, position…"
-          className="h-9 min-w-[200px] flex-1 rounded-lg border border-stone-200 bg-white px-3 text-sm outline-none focus:border-stone-400"
-        />
-
-        {/* view toggle */}
-        <div className="flex items-center gap-0.5 rounded-lg border border-stone-200 bg-white p-0.5">
-          <button onClick={() => setView("grid")} className={`grid size-8 place-items-center rounded-md ${view === "grid" ? "bg-stone-900 text-white" : "text-stone-500 hover:bg-stone-100"}`} aria-label="Grid">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-          </button>
-          <button onClick={() => setView("list")} className={`grid size-8 place-items-center rounded-md ${view === "list" ? "bg-stone-900 text-white" : "text-stone-500 hover:bg-stone-100"}`} aria-label="List">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
-          </button>
+        <div className="relative min-w-[200px] flex-1">
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Escape") setSearch(""); }}
+            placeholder="Search any field — name, phone, languages, experience…"
+            className="h-9 w-full rounded-lg border border-stone-200 bg-white pr-8 pl-3 text-sm outline-none focus:border-stone-400"
+          />
+          {search ? (
+            <button
+              type="button"
+              onClick={() => setSearch("")}
+              aria-label="Clear search"
+              className="absolute top-1/2 right-1.5 grid size-6 -translate-y-1/2 place-items-center rounded-md text-base leading-none text-stone-400 hover:bg-stone-100 hover:text-stone-900"
+            >
+              ×
+            </button>
+          ) : null}
         </div>
 
-        {/* position dropdown */}
-        <div className="relative" ref={posRef}>
-          <button onClick={() => setShowPos((v) => !v)} className={`flex h-9 items-center gap-1.5 rounded-lg border px-3 text-xs ${positionFilter !== "all" ? "border-stone-900 bg-stone-900 text-white" : "border-stone-200 bg-white text-stone-600 hover:border-stone-400"}`}>
-            <span className="max-w-[120px] truncate">{positionFilter === "all" ? "Position" : positionFilter}</span>
-            <span className="opacity-60">▾</span>
-          </button>
-          {showPos && (
-            <div className="absolute right-0 top-full z-20 mt-1 max-h-72 w-56 overflow-y-auto rounded-lg border border-stone-200 bg-white shadow-xl">
-              <button onClick={() => { setPositionFilter("all"); setShowPos(false); }} className="w-full px-3 py-2 text-left text-sm text-stone-600 hover:bg-stone-50">All Positions</button>
-              {allPositions.map((p) => (
-                <button key={p} onClick={() => { setPositionFilter(p); setShowPos(false); }} className="w-full px-3 py-2 text-left text-sm text-stone-700 hover:bg-stone-50">{p}</button>
-              ))}
-            </div>
-          )}
+        <AgeRangeSlider bounds={ageBounds} value={ageRange} onChange={setAgeRange} />
+        <FilterSelect label="Experience" value={experienceFilter} onChange={setExperienceFilter} options={EXPERIENCE_RANGES.map((r) => r.label)} />
+        <FilterSelect label="Salary" value={salaryFilter} onChange={setSalaryFilter} options={SALARY_RANGES.map((r) => r.label)} width="w-48" />
+        <FilterSelect label="UAE visa" value={visaFilter} onChange={setVisaFilter} options={visaOptions} width="w-56" />
+
+        <div className="ml-auto flex items-center gap-2">
+          <div className={`flex items-center gap-0.5 rounded-lg border border-stone-200 bg-white p-0.5 ${view === "grid" ? "" : "pointer-events-none opacity-40"}`}>
+            <button onClick={() => setCardSize((size) => Math.max(0, size - 1))} disabled={cardSize === 0} className="grid size-8 place-items-center rounded-md text-stone-500 hover:bg-stone-100 disabled:opacity-30 disabled:hover:bg-transparent" aria-label="Smaller thumbnails" title="Smaller thumbnails">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4M8 11h6"/></svg>
+            </button>
+            <button onClick={() => setCardSize((size) => Math.min(GRID_SIZES.length - 1, size + 1))} disabled={cardSize === GRID_SIZES.length - 1} className="grid size-8 place-items-center rounded-md text-stone-500 hover:bg-stone-100 disabled:opacity-30 disabled:hover:bg-transparent" aria-label="Bigger thumbnails" title="Bigger thumbnails">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4M8 11h6M11 8v6"/></svg>
+            </button>
+          </div>
+          <div className="flex items-center gap-0.5 rounded-lg border border-stone-200 bg-white p-0.5">
+            <button onClick={() => setView("grid")} className={`grid size-8 place-items-center rounded-md ${view === "grid" ? "bg-stone-900 text-white" : "text-stone-500 hover:bg-stone-100"}`} aria-label="Grid">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+            </button>
+            <button onClick={() => setView("list")} className={`grid size-8 place-items-center rounded-md ${view === "list" ? "bg-stone-900 text-white" : "text-stone-500 hover:bg-stone-100"}`} aria-label="List">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+            </button>
+          </div>
         </div>
 
+      </div>
+
+      <div className="mt-2 flex h-5 items-center gap-3 text-xs text-stone-500">
+        <p>{filtered.length} of {records.length} applications</p>
+        {visibleSelected.length > 0 && (
+          <span className="inline-flex items-center gap-2 rounded-full bg-stone-900 py-0.5 pr-1.5 pl-2.5 font-medium text-white">
+            {visibleSelected.length} selected · right-click to set status
+            <button onClick={() => setSelected(new Set())} aria-label="Clear selection" className="text-white/70 hover:text-white">×</button>
+          </span>
+        )}
         {activeFilters > 0 && (
-          <button onClick={clearAll} className="flex h-9 items-center gap-1 rounded-lg border border-stone-200 bg-white px-3 text-xs text-stone-500 hover:border-stone-400">× Clear</button>
+          <button onClick={clearAll} className="font-medium text-stone-600 hover:text-stone-950 hover:underline">× Clear filters</button>
         )}
       </div>
 
-      <p className="mt-2 text-xs text-stone-500">{filtered.length} of {records.length} applications</p>
-
       {/* Results */}
       {view === "grid" ? (
-        <div className="mt-3 grid min-h-0 flex-1 auto-rows-max content-start grid-cols-3 gap-3 overflow-y-auto pb-4 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+        <div className={`mt-3 grid min-h-0 flex-1 auto-rows-max content-start items-start gap-3 overflow-y-auto pb-4 ${GRID_SIZES[cardSize]}`}>
           {filtered.map((s) => {
             const photo = photoOf(s);
             return (
-              <button key={s.id} onClick={() => setDetail(s)} className="group flex flex-col overflow-hidden rounded-xl border border-stone-200 bg-white text-left transition-all hover:-translate-y-0.5 hover:shadow-md">
-                <div className="relative aspect-square w-full shrink-0 bg-stone-100">
+              <button key={s.id} onClick={(event) => openCard(event, s)} onContextMenu={(event) => openMenu(event, s.id)} className={`group relative flex flex-col overflow-hidden rounded-xl border bg-white text-left transition-all hover:-translate-y-0.5 hover:shadow-md ${selected.has(s.id) ? "border-red-600" : "border-stone-200"}`}>
+                <div
+                  className={`relative aspect-square w-full shrink-0 overflow-hidden bg-stone-100 ${photo ? "cursor-zoom-in" : ""}`}
+                  title={photo ? "View photo" : undefined}
+                  onClick={(event) => {
+                    if (!photo || event.metaKey || event.ctrlKey || event.shiftKey) return;
+                    event.stopPropagation();
+                    setZoom(1);
+                    setViewer({ url: photo, label: `${s.full_name} – Profile Photo` });
+                  }}
+                >
                   {photo ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={photo} alt={s.full_name} loading="lazy" className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
+                    <img src={photo} alt={s.full_name} loading="lazy" className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
                   ) : (
                     <div className="flex h-full w-full items-center justify-center text-stone-300"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg></div>
                   )}
-                  <span className={`absolute left-1.5 top-1.5 rounded-full border px-1.5 py-0.5 text-[9px] font-medium capitalize ${STATUS_STYLE[s.status]}`}>{s.status}</span>
+                  <span className={`absolute left-1.5 top-1.5 rounded-full border px-1.5 py-0.5 text-[9px] font-medium ${STATUS_STYLE[s.status]}`}>{HIRING_STATUS_LABEL[s.status]}</span>
+                  <span
+                    role="checkbox"
+                    aria-checked={selected.has(s.id)}
+                    aria-label={`Select ${s.full_name}`}
+                    title="Select (or ⌘/Ctrl-click, Shift-click for a range)"
+                    onClick={(event) => { event.stopPropagation(); toggleSelect(s.id, event.shiftKey); }}
+                    className={`absolute bottom-1.5 left-1.5 grid size-5 cursor-pointer place-items-center rounded-full border-2 text-[10px] font-bold transition ${
+                      selected.has(s.id) ? "border-white bg-red-600 text-white" : `border-white bg-black/30 text-transparent hover:bg-black/50 ${visibleSelected.length ? "" : "opacity-0 group-hover:opacity-100"}`
+                    }`}
+                  >
+                    ✓
+                  </span>
                   {dupInfo.map.has(s.id) && (
                     <span className="absolute right-1.5 top-1.5 rounded-full border border-orange-300 bg-orange-500/90 px-1.5 py-0.5 text-[9px] font-semibold text-white" title={`Applied ${dupInfo.map.get(s.id)!.count} times`}>
                       ⚑ ×{dupInfo.map.get(s.id)!.count}
                     </span>
                   )}
-                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-2 pb-1.5 pt-6">
-                    <p className="truncate text-xs font-medium text-white">{s.full_name}</p>
-                  </div>
                 </div>
                 <div className="space-y-0.5 px-2 py-1.5">
+                  <p className="truncate text-xs font-semibold text-stone-950">{s.full_name}</p>
                   <p className="truncate text-[11px] text-stone-700">{s.position_applied || "—"}</p>
-                  <p className="flex items-center gap-1 truncate text-[11px] text-stone-400"><span>{flagFor(s.nationality)}</span><span className="truncate">{s.nationality || "Unknown"}</span></p>
+                  <p className="flex items-center gap-1 truncate text-[11px] text-stone-400">{ageOf(s.date_of_birth) !== null && <span className="shrink-0 rounded-full bg-stone-100 px-1.5 text-[10px] font-medium tabular-nums text-stone-700">{ageOf(s.date_of_birth)} y/o</span>}<span>{flagFor(s.nationality)}</span><span className="truncate">{s.nationality || "Unknown"}</span></p>
                   {(s.experience_years || s.salary_expectation) && (
                     <p className="flex items-center gap-1.5 truncate text-[10px] text-stone-500">
                       {s.experience_years && <span>{s.experience_years} yrs</span>}
@@ -300,6 +437,7 @@ export function HiringResponses({ submissions }: { submissions: HiringSubmission
                     </p>
                   )}
                 </div>
+                {selected.has(s.id) && <span aria-hidden="true" className="pointer-events-none absolute inset-0 z-10 rounded-[inherit] ring-2 ring-red-600 ring-inset" />}
               </button>
             );
           })}
@@ -310,7 +448,7 @@ export function HiringResponses({ submissions }: { submissions: HiringSubmission
           {filtered.map((s) => {
             const photo = photoOf(s);
             return (
-              <button key={s.id} onClick={() => setDetail(s)} className="flex w-full items-center gap-3 rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-left hover:border-stone-400">
+              <button key={s.id} onClick={(event) => openCard(event, s)} onContextMenu={(event) => openMenu(event, s.id)} className={`relative flex w-full items-center gap-3 rounded-xl border bg-white px-4 py-2.5 text-left ${selected.has(s.id) ? "border-red-600" : "border-stone-200 hover:border-stone-400"}`}>
                 {photo ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={photo} alt="" className="size-9 shrink-0 rounded-full object-cover" />
@@ -321,7 +459,8 @@ export function HiringResponses({ submissions }: { submissions: HiringSubmission
                   <p className="truncate text-sm font-medium text-stone-900">{s.full_name}</p>
                   <p className="flex items-center gap-1 truncate text-xs text-stone-400"><span>{flagFor(s.nationality)}</span>{s.position_applied} · {s.nationality} · {s.email}</p>
                 </div>
-                <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-medium capitalize ${STATUS_STYLE[s.status]}`}>{s.status}</span>
+                <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-medium ${STATUS_STYLE[s.status]}`}>{HIRING_STATUS_LABEL[s.status]}</span>
+                {selected.has(s.id) && <span aria-hidden="true" className="pointer-events-none absolute inset-0 rounded-[inherit] ring-2 ring-red-600 ring-inset" />}
               </button>
             );
           })}
@@ -332,7 +471,8 @@ export function HiringResponses({ submissions }: { submissions: HiringSubmission
       {/* Detail drawer */}
       {detail && (
         <div className="fixed inset-0 z-[80] flex justify-end bg-stone-950/40" onClick={() => setDetail(null)}>
-          <div className="h-full w-full max-w-lg overflow-y-auto bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+          <div className="h-full w-full max-w-2xl overflow-y-auto bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="border-b border-stone-200 bg-stone-100 p-6">
             <div className="flex items-start justify-between gap-4">
               <div className="flex items-center gap-4">
                 {photoOf(detail) ? (
@@ -355,13 +495,13 @@ export function HiringResponses({ submissions }: { submissions: HiringSubmission
                   <p className="mt-0.5 flex items-center gap-1 text-xs text-stone-400"><span>{flagFor(detail.nationality)}</span>{detail.nationality}</p>
                 </div>
               </div>
-              <button onClick={() => setDetail(null)} className="grid size-8 place-items-center rounded-lg text-stone-500 hover:bg-stone-100">×</button>
+              <button onClick={() => setDetail(null)} className="grid size-8 place-items-center rounded-lg text-stone-500 hover:bg-white">×</button>
             </div>
 
             <div className="mt-4 flex items-center gap-2">
               <span className="text-xs text-stone-500">Status</span>
-              <select value={detail.status} onChange={(e) => changeStatus(detail.id, e.target.value)} className={`rounded-lg border px-2 py-1 text-xs font-medium capitalize ${STATUS_STYLE[detail.status]}`}>
-                {STATUS_OPTIONS.map((o) => <option key={o} value={o}>{o}</option>)}
+              <select value={detail.status} onChange={(e) => changeStatus(detail.id, e.target.value)} className={`rounded-lg border px-2 py-1 text-xs font-medium ${STATUS_STYLE[detail.status]}`}>
+                {STATUS_OPTIONS.map((o) => <option key={o} value={o}>{HIRING_STATUS_LABEL[o]}</option>)}
               </select>
               <button
                 onClick={() => downloadApplication(detail)}
@@ -371,6 +511,20 @@ export function HiringResponses({ submissions }: { submissions: HiringSubmission
                 Download
               </button>
             </div>
+
+            <dl className="mt-5 grid grid-cols-2 gap-x-4 gap-y-3 border-t border-stone-200 pt-4 text-sm sm:grid-cols-3">
+              <Field label="Email" value={detail.email} />
+              <Field label="Phone" value={detail.phone} />
+              <Field label="Date of birth" value={detail.date_of_birth} />
+              <Field label="Experience" value={detail.experience_years ? `${detail.experience_years} yrs` : null} />
+              <Field label="Salary expectation" value={detail.salary_expectation ? `AED ${detail.salary_expectation}` : null} />
+              <Field label="Current position" value={detail.current_position} />
+              <Field label="Address" value={detail.current_address} />
+              <Field label="Applied" value={detail.created_at ? new Date(detail.created_at).toLocaleDateString("en-GB") : null} />
+            </dl>
+            </div>
+
+            <div className="p-6 pt-1">
 
             {dupInfo.map.has(detail.id) && (
               <div className="mt-4 rounded-xl border border-orange-200 bg-orange-50 p-3">
@@ -388,7 +542,7 @@ export function HiringResponses({ submissions }: { submissions: HiringSubmission
                       <span className="truncate text-stone-700">
                         {o.position_applied || "—"} <span className="text-stone-400">· {o.created_at ? new Date(o.created_at).toLocaleDateString("en-GB") : "—"}</span>
                       </span>
-                      <span className={`ml-2 shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-medium capitalize ${STATUS_STYLE[o.status]}`}>{o.status}</span>
+                      <span className={`ml-2 shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-medium ${STATUS_STYLE[o.status]}`}>{HIRING_STATUS_LABEL[o.status]}</span>
                     </button>
                   ))}
                 </div>
@@ -415,17 +569,6 @@ export function HiringResponses({ submissions }: { submissions: HiringSubmission
               </div>
             </div>
 
-            <dl className="mt-5 grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-              <Field label="Email" value={detail.email} />
-              <Field label="Phone" value={detail.phone} />
-              <Field label="Date of birth" value={detail.date_of_birth} />
-              <Field label="Experience" value={detail.experience_years ? `${detail.experience_years} yrs` : null} />
-              <Field label="Salary expectation" value={detail.salary_expectation ? `AED ${detail.salary_expectation}` : null} />
-              <Field label="Current position" value={detail.current_position} />
-              <Field label="Address" value={detail.current_address} />
-              <Field label="Applied" value={detail.created_at ? new Date(detail.created_at).toLocaleDateString("en-GB") : null} />
-            </dl>
-
             {Object.keys(detail.data || {}).filter((k) => !["source", "source_id"].includes(k)).length > 0 && (
               <div className="mt-5 space-y-3">
                 <h3 className="text-xs font-semibold uppercase tracking-wide text-stone-400">Application details</h3>
@@ -441,6 +584,7 @@ export function HiringResponses({ submissions }: { submissions: HiringSubmission
             <div className="mt-6 border-t border-stone-100 pt-4">
               <button onClick={() => setPendingDelete(detail)} className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50">Delete application</button>
             </div>
+            </div>
           </div>
         </div>
       )}
@@ -451,7 +595,7 @@ export function HiringResponses({ submissions }: { submissions: HiringSubmission
         const isImg = !isPdf; // default everything else to the zoomable image viewer
         return (
           <div className="fixed inset-0 z-[95] flex flex-col bg-stone-950/90" onClick={() => setViewer(null)}>
-            <div className="flex items-center justify-between gap-3 px-4 py-3 text-white" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between gap-3 px-4 py-3 text-white" onClick={(e) => { e.stopPropagation(); if (e.target === e.currentTarget) setViewer(null); }}>
               <span className="text-sm font-medium">{viewer.label}</span>
               <div className="flex items-center gap-2">
                 {isImg && (
@@ -465,12 +609,12 @@ export function HiringResponses({ submissions }: { submissions: HiringSubmission
                 <button onClick={() => setViewer(null)} className="grid size-8 place-items-center rounded-lg bg-white/10 hover:bg-white/20">×</button>
               </div>
             </div>
-            <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto p-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex min-h-0 flex-1 cursor-zoom-out items-center justify-center overflow-auto p-4" onClick={(e) => { e.stopPropagation(); if (e.target === e.currentTarget) setViewer(null); }}>
               {isPdf ? (
                 <iframe src={viewer.url} className="h-full w-full rounded-lg bg-white" title={viewer.label} />
               ) : isImg ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={viewer.url} alt={viewer.label} style={{ transform: `scale(${zoom})` }} className="max-h-full max-w-full origin-center rounded-lg object-contain transition-transform" />
+                <img src={viewer.url} alt={viewer.label} onClick={(e) => e.stopPropagation()} style={{ transform: `scale(${zoom})` }} className="max-h-full max-w-full origin-center cursor-default rounded-lg object-contain transition-transform" />
               ) : (
                 <div className="rounded-lg bg-white p-8 text-center text-sm text-stone-600">
                   Preview not available. <a href={viewer.url} target="_blank" rel="noreferrer" className="text-[#063f3b] underline">Open file</a>
@@ -509,18 +653,223 @@ function Field({ label, value }: { label: string; value?: string | null }) {
 
 // Compact donut + full scrollable legend. Clicking a segment or legend row filters.
 // Shows EVERY nationality (no "Other" grouping).
-const DONUT_PALETTE = [
-  "#1c1917", "#78716c", "#a8a29e", "#44403c", "#57534e", "#d6d3d1",
-  "#0f766e", "#0891b2", "#2563eb", "#7c3aed", "#c026d3", "#db2777",
-  "#dc2626", "#ea580c", "#d97706", "#ca8a04", "#65a30d", "#16a34a",
-  "#059669", "#0d9488", "#0284c7", "#4f46e5", "#9333ea", "#be123c",
+type Range = { label: string; min: number; max: number };
+const EXPERIENCE_RANGES: Range[] = [
+  { label: "0–2 yrs", min: 0, max: 2 },
+  { label: "3–5 yrs", min: 3, max: 5 },
+  { label: "6–9 yrs", min: 6, max: 9 },
+  { label: "10+ yrs", min: 10, max: 60 },
+];
+const SALARY_RANGES: Range[] = [
+  { label: "Under AED 3,000", min: 0, max: 2999 },
+  { label: "AED 3,000–4,999", min: 3000, max: 4999 },
+  { label: "AED 5,000–7,999", min: 5000, max: 7999 },
+  { label: "AED 8,000+", min: 8000, max: Number.POSITIVE_INFINITY },
 ];
 
-function colorAt(i: number) {
-  return DONUT_PALETTE[i % DONUT_PALETTE.length];
+function inRange(ranges: Range[], selected: string, value: number | null) {
+  if (selected === "all") return true;
+  const range = ranges.find((r) => r.label === selected);
+  return !!range && value !== null && value >= range.min && value <= range.max;
 }
 
-function NationalityDonut({
+function withinAge(range: [number, number] | null, age: number | null) {
+  return !range || (age !== null && age >= range[0] && age <= range[1]);
+}
+
+function numberOf(raw: string | null) {
+  const value = Number((raw ?? "").replace(/[^\d.]/g, ""));
+  return raw && Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function experienceOf(raw: string | null) {
+  const value = Number((raw ?? "").trim());
+  return raw && Number.isFinite(value) && value <= 60 ? value : null;
+}
+
+function ageOf(dob: string | null) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(dob ?? "");
+  if (!match) return null;
+  const today = new Date();
+  let age = today.getFullYear() - Number(match[1]);
+  if (today.getMonth() + 1 < Number(match[2]) || (today.getMonth() + 1 === Number(match[2]) && today.getDate() < Number(match[3]))) age -= 1;
+  return age;
+}
+
+function visaOf(r: HiringSubmission) {
+  const value = r.data?.uae_eligibility ?? r.data?.uaeEligibility;
+  return typeof value === "string" ? value.trim() : "";
+}
+
+const GRID_SIZES = [
+  "grid-cols-4 sm:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10",
+  "grid-cols-3 sm:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8",
+  "grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6",
+  "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5",
+  "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4",
+];
+
+function StatusMenu({ x, y, current, name, onPick, onClose }: { x: number; y: number; current: HiringStatus | null; name: string; onPick: (status: HiringStatus) => void; onClose: () => void }) {
+  const width = 200;
+  const height = 44 + DECISION_OPTIONS.length * 34;
+  const left = Math.min(x, window.innerWidth - width - 8);
+  const top = Math.min(y, window.innerHeight - height - 8);
+  return (
+    <div
+      className="fixed inset-0 z-[95]"
+      onClick={onClose}
+      onContextMenu={(event) => { event.preventDefault(); onClose(); }}
+      onKeyDown={(event) => { if (event.key === "Escape") onClose(); }}
+      onWheel={onClose}
+    >
+      <div
+        role="menu"
+        aria-label={`Set status for ${name}`}
+        className="absolute space-y-0.5 overflow-hidden rounded-xl border border-stone-200 bg-white p-1 shadow-xl"
+        style={{ left, top, width }}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <p className="truncate px-2 pt-1 pb-1 text-[11px] font-medium text-stone-400">{name}</p>
+        {DECISION_OPTIONS.map((status, index) => (
+          <button
+            key={status}
+            type="button"
+            role="menuitemradio"
+            aria-checked={current === status}
+            autoFocus={index === 0}
+            onClick={() => onPick(status)}
+            className={`flex h-8 w-full items-center gap-2 rounded-lg px-2.5 text-left text-sm font-medium outline-none ${HIRING_STATUS_MENU_STYLE[status].row}`}
+          >
+            <span className={`size-2.5 shrink-0 rounded-full ${HIRING_STATUS_MENU_STYLE[status].dot}`} />
+            <span className="flex-1">{HIRING_STATUS_LABEL[status]}</span>
+            {current === status ? <span aria-hidden="true">✓</span> : null}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function AgeRangeSlider({ bounds, value, onChange }: { bounds: [number, number]; value: [number, number] | null; onChange: (value: [number, number] | null) => void }) {
+  const [min, max] = bounds;
+  const [low, high] = value ?? bounds;
+  const span = Math.max(1, max - min);
+  const trackRef = useRef<HTMLDivElement>(null);
+  const [dragging, setDragging] = useState<0 | 1 | null>(null);
+  const set = (next: [number, number]) => onChange(next[0] <= min && next[1] >= max ? null : next);
+  const valueAt = (clientX: number) => {
+    const rect = trackRef.current?.getBoundingClientRect();
+    if (!rect || rect.width === 0) return min;
+    const ratio = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
+    return Math.round(min + ratio * span);
+  };
+  const move = (handle: 0 | 1, next: number) => {
+    if (handle === 0) set([Math.min(next, high), high]);
+    else set([low, Math.max(next, low)]);
+  };
+  const percent = (age: number) => ((age - min) / span) * 100;
+
+  return (
+    <div className={`flex h-9 items-center gap-3 rounded-lg border bg-white px-3 text-xs ${value ? "border-stone-900" : "border-stone-200"}`}>
+      <span className="shrink-0 text-stone-600">Age</span>
+      <div
+        ref={trackRef}
+        className="relative h-4 w-32 cursor-pointer touch-none select-none"
+        onPointerDown={(event) => {
+          const next = valueAt(event.clientX);
+          const handle: 0 | 1 = Math.abs(next - low) <= Math.abs(next - high) && !(next > high) ? 0 : 1;
+          event.currentTarget.setPointerCapture(event.pointerId);
+          setDragging(handle);
+          move(handle, next);
+        }}
+        onPointerMove={(event) => {
+          if (dragging !== null) move(dragging, valueAt(event.clientX));
+        }}
+        onPointerUp={() => setDragging(null)}
+        onPointerCancel={() => setDragging(null)}
+      >
+        <div className="absolute inset-x-0 top-1/2 h-1 -translate-y-1/2 rounded-full bg-stone-200" />
+        <div className="absolute top-1/2 h-1 -translate-y-1/2 rounded-full bg-stone-900" style={{ left: `${percent(low)}%`, right: `${100 - percent(high)}%` }} />
+        {([low, high] as const).map((age, handle) => (
+          <span
+            key={handle}
+            role="slider"
+            tabIndex={0}
+            aria-label={handle === 0 ? "Minimum age" : "Maximum age"}
+            aria-valuemin={min}
+            aria-valuemax={max}
+            aria-valuenow={age}
+            onKeyDown={(event) => {
+              const step = event.key === "ArrowLeft" || event.key === "ArrowDown" ? -1 : event.key === "ArrowRight" || event.key === "ArrowUp" ? 1 : 0;
+              if (!step) return;
+              event.preventDefault();
+              move(handle as 0 | 1, Math.min(max, Math.max(min, age + step)));
+            }}
+            className={`absolute top-1/2 size-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-stone-900 shadow outline-none focus-visible:ring-2 focus-visible:ring-stone-400 ${dragging === handle ? "scale-110" : ""}`}
+            style={{ left: `${percent(age)}%`, zIndex: dragging === handle ? 2 : 1 }}
+          />
+        ))}
+      </div>
+      <span className="w-12 shrink-0 text-right font-medium tabular-nums text-stone-900">{low}–{high}</span>
+      <button
+        type="button"
+        onClick={() => onChange(null)}
+        className={`w-3 shrink-0 text-stone-400 hover:text-stone-900 ${value ? "" : "invisible"}`}
+        aria-label="Reset age range"
+        tabIndex={value ? 0 : -1}
+      >
+        ×
+      </button>
+    </div>
+  );
+}
+
+function FilterSelect({ label, value, onChange, options, width = "w-40" }: { label: string; value: string; onChange: (value: string) => void; options: string[]; width?: string }) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      aria-label={label}
+      className={`h-9 ${width} shrink-0 truncate rounded-lg border px-2 text-xs outline-none ${value !== "all" ? "border-stone-900 bg-stone-900 text-white" : "border-stone-200 bg-white text-stone-600 hover:border-stone-400"}`}
+    >
+      <option value="all">{label}: All</option>
+      {options.map((option) => (
+        <option key={option} value={option}>{label}: {option}</option>
+      ))}
+    </select>
+  );
+}
+
+function collectText(value: unknown, out: string[]) {
+  if (value === null || value === undefined) return;
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    out.push(String(value));
+  } else if (Array.isArray(value)) {
+    for (const item of value) collectText(item, out);
+  } else if (typeof value === "object") {
+    for (const [key, item] of Object.entries(value)) {
+      if (key !== "file_id" && key !== "web_view_link") collectText(item, out);
+    }
+  }
+}
+
+function searchTextOf(r: HiringSubmission) {
+  const parts: string[] = [];
+  const { id: _id, documents, data, ...fields } = r;
+  void _id;
+  collectText(fields, parts);
+  collectText(data, parts);
+  collectText(documents?.map((doc) => [doc.label, doc.file_name]), parts);
+  parts.push(normalizeNationality(r.nationality), continentFor(normalizeNationality(r.nationality)), (r.phone ?? "").replace(/\D/g, ""));
+  if (r.created_at) parts.push(new Date(r.created_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }));
+  return parts.join(" ").toLowerCase();
+}
+
+function matchesSearch(text: string, query: string) {
+  return query.split(/\s+/).every((term) => text.includes(term));
+}
+
+function PositionBreakdown({
   data,
   active,
   onPick,
@@ -529,66 +878,78 @@ function NationalityDonut({
   active: string;
   onPick: (name: string) => void;
 }) {
-  const total = data.reduce((s, d) => s + d.count, 0) || 1;
-  const r = 15.915; // circumference ≈ 100 for easy percentages
-  let offset = 25; // start at top (12 o'clock)
+  return (
+    <div className="rounded-2xl border border-stone-200 bg-stone-100 px-4 py-3">
+      <div className="mb-2 flex items-center justify-between">
+        <h2 className="text-xs font-semibold text-stone-900">
+          By Position
+        </h2>
+      </div>
+      <div className="grid max-h-[7.5rem] grid-cols-1 gap-x-6 gap-y-0.5 overflow-x-hidden overflow-y-auto pr-1 sm:grid-cols-2">
+        {data.map((seg) => (
+          <button
+            key={seg.name}
+            onClick={() => onPick(seg.name)}
+            className={`flex w-full min-w-0 items-center gap-1.5 rounded-md px-1.5 py-px text-left text-[11px] ${
+              seg.name === active ? "bg-stone-900 font-semibold text-white" : "text-stone-600 hover:bg-white hover:text-stone-900"
+            }`}
+          >
+            <span className="truncate">{seg.name}</span>
+            <span className={`ml-auto shrink-0 tabular-nums ${seg.name === active ? "text-white/70" : "text-stone-400"}`}>{seg.count}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function NationalityByContinent({
+  data,
+  active,
+  onPick,
+}: {
+  data: { name: string; count: number }[];
+  active: string;
+  onPick: (name: string) => void;
+}) {
+  const groups = continents
+    .map((continent) => {
+      const countries = data.filter((seg) => continentFor(seg.name) === continent);
+      return { continent, countries, count: countries.reduce((s, d) => s + d.count, 0) };
+    })
+    .filter((group) => group.countries.length > 0)
+    .sort((a, b) => (a.continent === "Other" ? 1 : b.continent === "Other" ? -1 : b.count - a.count));
 
   return (
-    <div className="flex items-center gap-4 rounded-2xl border border-stone-200 bg-white px-4 py-3">
-      {/* Donut — every nationality is a segment */}
-      <div className="relative shrink-0">
-        <svg viewBox="0 0 36 36" className="size-24 -rotate-90">
-          <circle cx="18" cy="18" r={r} fill="none" stroke="#f5f5f4" strokeWidth="4" />
-          {data.map((seg, i) => {
-            const pct = (seg.count / total) * 100;
-            const dash = `${pct} ${100 - pct}`;
-            const el = (
-              <circle
-                key={seg.name}
-                cx="18" cy="18" r={r} fill="none"
-                stroke={seg.name === active ? "#063f3b" : colorAt(i)}
-                strokeWidth={seg.name === active ? 5 : 4}
-                strokeDasharray={dash}
-                strokeDashoffset={-offset}
-                className="cursor-pointer"
-                onClick={() => onPick(seg.name)}
-              >
-                <title>{`${seg.name}: ${seg.count}`}</title>
-              </circle>
-            );
-            offset += pct;
-            return el;
-          })}
-        </svg>
-        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-          <span className="text-sm font-semibold text-stone-900">{total}</span>
-          <span className="text-[9px] uppercase tracking-wide text-stone-400">total</span>
-        </div>
+    <div className="rounded-2xl border border-stone-200 bg-stone-100 px-4 py-3">
+      <div className="mb-2 flex items-center justify-between">
+        <h2 className="text-xs font-semibold text-stone-900">
+          By Nationality
+        </h2>
       </div>
-
-      {/* Legend — ALL nationalities, scrollable */}
-      <div className="min-w-0 flex-1">
-        <div className="mb-1 flex items-center justify-between">
-          <h2 className="text-xs font-semibold text-stone-900">By Nationality <span className="text-stone-400">({data.length})</span></h2>
-          {active !== "all" && (
-            <button onClick={() => onPick(active)} className="text-[11px] text-stone-500 hover:underline">× clear</button>
-          )}
-        </div>
-        <div className="grid max-h-24 grid-cols-2 gap-x-4 gap-y-0.5 overflow-y-auto pr-1 sm:grid-cols-3 lg:grid-cols-4">
-          {data.map((seg, i) => (
-            <button
-              key={seg.name}
-              onClick={() => onPick(seg.name)}
-              className={`flex items-center gap-1.5 text-left text-[11px] ${
-                seg.name === active ? "font-semibold text-stone-900" : "text-stone-600 hover:text-stone-900"
-              }`}
-            >
-              <span className="size-2 shrink-0 rounded-sm" style={{ backgroundColor: seg.name === active ? "#063f3b" : colorAt(i) }} />
-              <span className="truncate">{flagFor(seg.name)} {seg.name}</span>
-              <span className="ml-auto shrink-0 tabular-nums text-stone-400">{seg.count}</span>
-            </button>
-          ))}
-        </div>
+      <div className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3 xl:grid-cols-4">
+        {groups.map((group) => (
+          <div key={group.continent} className="min-w-0">
+            <div className="mb-1 flex items-center justify-between border-b border-stone-200 pb-1 text-[11px] font-semibold text-stone-900">
+              <span>{group.continent}</span>
+              <span className="tabular-nums text-stone-400">{group.count}</span>
+            </div>
+            <div className="max-h-24 space-y-0.5 overflow-x-hidden overflow-y-auto pr-1">
+              {group.countries.map((seg) => (
+                <button
+                  key={seg.name}
+                  onClick={() => onPick(seg.name)}
+                  className={`flex w-full min-w-0 items-center gap-1.5 rounded-md px-1.5 py-px text-left text-[11px] ${
+              seg.name === active ? "bg-stone-900 font-semibold text-white" : "text-stone-600 hover:bg-white hover:text-stone-900"
+            }`}
+                >
+                  <span className="truncate">{flagFor(seg.name)} {seg.name}</span>
+                  <span className={`ml-auto shrink-0 tabular-nums ${seg.name === active ? "text-white/70" : "text-stone-400"}`}>{seg.count}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );

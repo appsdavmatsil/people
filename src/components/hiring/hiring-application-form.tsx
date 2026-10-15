@@ -170,6 +170,50 @@ export function HiringApplicationForm({
     </div>
   );
 
+  const renderRadioGrid = (rows: ConfigTextField[]) => {
+    const options = rows[0].options ?? [];
+    const prefixes = rows.map((r) => r.label.split(/\s+[—–-]\s+/));
+    const shared = prefixes.every((p) => p.length > 1 && p[0] === prefixes[0][0]) ? prefixes[0][0] : null;
+    return (
+      <fieldset key={rows.map((r) => r.name).join("|")}>
+        {shared && <legend className="text-sm font-medium text-stone-800">{shared}</legend>}
+        <div className="mt-1.5 overflow-x-auto rounded-lg border border-stone-200">
+          <table className="w-full min-w-[28rem] text-sm">
+            <thead>
+              <tr className="bg-stone-50 text-xs text-stone-500">
+                <th className="px-3 py-2 text-left font-medium" />
+                {options.map((o) => <th key={o} className="px-2 py-2 text-center font-medium">{o}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r, index) => (
+                <tr key={r.name} className="border-t border-stone-100">
+                  <th scope="row" className="px-3 py-2 text-left font-medium text-stone-800">
+                    {shared ? prefixes[index].slice(1).join(" — ") : r.label} {r.required && <span className="text-red-500">*</span>}
+                    {r.help && <span className="block text-xs font-normal text-stone-500">{r.help}</span>}
+                  </th>
+                  {options.map((o) => (
+                    <td key={o} className="px-2 py-2 text-center">
+                      <input
+                        type="radio"
+                        name={r.name}
+                        value={o}
+                        aria-label={`${r.label}: ${o}`}
+                        checked={values[r.name] === o}
+                        onChange={() => setVal(r.name, o)}
+                        className="size-4 cursor-pointer accent-stone-900"
+                      />
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </fieldset>
+    );
+  };
+
   return (
     <form onSubmit={onSubmit} className="space-y-6">
       {sections.map((sec) => (
@@ -177,7 +221,7 @@ export function HiringApplicationForm({
           {sec.name && (
             <h2 className="border-b border-stone-200 pb-1.5 text-sm font-semibold uppercase tracking-wide text-stone-500">{sec.name}</h2>
           )}
-          {sec.fields.map(renderField)}
+          {groupRadios(sec.fields).map((item) => (Array.isArray(item) ? renderRadioGrid(item) : renderField(item)))}
         </section>
       ))}
 
@@ -195,4 +239,19 @@ export function HiringApplicationForm({
       </button>
     </form>
   );
+}
+
+/** Groups consecutive radio questions that share the same choices into one grid. */
+function groupRadios(fields: ConfigTextField[]): (ConfigTextField | ConfigTextField[])[] {
+  const out: (ConfigTextField | ConfigTextField[])[] = [];
+  for (const f of fields) {
+    if (f.type !== "radio") {
+      out.push(f);
+      continue;
+    }
+    const last = out.at(-1);
+    if (Array.isArray(last) && (last[0].options ?? []).join("|") === (f.options ?? []).join("|")) last.push(f);
+    else out.push([f]);
+  }
+  return out;
 }

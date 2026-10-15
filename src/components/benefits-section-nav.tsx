@@ -14,7 +14,7 @@ export function BenefitsSectionNav() {
 
   return (
     <SectionTabs
-      label="Benefits"
+      label="PayRoll"
       active={current}
       tabs={tabs.map((tab) => ({ ...tab, href: `/benefits/${tab.id}` }))}
     />

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { saveHiringConfig } from "@/lib/hiring-config";
 import type { FormConfig } from "@/lib/form-config";
+import { HIRING_STATUSES, type HiringStatus } from "@/lib/hiring-status";
 
 /**
  * Saves the hiring form configuration. Requires an authenticated app session.
@@ -27,12 +28,9 @@ export async function saveHiringConfigAction(
   return { ok: true };
 }
 
-const STATUSES = ["new", "reviewed", "shortlisted", "hired"] as const;
-type HiringStatus = (typeof STATUSES)[number];
-
-/** Updates one hiring submission's status. Requires an app session. */
+/** Updates the status of one or more hiring submissions. Requires an app session. */
 export async function updateHiringStatusAction(
-  id: string,
+  ids: string | string[],
   status: string,
 ): Promise<{ ok: boolean; error?: string }> {
   const supabase = await createClient();
@@ -40,9 +38,11 @@ export async function updateHiringStatusAction(
   if (typeof data?.claims?.sub !== "string") {
     return { ok: false, error: "Not authorized." };
   }
-  if (!STATUSES.includes(status as HiringStatus)) {
+  if (!HIRING_STATUSES.includes(status as HiringStatus)) {
     return { ok: false, error: "Invalid status." };
   }
+  const idList = Array.isArray(ids) ? ids : [ids];
+  if (idList.length === 0) return { ok: true };
 
   const { createServiceClient } = await import("@/lib/supabase/service");
   const service = createServiceClient();
@@ -51,7 +51,7 @@ export async function updateHiringStatusAction(
   const { error } = await service
     .from("hiring_submissions")
     .update({ status, updated_at: new Date().toISOString() })
-    .eq("id", id);
+    .in("id", idList);
   if (error) return { ok: false, error: error.message };
 
   revalidatePath("/hiringform");

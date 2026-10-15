@@ -4,13 +4,13 @@ import type { FormConfig } from "@/lib/form-config";
 /** Default hiring form config — full maine-forms application question set. CV + Photo only for docs. */
 export const DEFAULT_HIRING_CONFIG: FormConfig = {
   textFields: [
-    { name: "firstName", label: "First Name", type: "text", required: true, autoComplete: "given-name" },
-    { name: "lastName", label: "Last Name", type: "text", required: true, autoComplete: "family-name" },
+    { name: "fullName", label: "Full Name", type: "text", required: true, autoComplete: "name" },
     { name: "phone", label: "Phone Number", type: "phone", required: true },
     { name: "email", label: "Email Address", type: "email", required: true, autoComplete: "email" },
     { name: "dateOfBirth", label: "Date of Birth", type: "date", required: true },
     { name: "nationality", label: "Nationality", type: "country", required: true },
-    { name: "currentAddress", label: "Current Address", type: "text", required: true, help: "City, Country" },
+    { name: "currentCountry", label: "Current Country", type: "country", required: true },
+    { name: "currentCity", label: "Current City", type: "text", required: true, autoComplete: "address-level2" },
     { name: "instagram", label: "Instagram Handle", type: "text", required: false, help: "@yourhandle (optional)" },
     { name: "positionApplied", label: "Position Applied For", type: "select", required: true, options: ["Senior Sous Chef", "Sous Chef", "Junior Sous Chef", "Chef de Partie (CDP)", "Demi Chef de Partie (DCDP)", "Commis 1", "Commis 2", "Commis 3", "Pastry Chef", "Kitchen Steward"] },
     { name: "uaeDrivingLicense", label: "UAE Driving License?", type: "select", required: true, options: ["Yes", "No"] },

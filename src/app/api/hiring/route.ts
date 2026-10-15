@@ -1,5 +1,6 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { loadHiringConfig } from "@/lib/hiring-config";
+import { splitFullName } from "@/lib/staff";
 import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
@@ -56,9 +57,11 @@ export async function POST(req: Request): Promise<NextResponse> {
     }
   }
 
-  const first = (fields.firstName || "").trim();
-  const last = (fields.lastName || "").trim();
-  const fullName = (fields.fullName || `${first} ${last}`).trim() || (fields.email || "Applicant");
+  const typedName = (fields.fullName || `${fields.firstName || ""} ${fields.lastName || ""}`).trim().replace(/\s+/g, " ");
+  const split = splitFullName(typedName);
+  const first = (fields.firstName || split.firstName).trim();
+  const last = (fields.lastName || split.lastName).trim();
+  const fullName = typedName || (fields.email || "Applicant");
   const folder = `${Date.now()}_${slug(fullName)}`;
 
   // Upload documents to Supabase Storage
@@ -89,8 +92,8 @@ export async function POST(req: Request): Promise<NextResponse> {
 
   // Known top-level columns; the rest go into data jsonb.
   const TOP = new Set([
-    "firstName", "lastName", "email", "phone", "dateOfBirth", "nationality",
-    "currentAddress", "instagram", "positionApplied", "currentPosition",
+    "fullName", "firstName", "lastName", "email", "phone", "dateOfBirth", "nationality",
+    "currentAddress", "currentCity", "currentCountry", "instagram", "positionApplied", "currentPosition",
     "experienceYears", "salaryExpectation",
   ]);
   const data: Record<string, unknown> = { source: "people-hiring-form" };
@@ -107,7 +110,7 @@ export async function POST(req: Request): Promise<NextResponse> {
     phone: fields.phone || null,
     date_of_birth: fields.dateOfBirth || null,
     nationality: fields.nationality || null,
-    current_address: fields.currentAddress || null,
+    current_address: fields.currentAddress || [fields.currentCity, fields.currentCountry].map((part) => (part || "").trim()).filter(Boolean).join(", ") || null,
     instagram: fields.instagram || null,
     position_applied: fields.positionApplied || fields.currentPosition || null,
     current_position: fields.currentPosition || null,
