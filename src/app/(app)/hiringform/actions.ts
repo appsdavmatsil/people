@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { saveHiringConfig } from "@/lib/hiring-config";
 import type { FormConfig } from "@/lib/form-config";
-import { HIRING_STATUSES, type HiringStatus } from "@/lib/hiring-status";
+import { updateHiringStatuses } from "@/lib/hiring-records";
+import { setHiringShareToken } from "@/lib/hiring-share";
 
 /**
  * Saves the hiring form configuration. Requires an authenticated app session.
@@ -39,24 +40,21 @@ export async function updateHiringStatusAction(
   if (typeof data?.claims?.sub !== "string") {
     return { ok: false, error: "Not authorized." };
   }
-  if (!HIRING_STATUSES.includes(status as HiringStatus)) {
-    return { ok: false, error: "Invalid status." };
+  const result = await updateHiringStatuses(ids, status);
+  if (result.ok) revalidatePath("/hiringform");
+  return result;
+}
+
+/** Creates a new team link to Form Responses (replacing any old one), or turns it off. */
+export async function setHiringShareLinkAction(enabled: boolean): Promise<{ ok: boolean; token?: string | null; error?: string }> {
+  const supabase = await createClient();
+  const { data } = await supabase.auth.getClaims();
+  if (typeof data?.claims?.sub !== "string") {
+    return { ok: false, error: "Not authorized." };
   }
-  const idList = Array.isArray(ids) ? ids : [ids];
-  if (idList.length === 0) return { ok: true };
-
-  const { createServiceClient } = await import("@/lib/supabase/service");
-  const service = createServiceClient();
-  if (!service) return { ok: false, error: "Server not configured." };
-
-  const { error } = await service
-    .from("hiring_submissions")
-    .update({ status, updated_at: new Date().toISOString() })
-    .in("id", idList);
-  if (error) return { ok: false, error: error.message };
-
-  revalidatePath("/hiringform");
-  return { ok: true };
+  const result = await setHiringShareToken(enabled);
+  if (result.error) return { ok: false, error: result.error };
+  return { ok: true, token: result.token };
 }
 
 /** Deletes one hiring submission. Requires an app session. */

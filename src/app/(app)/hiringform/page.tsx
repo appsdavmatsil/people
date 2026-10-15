@@ -3,6 +3,8 @@ import { landingOf, loadHiringConfig, loadHiringConfigVersion } from "@/lib/hiri
 import { listHiringSubmissions } from "@/lib/hiring-records";
 import { HiringFormBuilder } from "@/components/hiring/hiring-form-builder";
 import { HiringResponses } from "@/components/hiring/hiring-responses";
+import { HiringTeamLink } from "@/components/hiring/hiring-team-link";
+import { loadHiringShareToken } from "@/lib/hiring-share";
 
 export const metadata: Metadata = {
   title: "Hiring Form",
@@ -27,6 +29,11 @@ export default async function HiringFormPage({
     return <HiringFormBuilder config={config} landing={landingOf(config)} version={version} />;
   }
 
-  const [submissions, config] = await Promise.all([listHiringSubmissions(), loadHiringConfig()]);
-  return <HiringResponses submissions={submissions} fields={config.textFields} />;
+  const [submissions, config, shareToken] = await Promise.all([listHiringSubmissions(), loadHiringConfig(), loadHiringShareToken()]);
+  return (
+    <>
+      <HiringTeamLink token={shareToken} />
+      <HiringResponses submissions={submissions} fields={config.textFields} />
+    </>
+  );
 }

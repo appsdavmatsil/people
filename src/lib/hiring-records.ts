@@ -1,5 +1,5 @@
 import { createServiceClient } from "@/lib/supabase/service";
-import { normalizeHiringStatus, type HiringStatus } from "@/lib/hiring-status";
+import { HIRING_STATUSES, normalizeHiringStatus, type HiringStatus } from "@/lib/hiring-status";
 
 export type HiringDocumentRecord = {
   label: string;
@@ -52,4 +52,22 @@ export async function listHiringSubmissions(): Promise<HiringSubmission[]> {
   }
 
   return ((data ?? []) as HiringSubmission[]).map((row) => ({ ...row, status: normalizeHiringStatus(row.status) }));
+}
+
+/** Sets the status of one or more submissions. Callers must check access first. */
+export async function updateHiringStatuses(ids: string | string[], status: string): Promise<{ ok: boolean; error?: string }> {
+  if (!HIRING_STATUSES.includes(status as HiringStatus)) {
+    return { ok: false, error: "Invalid status." };
+  }
+  const idList = Array.isArray(ids) ? ids : [ids];
+  if (idList.length === 0) return { ok: true };
+
+  const supabase = createServiceClient();
+  if (!supabase) return { ok: false, error: "Server not configured." };
+
+  const { error } = await supabase
+    .from("hiring_submissions")
+    .update({ status, updated_at: new Date().toISOString() })
+    .in("id", idList);
+  return error ? { ok: false, error: error.message } : { ok: true };
 }

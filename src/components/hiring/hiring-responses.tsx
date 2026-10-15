@@ -7,6 +7,7 @@ import { positionRank } from "@/lib/position-rank";
 import { continentFor, continents, flagFor, normalizeNationality } from "@/lib/hiring-nationality";
 import { HIRING_STATUSES, HIRING_STATUS_ACTIVE_STYLE, HIRING_STATUS_LABEL, HIRING_STATUS_MENU_STYLE, HIRING_STATUS_STYLE, normalizeHiringStatus, type HiringStatus } from "@/lib/hiring-status";
 import { updateHiringStatusAction, deleteHiringSubmissionAction } from "@/app/(app)/hiringform/actions";
+import { updateHiringStatusSharedAction } from "@/app/hiring-team/[token]/actions";
 
 const STATUS_OPTIONS = HIRING_STATUSES;
 const DECISION_OPTIONS = HIRING_STATUSES.filter((status) => status !== "new");
@@ -19,7 +20,16 @@ function photoOf(s: HiringSubmission): string | null {
   return d?.web_view_link ?? d?.file_id ?? null;
 }
 
-export function HiringResponses({ submissions, fields }: { submissions: HiringSubmission[]; fields: ConfigTextField[] }) {
+export function HiringResponses({
+  submissions,
+  fields,
+  shareToken,
+}: {
+  submissions: HiringSubmission[];
+  fields: ConfigTextField[];
+  /** Set when opened from the team link: status changes go through the link, and deleting is hidden. */
+  shareToken?: string;
+}) {
   const pages = useMemo(() => detailPages(fields), [fields]);
   const [records, setRecords] = useState(() => submissions.map((s) => ({ ...s, status: normalizeHiringStatus(s.status) })));
   const [search, setSearch] = useState("");
@@ -147,7 +157,9 @@ export function HiringResponses({ submissions, fields }: { submissions: HiringSu
     const previous = new Map(records.filter((r) => targets.has(r.id)).map((r) => [r.id, r.status]));
     setRecords((prev) => prev.map((r) => (targets.has(r.id) ? { ...r, status: status as HiringStatus } : r)));
     setDetail((current) => (current && targets.has(current.id) ? { ...current, status: status as HiringStatus } : current));
-    const result = await updateHiringStatusAction([...targets], status);
+    const result = shareToken
+      ? await updateHiringStatusSharedAction(shareToken, [...targets], status)
+      : await updateHiringStatusAction([...targets], status);
     if (!result.ok) {
       setRecords((prev) => prev.map((r) => (previous.has(r.id) ? { ...r, status: previous.get(r.id)! } : r)));
       setDetail((current) => (current && previous.has(current.id) ? { ...current, status: previous.get(current.id)! } : current));
@@ -598,9 +610,11 @@ export function HiringResponses({ submissions, fields }: { submissions: HiringSu
               </div>
             )}
 
-            <div className="mt-6 border-t border-stone-100 pt-4">
-              <button onClick={() => setPendingDelete(detail)} className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50">Delete application</button>
-            </div>
+            {!shareToken && (
+              <div className="mt-6 border-t border-stone-100 pt-4">
+                <button onClick={() => setPendingDelete(detail)} className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50">Delete application</button>
+              </div>
+            )}
             </div>
           </div>
         </div>

@@ -58,6 +58,8 @@ export async function proxy(request: NextRequest) {
     path.startsWith("/onboarding") ||
     path.startsWith("/staff-details") ||
     path.startsWith("/hiring-details") ||
+    // Team link to Form Responses (the page checks its own token).
+    path.startsWith("/hiring-team/") ||
     path === "/api/staff-intake" ||
     path === "/api/hiring" ||
     // Self-service edit steps (each verifies its own code/token).
