@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import type { HiringSubmission } from "@/lib/hiring-records";
+import type { ConfigTextField } from "@/lib/form-config";
 import { positionRank } from "@/lib/position-rank";
 import { continentFor, continents, flagFor, normalizeNationality } from "@/lib/hiring-nationality";
 import { HIRING_STATUSES, HIRING_STATUS_ACTIVE_STYLE, HIRING_STATUS_LABEL, HIRING_STATUS_MENU_STYLE, HIRING_STATUS_STYLE, normalizeHiringStatus, type HiringStatus } from "@/lib/hiring-status";
@@ -18,7 +19,8 @@ function photoOf(s: HiringSubmission): string | null {
   return d?.web_view_link ?? d?.file_id ?? null;
 }
 
-export function HiringResponses({ submissions }: { submissions: HiringSubmission[] }) {
+export function HiringResponses({ submissions, fields }: { submissions: HiringSubmission[]; fields: ConfigTextField[] }) {
+  const pages = useMemo(() => detailPages(fields), [fields]);
   const [records, setRecords] = useState(() => submissions.map((s) => ({ ...s, status: normalizeHiringStatus(s.status) })));
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("new");
@@ -492,7 +494,10 @@ export function HiringResponses({ submissions }: { submissions: HiringSubmission
                 <div>
                   <h2 className="text-lg font-semibold text-stone-900">{detail.full_name}</h2>
                   <p className="text-sm text-stone-500">{detail.position_applied}</p>
-                  <p className="mt-0.5 flex items-center gap-1 text-xs text-stone-400"><span>{flagFor(detail.nationality)}</span>{detail.nationality}</p>
+                  <p className="mt-0.5 flex items-center gap-1 text-xs text-stone-400">
+                    <span>{flagFor(detail.nationality)}</span>{detail.nationality}
+                    {detail.created_at && <span className="ml-1">· Applied {new Date(detail.created_at).toLocaleDateString("en-GB")}</span>}
+                  </p>
                 </div>
               </div>
               <button onClick={() => setDetail(null)} className="grid size-8 place-items-center rounded-lg text-stone-500 hover:bg-white">×</button>
@@ -512,16 +517,19 @@ export function HiringResponses({ submissions }: { submissions: HiringSubmission
               </button>
             </div>
 
-            <dl className="mt-5 grid grid-cols-2 gap-x-4 gap-y-3 border-t border-stone-200 pt-4 text-sm sm:grid-cols-3">
-              <Field label="Email" value={detail.email} />
-              <Field label="Phone" value={detail.phone} />
-              <Field label="Date of birth" value={detail.date_of_birth} />
-              <Field label="Experience" value={detail.experience_years ? `${detail.experience_years} yrs` : null} />
-              <Field label="Salary expectation" value={detail.salary_expectation ? `AED ${detail.salary_expectation}` : null} />
-              <Field label="Current position" value={detail.current_position} />
-              <Field label="Address" value={detail.current_address} />
-              <Field label="Applied" value={detail.created_at ? new Date(detail.created_at).toLocaleDateString("en-GB") : null} />
-            </dl>
+            {pages[0] && (
+              <div className="mt-5 space-y-4 border-t border-stone-200 pt-4">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-stone-500">{pages[0].title}</h3>
+                {pages[0].sections.map((section, index) => (
+                  <AnswerSection
+                    key={section.title + index}
+                    section={{ ...section, fields: section.fields.filter((f) => f.name !== "fullName") }}
+                    submission={detail}
+                    showTitle={section.title !== pages[0].title}
+                  />
+                ))}
+              </div>
+            )}
             </div>
 
             <div className="p-6 pt-1">
@@ -549,8 +557,17 @@ export function HiringResponses({ submissions }: { submissions: HiringSubmission
               </div>
             )}
 
-            <div className="mt-5">
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-stone-400">Documents</h3>
+            {pages.slice(1).map((page, pageIndex) => (
+              <div key={page.title + pageIndex} className="mt-5 space-y-4 border-t border-stone-200 pt-5 first:border-t-0">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-[#063f3b]">{page.title}</h3>
+                {page.sections.map((section, index) => (
+                  <AnswerSection key={section.title + index} section={section} submission={detail} showTitle={section.title !== page.title} />
+                ))}
+              </div>
+            ))}
+
+            <div className="mt-5 border-t border-stone-200 pt-5">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-[#063f3b]">Documents</h3>
               <div className="mt-2 flex flex-wrap gap-2">
                 {detail.documents?.length ? detail.documents.map((d, i) => {
                   const url = d.web_view_link ?? d.file_id;
@@ -569,10 +586,10 @@ export function HiringResponses({ submissions }: { submissions: HiringSubmission
               </div>
             </div>
 
-            {Object.keys(detail.data || {}).filter((k) => !["source", "source_id"].includes(k)).length > 0 && (
-              <div className="mt-5 space-y-3">
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-stone-400">Application details</h3>
-                {Object.entries(detail.data).filter(([k, v]) => !["source", "source_id"].includes(k) && v).map(([k, v]) => (
+            {otherAnswers(detail, fields).length > 0 && (
+              <div className="mt-5 space-y-3 border-t border-stone-200 pt-5">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-stone-400">Other answers</h3>
+                {otherAnswers(detail, fields).map(([k, v]) => (
                   <div key={k}>
                     <p className="text-xs font-medium capitalize text-stone-500">{fieldTitle(k)}</p>
                     <p className="whitespace-pre-wrap text-sm text-stone-700">{String(v)}</p>
@@ -637,16 +654,6 @@ export function HiringResponses({ submissions }: { submissions: HiringSubmission
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-function Field({ label, value }: { label: string; value?: string | null }) {
-  if (!value) return null;
-  return (
-    <div>
-      <dt className="text-xs text-stone-400">{label}</dt>
-      <dd className="text-stone-800">{value}</dd>
     </div>
   );
 }
@@ -957,4 +964,85 @@ function NationalityByContinent({
 
 function fieldTitle(key: string) {
   return key.replace(/_/g, " ").replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, (c) => c.toUpperCase());
+}
+
+const snakeCase = (key: string) => key.replace(/([a-z0-9])([A-Z])/g, "$1_$2").toLowerCase();
+const HIDDEN_DATA_KEYS = new Set(["source", "source_id"]);
+
+/** Splits the stored "City, Country" address back into its two form fields. */
+function addressPart(address: string | null, part: "city" | "country") {
+  if (!address) return null;
+  const parts = address.split(",").map((p) => p.trim()).filter(Boolean);
+  if (part === "country") return parts.length > 1 ? parts.at(-1)! : null;
+  return (parts.length > 1 ? parts.slice(0, -1).join(", ") : parts[0]) || null;
+}
+
+/** The candidate's answer to one form field, from its column or the extra data. */
+function answerOf(s: HiringSubmission, name: string): string | null {
+  const column: Record<string, string | null> = {
+    fullName: s.full_name,
+    email: s.email,
+    phone: s.phone,
+    dateOfBirth: s.date_of_birth,
+    nationality: s.nationality,
+    instagram: s.instagram,
+    positionApplied: s.position_applied,
+    currentPosition: s.current_position,
+    experienceYears: s.experience_years ? `${s.experience_years} yrs` : null,
+    salaryExpectation: s.salary_expectation ? `AED ${s.salary_expectation}` : null,
+    currentAddress: s.current_address,
+    currentCity: addressPart(s.current_address, "city"),
+    currentCountry: addressPart(s.current_address, "country"),
+  };
+  if (name in column) return column[name];
+  const value = s.data?.[name] ?? s.data?.[snakeCase(name)];
+  return value == null || value === "" ? null : String(value);
+}
+
+type DetailSection = { title: string; fields: ConfigTextField[] };
+type DetailPage = { title: string; sections: DetailSection[] };
+
+/** Groups the form fields into its pages, and each page into its section headings. */
+function detailPages(fields: ConfigTextField[]): DetailPage[] {
+  const pages: DetailPage[] = [];
+  for (const f of fields) {
+    if (pages.length === 0 || f.pageBreak) pages.push({ title: f.section || "Details", sections: [] });
+    const page = pages.at(-1)!;
+    const title = f.section || page.title;
+    if (page.sections.at(-1)?.title !== title) page.sections.push({ title, fields: [] });
+    page.sections.at(-1)!.fields.push(f);
+  }
+  return pages;
+}
+
+/** Extra answers stored on the application that the current form no longer asks. */
+function otherAnswers(s: HiringSubmission, fields: ConfigTextField[]) {
+  const known = new Set(fields.flatMap((f) => [f.name, snakeCase(f.name)]));
+  return Object.entries(s.data || {}).filter(([k, v]) => !HIDDEN_DATA_KEYS.has(k) && !known.has(k) && v != null && v !== "");
+}
+
+function AnswerSection({ section, submission, showTitle }: { section: DetailSection; submission: HiringSubmission; showTitle: boolean }) {
+  const short = section.fields.filter((f) => f.type !== "textarea");
+  const long = section.fields.filter((f) => f.type === "textarea");
+  return (
+    <div className="space-y-3">
+      {showTitle && <h4 className="text-[11px] font-semibold uppercase tracking-wide text-stone-500">{section.title}</h4>}
+      {short.length > 0 && (
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm sm:grid-cols-3">
+          {short.map((f) => (
+            <div key={f.name} className="min-w-0">
+              <dt className="text-xs text-stone-400">{f.label}</dt>
+              <dd className={`break-words ${answerOf(submission, f.name) ? "text-stone-800" : "text-stone-300"}`}>{answerOf(submission, f.name) ?? "—"}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+      {long.map((f) => (
+        <div key={f.name}>
+          <p className="text-xs text-stone-400">{f.label}</p>
+          <p className={`whitespace-pre-wrap text-sm ${answerOf(submission, f.name) ? "text-stone-700" : "text-stone-300"}`}>{answerOf(submission, f.name) ?? "—"}</p>
+        </div>
+      ))}
+    </div>
+  );
 }

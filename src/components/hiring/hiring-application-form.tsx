@@ -1,8 +1,9 @@
 "use client";
 
 import { useRef, useState } from "react";
-import type { ConfigDocument, ConfigTextField } from "@/lib/form-config";
+import type { ConfigDocument, ConfigTextField, LandingConfig } from "@/lib/form-config";
 import { CountrySelect } from "@/components/country-select";
+import { PhoneNumberInput } from "@/components/phone-number-input";
 
 const fieldClass =
   "mt-1.5 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-950 outline-none focus:border-stone-950";
@@ -43,6 +44,31 @@ async function toWebp(file: File): Promise<File> {
   }
 }
 
+function SocialIcon({ name }: { name: string }) {
+  if (name === "Instagram") {
+    return (
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="size-5">
+        <rect x="3" y="3" width="18" height="18" rx="5" />
+        <circle cx="12" cy="12" r="4" />
+        <circle cx="17.5" cy="6.5" r="0.5" fill="currentColor" />
+      </svg>
+    );
+  }
+  if (name === "Facebook") {
+    return (
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" className="size-5">
+        <path d="M14 8.5V6.8c0-.8.2-1.3 1.4-1.3H17V2.2C16.6 2.1 15.5 2 14.3 2 11.7 2 10 3.6 10 6.4v2.1H7.3V12H10v10h4V12h2.8l.4-3.5H14Z" />
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="size-5">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3Z" />
+    </svg>
+  );
+}
+
 function FileField({ doc, file, onSelect }: { doc: ConfigDocument; file: File | null; onSelect: (f: File | null) => void }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const isPhoto = /photo/i.test(doc.label) || /photo/i.test(doc.field);
@@ -80,15 +106,21 @@ function FileField({ doc, file, onSelect }: { doc: ConfigDocument; file: File | 
 export function HiringApplicationForm({
   textFields,
   documents,
+  landing,
+  previewSuccess = false,
 }: {
   textFields: ConfigTextField[];
   documents: ConfigDocument[];
+  landing: LandingConfig;
+  /** Opens straight on the thank-you screen, for checking it without submitting. */
+  previewSuccess?: boolean;
 }) {
   const [values, setValues] = useState<Record<string, string>>({});
   const [files, setFiles] = useState<Record<string, File | null>>({});
-  const [status, setStatus] = useState<Status>("idle");
+  const [status, setStatus] = useState<Status>(previewSuccess ? "success" : "idle");
   const [error, setError] = useState("");
   const [step, setStep] = useState(0);
+  const [started, setStarted] = useState(false);
   const [showMissing, setShowMissing] = useState(false);
   const formTop = useRef<HTMLDivElement>(null);
 
@@ -170,11 +202,158 @@ export function HiringApplicationForm({
     }
   }
 
+  const header = landing.headerLogo ? (
+    <h1>
+      <img src={landing.headerLogo} alt="The Maine" className="mx-auto h-auto max-h-32 w-56 object-contain mix-blend-multiply" />
+    </h1>
+  ) : (
+    <h1 className="text-center text-2xl font-semibold text-stone-950">Job Application Form</h1>
+  );
+
   if (status === "success") {
+    const links = [
+      { label: "Website", href: landing.website },
+      { label: "Instagram", href: landing.instagram },
+      { label: "Facebook", href: landing.facebook },
+    ].filter((link) => link.href.trim());
     return (
-      <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-8 text-center">
-        <h2 className="text-lg font-semibold text-emerald-800">Application received</h2>
-        <p className="mt-2 text-sm text-emerald-700">Thank you for applying to The Maine. Our team will review your application and be in touch.</p>
+      <div className="space-y-6">
+        {header}
+        <div className="overflow-hidden rounded-2xl border border-stone-200 bg-white text-center shadow-sm">
+          <div className="bg-[#063f3b] px-6 py-8 text-white">
+            <span className="mx-auto grid size-12 place-items-center rounded-full bg-white/15">
+              <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" className="size-6">
+                <path fillRule="evenodd" d="M16.7 5.3a1 1 0 0 1 0 1.4l-8 8a1 1 0 0 1-1.4 0l-4-4a1 1 0 1 1 1.4-1.4L8 12.58l7.3-7.3a1 1 0 0 1 1.4 0Z" clipRule="evenodd" />
+              </svg>
+            </span>
+            {landing.successTitle && <h2 className="mt-4 text-xl font-semibold">{landing.successTitle}</h2>}
+            {landing.successMessage && <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-white/85">{landing.successMessage}</p>}
+          </div>
+          {(landing.successNote || links.length > 0) && (
+            <div className="space-y-4 px-6 py-6">
+              {landing.successNote && <p className="whitespace-pre-line text-sm leading-relaxed text-stone-600">{landing.successNote}</p>}
+              {links.length > 0 && (
+                <div className="flex justify-center gap-3">
+                  {links.map((link) => (
+                    <a
+                      key={link.label}
+                      href={/^https?:\/\//i.test(link.href) ? link.href : `https://${link.href}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      aria-label={link.label}
+                      title={link.label}
+                      className="grid size-11 place-items-center rounded-full bg-[#063f3b] text-white transition hover:bg-[#052f2c]"
+                    >
+                      <SocialIcon name={link.label} />
+                    </a>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  const stepTitles = ["Welcome", ...pageTitles];
+  const activeStep = started ? currentStep + 1 : 0;
+
+  function openStep(index: number) {
+    if (index === 0) {
+      setStarted(false);
+      requestAnimationFrame(() => formTop.current?.scrollIntoView({ behavior: "smooth", block: "start" }));
+      return;
+    }
+    setStarted(true);
+    goTo(index - 1);
+  }
+
+  const progress = (
+    <div>
+      <div className="flex items-baseline justify-between gap-3 text-xs">
+        <p className="font-semibold text-stone-900">{stepTitles[activeStep]}</p>
+        <p className="shrink-0 font-medium text-stone-500">Step {activeStep + 1} of {stepTitles.length}</p>
+      </div>
+      <nav className="mt-1 flex gap-1.5" aria-label="Application steps">
+        {stepTitles.map((title, index) => {
+          const hasMissing = showMissing && missingByStep.some((group) => group.step === index - 1);
+          return (
+            <button
+              key={index}
+              type="button"
+              onClick={() => openStep(index)}
+              aria-current={index === activeStep ? "step" : undefined}
+              aria-label={`Step ${index + 1}: ${title}`}
+              title={title}
+              className="group min-w-0 flex-1 cursor-pointer py-1.5 text-left"
+            >
+              <span className={`block h-1.5 rounded-full transition-colors group-hover:opacity-80 ${hasMissing ? "bg-red-400" : index <= activeStep ? "bg-[#063f3b]" : "bg-stone-200 group-hover:bg-stone-300"} ${index === activeStep ? "ring-2 ring-[#063f3b]/25 ring-offset-1" : ""}`} />
+              <span className={`mt-1 hidden truncate text-[10px] sm:block ${index === activeStep ? "font-semibold text-stone-900" : hasMissing ? "text-red-600" : "text-stone-500 group-hover:text-stone-800"}`}>
+                {title}
+              </span>
+            </button>
+          );
+        })}
+      </nav>
+    </div>
+  );
+
+  if (!started) {
+    const requiredDocs = documents.filter((d) => d.required).map((d) => d.label);
+    const optionalDocs = documents.filter((d) => !d.required).map((d) => d.label);
+    return (
+      <div className="space-y-6">
+      <div ref={formTop} className="scroll-mt-6" />
+      {header}
+      {progress}
+      <div className="overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-sm">
+        <div className="bg-[#063f3b] px-6 py-7 text-white">
+          {landing.title && (
+            <h2 className="mb-3 text-center text-lg font-semibold uppercase tracking-[0.08em] sm:text-xl">{landing.title}</h2>
+          )}
+          {landing.intro && <p className="whitespace-pre-line text-sm leading-relaxed text-white/85">{landing.intro}</p>}
+          {landing.headline && <h3 className="mt-4 whitespace-pre-line text-xl font-semibold leading-snug">{landing.headline}</h3>}
+          {landing.note && <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-white/80">{landing.note}</p>}
+        </div>
+        <div className="space-y-5 px-6 py-6">
+          <div>
+            <h3 className="text-sm font-semibold text-stone-900">What the application covers</h3>
+            <ol className="mt-2 space-y-1.5">
+              {pageTitles.map((title, index) => (
+                <li key={title + index} className="flex items-center gap-2.5 text-sm text-stone-700">
+                  <span className="grid size-6 shrink-0 place-items-center rounded-full bg-stone-100 text-xs font-semibold text-stone-700">{index + 1}</span>
+                  {title}
+                </li>
+              ))}
+            </ol>
+          </div>
+          {documents.length > 0 && (
+            <div className="rounded-xl bg-stone-50 px-4 py-3">
+              <h3 className="text-sm font-semibold text-stone-900">Have these ready</h3>
+              <ul className="mt-1.5 space-y-1 text-sm text-stone-700">
+                {requiredDocs.map((label) => <li key={label}>• {label}</li>)}
+                {optionalDocs.map((label) => <li key={label} className="text-stone-500">• {label} (optional)</li>)}
+              </ul>
+            </div>
+          )}
+          <div className="space-y-2 text-xs text-stone-500">
+            <p>It takes about 10–15 minutes. You can move between steps freely — nothing is sent until you press Submit on the last step.</p>
+            <p className="flex gap-2 rounded-lg border border-stone-200 px-3 py-2 text-stone-600">
+              <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true" className="mt-px size-3.5 shrink-0 text-[#063f3b]">
+                <path fillRule="evenodd" d="M10 1a4.5 4.5 0 0 0-4.5 4.5V9H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-.5V5.5A4.5 4.5 0 0 0 10 1Zm3 8V5.5a3 3 0 1 0-6 0V9h6Z" clipRule="evenodd" />
+              </svg>
+              <span>
+                <span className="font-semibold text-stone-700">Your privacy:</span> all your personal information is stored
+                securely and internally by the company&apos;s HR department, and is never shared outside the organization.
+              </span>
+            </p>
+          </div>
+          <button type="button" onClick={() => { setStarted(true); requestAnimationFrame(() => formTop.current?.scrollIntoView({ block: "start" })); }} className={primaryButtonClass}>
+            Start application
+          </button>
+        </div>
+      </div>
       </div>
     );
   }
@@ -207,9 +386,11 @@ export function HiringApplicationForm({
         <div className="mt-1.5">
           <CountrySelect value={values[f.name] ?? ""} onChange={(v) => setVal(f.name, v)} />
         </div>
+      ) : f.type === "phone" ? (
+        <PhoneNumberInput className="mt-1.5" label={f.label} value={values[f.name] ?? ""} onChange={(v) => setVal(f.name, v)} />
       ) : (
         <input
-          type={f.type === "phone" ? "tel" : f.type}
+          type={f.type}
           className={fieldClass}
           autoComplete={f.autoComplete}
           value={values[f.name] ?? ""}
@@ -266,35 +447,8 @@ export function HiringApplicationForm({
   return (
     <form onSubmit={onSubmit} className="space-y-6">
       <div ref={formTop} className="scroll-mt-6" />
-      {pages.length > 1 && (
-        <div>
-          <div className="flex items-baseline justify-between gap-3 text-xs">
-            <p className="font-semibold text-stone-900">{pageTitles[currentStep]}</p>
-            <p className="shrink-0 font-medium text-stone-500">Step {currentStep + 1} of {pages.length}</p>
-          </div>
-          <nav className="mt-1 flex gap-1.5" aria-label="Application steps">
-            {pages.map((_, index) => {
-              const hasMissing = showMissing && missingByStep.some((group) => group.step === index);
-              return (
-                <button
-                  key={index}
-                  type="button"
-                  onClick={() => goTo(index)}
-                  aria-current={index === currentStep ? "step" : undefined}
-                  aria-label={`Step ${index + 1}: ${pageTitles[index]}`}
-                  title={pageTitles[index]}
-                  className="group min-w-0 flex-1 cursor-pointer py-1.5 text-left"
-                >
-                  <span className={`block h-1.5 rounded-full transition-colors group-hover:opacity-80 ${hasMissing ? "bg-red-400" : index <= currentStep ? "bg-[#063f3b]" : "bg-stone-200 group-hover:bg-stone-300"} ${index === currentStep ? "ring-2 ring-[#063f3b]/25 ring-offset-1" : ""}`} />
-                  <span className={`mt-1 hidden truncate text-[10px] sm:block ${index === currentStep ? "font-semibold text-stone-900" : hasMissing ? "text-red-600" : "text-stone-500 group-hover:text-stone-800"}`}>
-                    {pageTitles[index]}
-                  </span>
-                </button>
-              );
-            })}
-          </nav>
-        </div>
-      )}
+      <h1 className="text-center text-2xl font-semibold text-stone-950">Job Application Form</h1>
+      {progress}
       {sections.map((sec) => (
         <section key={sec.name} className="space-y-4">
           {sec.name && (
@@ -323,7 +477,7 @@ export function HiringApplicationForm({
             {missingByStep.map((group) => (
               <li key={group.step}>
                 <button type="button" onClick={() => goTo(group.step)} className="text-xs font-semibold text-red-900 underline underline-offset-2 hover:text-red-700">
-                  Step {group.step + 1}: {pageTitles[group.step]}
+                  Step {group.step + 2}: {pageTitles[group.step]}
                 </button>
                 <p className="mt-0.5 text-xs text-red-700">{group.labels.join(" · ")}</p>
               </li>
@@ -335,11 +489,9 @@ export function HiringApplicationForm({
       {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
 
       <div className="flex gap-3">
-        {currentStep > 0 && (
-          <button type="button" onClick={() => goTo(currentStep - 1)} disabled={status === "submitting"} className="inline-flex h-11 shrink-0 items-center justify-center rounded-lg border border-stone-300 bg-white px-5 text-sm font-semibold text-stone-800 hover:bg-stone-50 disabled:opacity-60">
-            Back
-          </button>
-        )}
+        <button type="button" onClick={() => openStep(activeStep - 1)} disabled={status === "submitting"} className="inline-flex h-11 shrink-0 items-center justify-center rounded-lg border border-stone-300 bg-white px-5 text-sm font-semibold text-stone-800 hover:bg-stone-50 disabled:opacity-60">
+          Back
+        </button>
         <button type="submit" className={primaryButtonClass} disabled={status === "submitting"}>
           {currentStep < lastStep ? "Next" : status === "submitting" ? "Submitting…" : "Submit application"}
         </button>

@@ -36,10 +36,28 @@ export type NamingRules = {
   filePattern: string;
 };
 
+export type LandingConfig = {
+  title: string;
+  intro: string;
+  headline: string;
+  note: string;
+  /** Image URL or data URL shown at the top of the landing and thank-you screens. Empty hides it. */
+  headerLogo: string;
+  /** Image URL or data URL shown in the footer under the form. Empty hides it. */
+  logo: string;
+  successTitle: string;
+  successMessage: string;
+  successNote: string;
+  website: string;
+  instagram: string;
+  facebook: string;
+};
+
 export type FormConfig = {
   textFields: ConfigTextField[];
   documents: ConfigDocument[];
   naming: NamingRules;
+  landing?: LandingConfig;
 };
 
 /** Built-in default used when the DB config row is missing. Mirrors the seed. */

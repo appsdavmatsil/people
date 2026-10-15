@@ -1,12 +1,13 @@
 "use client";
 
-import { Fragment, useState } from "react";
+import { Fragment, useRef, useState } from "react";
 import { saveHiringConfigAction } from "@/app/(app)/hiringform/actions";
 import type {
   ConfigDocument,
   ConfigTextField,
   FieldType,
   FormConfig,
+  LandingConfig,
 } from "@/lib/form-config";
 
 const fieldClass =
@@ -20,8 +21,9 @@ const primary =
 
 const FIELD_TYPES: FieldType[] = ["text", "email", "phone", "date", "textarea", "select", "radio", "country"];
 
-export function HiringFormBuilder({ config, version }: { config: FormConfig; version: string | null }) {
+export function HiringFormBuilder({ config, landing: initialLanding, version }: { config: FormConfig; landing: LandingConfig; version: string | null }) {
   const [savedVersion, setSavedVersion] = useState(version);
+  const [landing, setLanding] = useState<LandingConfig>(initialLanding);
   const [fields, setFields] = useState<ConfigTextField[]>(config.textFields);
   const [docs, setDocs] = useState<ConfigDocument[]>(config.documents);
   const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
@@ -67,7 +69,7 @@ export function HiringFormBuilder({ config, version }: { config: FormConfig; ver
   async function save() {
     setStatus("saving");
     setMessage("");
-    const result = await saveHiringConfigAction({ textFields: fields, documents: docs, naming: config.naming }, savedVersion);
+    const result = await saveHiringConfigAction({ textFields: fields, documents: docs, naming: config.naming, landing }, savedVersion);
     if (result.ok) {
       setSavedVersion(result.version ?? savedVersion);
       setStatus("saved");
@@ -105,18 +107,30 @@ export function HiringFormBuilder({ config, version }: { config: FormConfig; ver
         <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{message}</p>
       ) : null}
 
+      <LandingEditor landing={landing} onChange={(patch) => setLanding((cur) => ({ ...cur, ...patch }))} />
+
       <section className="mb-8">
         <h2 className="mb-2 text-sm font-semibold text-stone-900">Fields</h2>
         <div className="space-y-2">
           {fields.map((f, i) => (
             <Fragment key={i}>
-              {i > 0 && f.pageBreak && (
-                <div className="flex items-center gap-3 pt-4 text-[11px] font-semibold uppercase tracking-wide text-stone-500">
-                  <span className="h-px flex-1 border-t border-dashed border-stone-300" />
-                  Page {fields.slice(1, i + 1).filter((field) => field.pageBreak).length + 1} starts here
-                  <span className="h-px flex-1 border-t border-dashed border-stone-300" />
+              {i === 0 && fields.some((field, index) => index > 0 && field.pageBreak) && <PageDivider page={1} />}
+              {i > 0 && (f.pageBreak ? (
+                <PageDivider
+                  page={fields.slice(1, i + 1).filter((field) => field.pageBreak).length + 1}
+                  onRemove={() => updateField(i, { pageBreak: undefined })}
+                />
+              ) : (
+                <div className="group/insert relative -my-1 flex h-3 items-center justify-center">
+                  <button
+                    type="button"
+                    onClick={() => updateField(i, { pageBreak: true })}
+                    className="relative z-10 rounded-full border border-dashed border-stone-300 bg-white px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-stone-500 opacity-0 transition hover:border-[#063f3b] hover:text-[#063f3b] focus-visible:opacity-100 group-hover/insert:opacity-100"
+                  >
+                    + Page break
+                  </button>
                 </div>
-              )}
+              ))}
               {(i === 0 || fields[i - 1].section !== f.section) && f.section && (
                 <h3 className="mt-4 border-b border-stone-200 pb-1 text-xs font-semibold uppercase tracking-wide text-[#063f3b] first:mt-0">
                   {f.section}
@@ -157,16 +171,6 @@ export function HiringFormBuilder({ config, version }: { config: FormConfig; ver
                   />
                   Required
                 </label>
-                {i > 0 && (
-                  <label className="flex items-center gap-1.5" title="Start a new page of the public form at this field">
-                    <input
-                      type="checkbox"
-                      checked={Boolean(f.pageBreak)}
-                      onChange={(e) => updateField(i, { pageBreak: e.target.checked || undefined })}
-                    />
-                    New page
-                  </label>
-                )}
               </div>
               <div className="flex items-center gap-1">
                 <button type="button" className={btn} onClick={() => moveField(i, -1)} aria-label="Move up">↑</button>
@@ -211,6 +215,9 @@ export function HiringFormBuilder({ config, version }: { config: FormConfig; ver
       </section>
 
       <section>
+        {fields.some((field, index) => index > 0 && field.pageBreak) && (
+          <PageDivider page={fields.filter((field, index) => index > 0 && field.pageBreak).length + 2} />
+        )}
         <h2 className="mb-2 text-sm font-semibold text-stone-900">Documents</h2>
         <div className="space-y-2">
           {docs.map((d, i) => (
@@ -264,6 +271,14 @@ export function HiringFormBuilder({ config, version }: { config: FormConfig; ver
           + Add document
         </button>
       </section>
+
+      <SuccessEditor landing={landing} onChange={(patch) => setLanding((cur) => ({ ...cur, ...patch }))} />
+
+      <div className="mt-6 flex justify-end">
+        <button className={primary} onClick={save} disabled={status === "saving"}>
+          {status === "saving" ? "Saving…" : "Save changes"}
+        </button>
+      </div>
       </div>
     </div>
   );
@@ -318,6 +333,154 @@ function ShareLink() {
   );
 }
 
+const DEFAULT_LOGO = "/the-maine-seal.png";
+const DEFAULT_HEADER_LOGO = "/the-maine-logo.png";
+
+/** Shrinks an uploaded logo so it can be stored inside the form config. */
+async function logoDataUrl(file: File): Promise<string> {
+  if (file.type === "image/svg+xml") {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(reader.error);
+      reader.readAsDataURL(file);
+    });
+  }
+  const bitmap = await createImageBitmap(file);
+  const scale = Math.min(1, 800 / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(bitmap.width * scale);
+  canvas.height = Math.round(bitmap.height * scale);
+  canvas.getContext("2d")?.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  const png = canvas.toDataURL("image/png");
+  return png.length < 300_000 ? png : canvas.toDataURL("image/webp", 0.9);
+}
+
+function ImageField({ label, help, value, defaultValue, onChange }: { label: string; help: string; value: string; defaultValue: string; onChange: (value: string) => void }) {
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [error, setError] = useState("");
+
+  async function pick(file: File | undefined) {
+    if (!file) return;
+    setError("");
+    try {
+      onChange(await logoDataUrl(file));
+    } catch {
+      setError("Could not read that image. Try a PNG, JPG or SVG.");
+    }
+  }
+
+  return (
+    <div className="min-w-0 rounded-lg border border-stone-200 p-3">
+      <p className="text-xs font-medium text-stone-600">{label}</p>
+      <p className="text-[11px] text-stone-400">{help}</p>
+      <div className="mt-2 flex h-24 items-center justify-center overflow-hidden rounded-lg border border-stone-200 bg-stone-100 p-2">
+        {value ? (
+          <img src={value} alt={label} className="block max-h-full max-w-full object-contain mix-blend-multiply" />
+        ) : (
+          <span className="text-xs text-stone-400">No image</span>
+        )}
+      </div>
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <button type="button" className={btn} onClick={() => fileRef.current?.click()}>Change</button>
+        {value && <button type="button" className={btn} onClick={() => onChange("")}>Remove</button>}
+        {value !== defaultValue && (
+          <button type="button" className="text-xs font-medium text-stone-500 underline hover:text-stone-900" onClick={() => onChange(defaultValue)}>
+            Use default
+          </button>
+        )}
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/png,image/jpeg,image/webp,image/svg+xml"
+          className="hidden"
+          onChange={(e) => { void pick(e.target.files?.[0]); e.target.value = ""; }}
+        />
+      </div>
+      {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
+    </div>
+  );
+}
+
+function LandingEditor({ landing, onChange }: { landing: LandingConfig; onChange: (patch: Partial<LandingConfig>) => void }) {
+  return (
+    <section className="mb-8">
+      <h2 className="mb-2 text-sm font-semibold text-stone-900">Landing page</h2>
+      <div className="space-y-3 rounded-xl border border-stone-200 bg-white p-4">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <ImageField
+            label="Logo"
+            help="Top of the welcome and thank-you screens"
+            value={landing.headerLogo}
+            defaultValue={DEFAULT_HEADER_LOGO}
+            onChange={(headerLogo) => onChange({ headerLogo })}
+          />
+          <ImageField
+            label="Footer"
+            help="Bottom of every page"
+            value={landing.logo}
+            defaultValue={DEFAULT_LOGO}
+            onChange={(logo) => onChange({ logo })}
+          />
+        </div>
+        <label className="block">
+          <span className="text-xs font-medium text-stone-600">Title</span>
+          <input className={`${labelFieldClass} mt-1`} value={landing.title} onChange={(e) => onChange({ title: e.target.value })} />
+        </label>
+        <label className="block">
+          <span className="text-xs font-medium text-stone-600">Introduction</span>
+          <textarea rows={3} className={`${fieldClass} mt-1`} value={landing.intro} onChange={(e) => onChange({ intro: e.target.value })} />
+        </label>
+        <label className="block">
+          <span className="text-xs font-medium text-stone-600">Headline (large text)</span>
+          <textarea rows={2} className={`${fieldClass} mt-1`} value={landing.headline} onChange={(e) => onChange({ headline: e.target.value })} />
+        </label>
+        <label className="block">
+          <span className="text-xs font-medium text-stone-600">Closing note</span>
+          <textarea rows={2} className={`${fieldClass} mt-1`} value={landing.note} onChange={(e) => onChange({ note: e.target.value })} />
+        </label>
+        <p className="text-xs text-stone-400">Leave a box empty to hide it. The step list and documents list are added automatically.</p>
+      </div>
+    </section>
+  );
+}
+
+function SuccessEditor({ landing, onChange }: { landing: LandingConfig; onChange: (patch: Partial<LandingConfig>) => void }) {
+  return (
+    <section className="mt-8">
+      <h2 className="mb-2 text-sm font-semibold text-stone-900">After submitting</h2>
+      <p className="mb-2 text-xs text-stone-500">The thank-you screen candidates see once their application is sent.</p>
+      <div className="space-y-3 rounded-xl border border-stone-200 bg-white p-4">
+        <label className="block">
+          <span className="text-xs font-medium text-stone-600">Title</span>
+          <input className={`${labelFieldClass} mt-1`} value={landing.successTitle} onChange={(e) => onChange({ successTitle: e.target.value })} />
+        </label>
+        <label className="block">
+          <span className="text-xs font-medium text-stone-600">Thank-you message</span>
+          <textarea rows={2} className={`${fieldClass} mt-1`} value={landing.successMessage} onChange={(e) => onChange({ successMessage: e.target.value })} />
+        </label>
+        <label className="block">
+          <span className="text-xs font-medium text-stone-600">Follow-up note</span>
+          <textarea rows={2} className={`${fieldClass} mt-1`} value={landing.successNote} onChange={(e) => onChange({ successNote: e.target.value })} />
+        </label>
+        <div className="grid gap-3 sm:grid-cols-3">
+          {([
+            ["website", "Website", "https://…"],
+            ["instagram", "Instagram", "https://instagram.com/…"],
+            ["facebook", "Facebook", "https://facebook.com/…"],
+          ] as const).map(([key, label, placeholder]) => (
+            <label key={key} className="block">
+              <span className="text-xs font-medium text-stone-600">{label} link</span>
+              <input type="url" className={`${fieldClass} mt-1`} value={landing[key]} placeholder={placeholder} onChange={(e) => onChange({ [key]: e.target.value.trim() })} />
+            </label>
+          ))}
+        </div>
+        <p className="text-xs text-stone-400">Each link appears as a button on the thank-you screen. Leave it empty to hide that button.</p>
+      </div>
+    </section>
+  );
+}
+
 function OptionTags({ options, locked, onChange }: { options: string[]; locked: boolean; onChange: (options: string[]) => void }) {
   const [draft, setDraft] = useState("");
   const add = (raw: string) => {
@@ -354,6 +517,23 @@ function OptionTags({ options, locked, onChange }: { options: string[]; locked: 
           className="min-w-32 flex-1 bg-transparent px-1 py-0.5 text-sm outline-none"
         />
       )}
+    </div>
+  );
+}
+
+function PageDivider({ page, onRemove }: { page: number; onRemove?: () => void }) {
+  return (
+    <div className={`flex items-center gap-3 ${page > 1 ? "pt-6 pb-2" : "pb-2"}`}>
+      <span className="h-0.5 flex-1 rounded-full bg-[#063f3b]" />
+      <span className="inline-flex items-center gap-2 rounded-full bg-[#063f3b] px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-white">
+        Page {page}
+        {onRemove && (
+          <button type="button" onClick={onRemove} aria-label={`Remove page break before page ${page}`} title="Remove this page break" className="text-white/70 hover:text-white">
+            ×
+          </button>
+        )}
+      </span>
+      <span className="h-0.5 flex-1 rounded-full bg-[#063f3b]" />
     </div>
   );
 }

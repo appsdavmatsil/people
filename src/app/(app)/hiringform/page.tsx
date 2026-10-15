@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { loadHiringConfig, loadHiringConfigVersion } from "@/lib/hiring-config";
+import { landingOf, loadHiringConfig, loadHiringConfigVersion } from "@/lib/hiring-config";
 import { listHiringSubmissions } from "@/lib/hiring-records";
 import { HiringFormBuilder } from "@/components/hiring/hiring-form-builder";
 import { HiringResponses } from "@/components/hiring/hiring-responses";
@@ -24,9 +24,9 @@ export default async function HiringFormPage({
 
   if (active === "builder") {
     const [config, version] = await Promise.all([loadHiringConfig(), loadHiringConfigVersion()]);
-    return <HiringFormBuilder config={config} version={version} />;
+    return <HiringFormBuilder config={config} landing={landingOf(config)} version={version} />;
   }
 
-  const submissions = await listHiringSubmissions();
-  return <HiringResponses submissions={submissions} />;
+  const [submissions, config] = await Promise.all([listHiringSubmissions(), loadHiringConfig()]);
+  return <HiringResponses submissions={submissions} fields={config.textFields} />;
 }

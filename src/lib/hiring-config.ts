@@ -1,5 +1,27 @@
 import { createServiceClient } from "@/lib/supabase/service";
-import type { FormConfig } from "@/lib/form-config";
+import type { FormConfig, LandingConfig } from "@/lib/form-config";
+
+export const DEFAULT_HIRING_LANDING: LandingConfig = {
+  title: "Group Careers • Job Application Form",
+  intro:
+    "The heart and soul of our company are our people, and as our company expands, so do the opportunities. Do you have a passion for people? Do you know what it means to serve with soul? Can you handle working in a high octane environment?",
+  headline:
+    "Start your application here if you want to become part of The Maine Group, one of the best restaurant groups based in Dubai.",
+  note: "We are currently hiring for multiple positions. Please follow the instructions to submit your application.",
+  headerLogo: "/the-maine-logo.png",
+  logo: "/the-maine-seal.png",
+  successTitle: "Application received",
+  successMessage: "Thank you for applying to The Maine. Our team will review your application and be in touch.",
+  successNote: "Please visit our website for more information, and don't forget to follow our social channels.",
+  website: "",
+  instagram: "",
+  facebook: "",
+};
+
+/** The saved landing texts, with defaults for anything not saved yet. */
+export function landingOf(config: FormConfig): LandingConfig {
+  return { ...DEFAULT_HIRING_LANDING, ...config.landing };
+}
 
 /** Default hiring form config — full maine-forms application question set. CV + Photo only for docs. */
 export const DEFAULT_HIRING_CONFIG: FormConfig = {
@@ -16,12 +38,12 @@ export const DEFAULT_HIRING_CONFIG: FormConfig = {
     { name: "uaeDrivingLicense", label: "UAE Driving License?", type: "select", required: true, options: ["Yes", "No"] },
     { name: "requiresAccommodation", label: "Do you require company accommodation?", type: "select", required: true, options: ["Yes", "No"] },
     { name: "uaeEligibility", label: "UAE Work Eligibility", type: "select", required: true, options: ["Yes – Current company sponsors my visa", "Yes – On own/spouse/family visa", "No – Would need visa sponsorship", "Currently outside UAE"] },
-    { name: "joiningAvailability", label: "Joining Availability", type: "select", required: true, options: ["Immediately", "15 Days Notice Period", "30 Days Notice Period", "60 Days Notice Period", "Other"] },
     { name: "otherLanguages", label: "Other Languages", type: "text", required: false, help: "e.g. Arabic, French, Spanish" },
     { name: "currentPosition", label: "Current / Last Position", type: "text", required: true, help: "e.g. Demi Chef" },
     { name: "salaryExpectation", label: "Salary Expectation (AED/month)", type: "text", required: true, help: "e.g. 4500" },
     { name: "experienceYears", label: "Years of Experience", type: "text", required: true, help: "e.g. 5" },
     { name: "employmentStatus", label: "Employment Status", type: "select", required: true, options: ["Currently Working", "Currently Not Working"] },
+    { name: "joiningAvailability", label: "Joining Availability", type: "select", required: true, options: ["Immediately", "15 Days Notice Period", "30 Days Notice Period", "60 Days Notice Period", "Other"] },
     { name: "currentWorkplace", label: "Current / Last Workplace", type: "text", required: false, help: "Restaurant name & city" },
     { name: "previousWorkplaces", label: "Previous Workplaces", type: "textarea", required: false, help: "One per line: workplace, position, dates" },
     { name: "education", label: "Highest Education Level", type: "text", required: true, help: "e.g. Culinary Diploma, Bachelor's in Hospitality" },
