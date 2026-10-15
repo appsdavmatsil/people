@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type TouchEvent } from "react";
 import type { HiringSubmission } from "@/lib/hiring-records";
 import type { ConfigTextField } from "@/lib/form-config";
 import { positionRank } from "@/lib/position-rank";
@@ -202,6 +202,11 @@ export function HiringResponses({
   }
 
   function openCard(event: MouseEvent, s: HiringSubmission) {
+    if (longPressed.current) {
+      longPressed.current = false;
+      event.preventDefault();
+      return;
+    }
     if (event.metaKey || event.ctrlKey || event.shiftKey) {
       event.preventDefault();
       toggleSelect(s.id, event.shiftKey);
@@ -212,8 +217,46 @@ export function HiringResponses({
 
   function openMenu(event: MouseEvent, id: string) {
     event.preventDefault();
+    showMenu(id, event.clientX, event.clientY);
+  }
+  function showMenu(id: string, x: number, y: number) {
     const ids = selected.has(id) ? visibleSelected : [id];
-    setMenu({ ids, x: event.clientX, y: event.clientY });
+    setMenu({ ids, x, y });
+  }
+
+  // Touch screens have no right-click: holding a card for half a second opens the status menu.
+  const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pressOrigin = useRef<{ x: number; y: number } | null>(null);
+  const longPressed = useRef(false);
+  function cancelPress() {
+    if (pressTimer.current) clearTimeout(pressTimer.current);
+    pressTimer.current = null;
+  }
+  function longPressProps(id: string) {
+    return {
+      onTouchStart: (event: TouchEvent) => {
+        const touch = event.touches[0];
+        longPressed.current = false;
+        pressOrigin.current = { x: touch.clientX, y: touch.clientY };
+        cancelPress();
+        pressTimer.current = setTimeout(() => {
+          longPressed.current = true;
+          navigator.vibrate?.(10);
+          showMenu(id, touch.clientX, touch.clientY);
+        }, 500);
+      },
+      onTouchMove: (event: TouchEvent) => {
+        const touch = event.touches[0];
+        const origin = pressOrigin.current;
+        if (origin && Math.hypot(touch.clientX - origin.x, touch.clientY - origin.y) > 10) cancelPress();
+      },
+      onTouchEnd: (event: TouchEvent) => {
+        cancelPress();
+        // Stops the tap that follows the hold from opening the card or closing the menu.
+        if (longPressed.current) event.preventDefault();
+      },
+      onTouchCancel: cancelPress,
+    };
   }
   async function doDelete(id: string) {
     setRecords((prev) => prev.filter((r) => r.id !== id));
@@ -288,7 +331,7 @@ export function HiringResponses({
         />
       ) : null}
       {/* Status pills */}
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start">
         {(["all", ...STATUS_OPTIONS] as const).map((s) => (
           <button
             key={s}
@@ -317,7 +360,24 @@ export function HiringResponses({
 
       {/* Breakdown — position first, then nationality */}
       {(posCounts.length > 0 || natCounts.length > 0) && (
-        <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+        <div className="mt-4 grid grid-cols-2 gap-2 sm:hidden">
+          <SearchableFilter
+            label="Position"
+            data={posCounts.filter((seg) => seg.name !== "Not specified")}
+            active={positionFilter}
+            onPick={(name) => setPositionFilter(positionFilter === name ? "all" : name)}
+          />
+          <SearchableFilter
+            label="Nationality"
+            data={[...natCounts].sort((a, b) => b.count - a.count)}
+            active={nationalityFilter}
+            onPick={(name) => setNationalityFilter(nationalityFilter === name ? "all" : name)}
+            withFlags
+          />
+        </div>
+      )}
+      {(posCounts.length > 0 || natCounts.length > 0) && (
+        <div className="mt-4 hidden gap-3 sm:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
           <PositionBreakdown
             data={posCounts}
             active={positionFilter}
@@ -359,7 +419,7 @@ export function HiringResponses({
         <FilterSelect label="UAE visa" value={visaFilter} onChange={setVisaFilter} options={visaOptions} width="w-56" />
 
         <div className="ml-auto flex items-center gap-2">
-          <div className={`flex items-center gap-0.5 rounded-lg border border-stone-200 bg-white p-0.5 ${view === "grid" ? "" : "pointer-events-none opacity-40"}`}>
+          <div className={`hidden items-center gap-0.5 rounded-lg border border-stone-200 bg-white p-0.5 sm:flex ${view === "grid" ? "" : "pointer-events-none opacity-40"}`}>
             <button onClick={() => setCardSize((size) => Math.max(0, size - 1))} disabled={cardSize === 0} className="grid size-8 place-items-center rounded-md text-stone-500 hover:bg-stone-100 disabled:opacity-30 disabled:hover:bg-transparent" aria-label="Smaller thumbnails" title="Smaller thumbnails">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4M8 11h6"/></svg>
             </button>
@@ -398,7 +458,7 @@ export function HiringResponses({
           {filtered.map((s) => {
             const photo = photoOf(s);
             return (
-              <button key={s.id} onClick={(event) => openCard(event, s)} onContextMenu={(event) => openMenu(event, s.id)} className={`group relative flex flex-col overflow-hidden rounded-xl border bg-white text-left transition-all hover:-translate-y-0.5 hover:shadow-md ${selected.has(s.id) ? "border-red-600" : "border-stone-200"}`}>
+              <button key={s.id} onClick={(event) => openCard(event, s)} onContextMenu={(event) => openMenu(event, s.id)} {...longPressProps(s.id)} className={`group relative flex flex-col overflow-hidden rounded-xl border bg-white text-left transition-all select-none [-webkit-touch-callout:none] hover:-translate-y-0.5 hover:shadow-md ${selected.has(s.id) ? "border-red-600" : "border-stone-200"}`}>
                 <div
                   className={`relative aspect-square w-full shrink-0 overflow-hidden bg-stone-100 ${photo ? "cursor-zoom-in" : ""}`}
                   title={photo ? "View photo" : undefined}
@@ -462,7 +522,7 @@ export function HiringResponses({
           {filtered.map((s) => {
             const photo = photoOf(s);
             return (
-              <button key={s.id} onClick={(event) => openCard(event, s)} onContextMenu={(event) => openMenu(event, s.id)} className={`relative flex w-full items-center gap-3 rounded-xl border bg-white px-4 py-2.5 text-left ${selected.has(s.id) ? "border-red-600" : "border-stone-200 hover:border-stone-400"}`}>
+              <button key={s.id} onClick={(event) => openCard(event, s)} onContextMenu={(event) => openMenu(event, s.id)} {...longPressProps(s.id)} className={`relative flex w-full items-center gap-3 rounded-xl border bg-white px-4 py-2.5 text-left select-none [-webkit-touch-callout:none] ${selected.has(s.id) ? "border-red-600" : "border-stone-200 hover:border-stone-400"}`}>
                 {photo ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={photo} alt="" className="size-9 shrink-0 rounded-full object-cover" />
@@ -722,12 +782,13 @@ function visaOf(r: HiringSubmission) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+/** Phones always get 3 per row; the size buttons only show from the sm breakpoint. */
 const GRID_SIZES = [
-  "grid-cols-4 sm:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10",
+  "grid-cols-3 sm:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10",
   "grid-cols-3 sm:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8",
   "grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6",
-  "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5",
-  "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4",
+  "grid-cols-3 lg:grid-cols-4 xl:grid-cols-5",
+  "grid-cols-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4",
 ];
 
 function StatusMenu({ x, y, current, name, onPick, onClose }: { x: number; y: number; current: HiringStatus | null; name: string; onPick: (status: HiringStatus) => void; onClose: () => void }) {
@@ -851,7 +912,7 @@ function FilterSelect({ label, value, onChange, options, width = "w-40" }: { lab
       value={value}
       onChange={(e) => onChange(e.target.value)}
       aria-label={label}
-      className={`h-9 ${width} shrink-0 truncate rounded-lg border px-2 text-xs outline-none ${value !== "all" ? "border-stone-900 bg-stone-900 text-white" : "border-stone-200 bg-white text-stone-600 hover:border-stone-400"}`}
+      className={`hidden h-9 ${width} shrink-0 truncate rounded-lg border px-2 text-xs outline-none sm:block ${value !== "all" ? "border-stone-900 bg-stone-900 text-white" : "border-stone-200 bg-white text-stone-600 hover:border-stone-400"}`}
     >
       <option value="all">{label}: All</option>
       {options.map((option) => (
@@ -888,6 +949,77 @@ function searchTextOf(r: HiringSubmission) {
 
 function matchesSearch(text: string, query: string) {
   return query.split(/\s+/).every((term) => text.includes(term));
+}
+
+/** Phone-sized replacement for the breakdown boxes: type to search, tap to filter. */
+function SearchableFilter({
+  label,
+  data,
+  active,
+  onPick,
+  withFlags = false,
+}: {
+  label: string;
+  data: { name: string; count: number }[];
+  active: string;
+  onPick: (name: string) => void;
+  withFlags?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const isActive = active !== "all";
+  const display = (name: string) => (withFlags ? `${flagFor(name)} ${name}` : name);
+  const matches = data.filter((seg) => seg.name.toLowerCase().includes(query.trim().toLowerCase()));
+
+  function pick(name: string) {
+    onPick(name);
+    setQuery("");
+    setOpen(false);
+  }
+
+  return (
+    <div className="relative min-w-0">
+      <input
+        value={open ? query : isActive ? display(active) : ""}
+        onFocus={() => { setQuery(""); setOpen(true); }}
+        onClick={() => setOpen(true)}
+        onChange={(e) => { setQuery(e.target.value); setOpen(true); }}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        placeholder={open ? `Search ${label.toLowerCase()}…` : `${label}: All`}
+        aria-label={label}
+        className={`h-9 w-full truncate rounded-lg border pr-7 pl-2.5 text-xs outline-none ${isActive && !open ? "border-stone-900 bg-stone-900 text-white" : "border-stone-200 bg-white text-stone-700 placeholder:text-stone-600 focus:border-stone-400"}`}
+      />
+      {isActive && !open ? (
+        <button type="button" onClick={() => onPick(active)} aria-label={`Clear ${label}`} className="absolute top-1/2 right-1.5 grid size-6 -translate-y-1/2 place-items-center text-sm text-white/80">×</button>
+      ) : (
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="pointer-events-none absolute top-1/2 right-2.5 -translate-y-1/2 text-stone-400"><path d="m6 9 6 6 6-6" /></svg>
+      )}
+      {open && (
+        <ul className="absolute z-30 mt-1 max-h-64 w-full overflow-auto rounded-lg border border-stone-200 bg-white py-1 shadow-lg">
+          {!query && (
+            <li>
+              <button type="button" onMouseDown={(e) => { e.preventDefault(); if (isActive) onPick(active); setOpen(false); }} className="flex w-full px-3 py-1.5 text-left text-xs font-medium text-stone-800 hover:bg-stone-100">
+                All
+              </button>
+            </li>
+          )}
+          {matches.map((seg) => (
+            <li key={seg.name}>
+              <button
+                type="button"
+                onMouseDown={(e) => { e.preventDefault(); pick(seg.name); }}
+                className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-xs ${seg.name === active ? "bg-stone-900 font-semibold text-white" : "text-stone-700 hover:bg-stone-100"}`}
+              >
+                <span className="truncate">{display(seg.name)}</span>
+                <span className={`ml-auto shrink-0 tabular-nums ${seg.name === active ? "text-white/70" : "text-stone-400"}`}>{seg.count}</span>
+              </button>
+            </li>
+          ))}
+          {matches.length === 0 && <li className="px-3 py-1.5 text-xs text-stone-400">No matches</li>}
+        </ul>
+      )}
+    </div>
+  );
 }
 
 function PositionBreakdown({
