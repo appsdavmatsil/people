@@ -4,8 +4,8 @@ import { useMemo, useRef, useState } from "react";
 import { countryNames } from "@/lib/countries";
 
 /**
- * Searchable country dropdown. Type to filter (e.g. "i" shows every country
- * containing "i"); click to select. Falls back to free text if needed.
+ * Searchable country dropdown. Typing only filters the list. The field keeps a
+ * value when it is one of the suggestions.
  */
 export function CountrySelect({
   value,
@@ -24,13 +24,31 @@ export function CountrySelect({
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const blurTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
   const matches = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return options.slice(0, 60);
     return options.filter((c) => c.toLowerCase().includes(q)).slice(0, 60);
   }, [query, options]);
+
+  function choose(name: string) {
+    onChange(name);
+    setQuery(name);
+    setOpen(false);
+    inputRef.current?.setCustomValidity("");
+  }
+
+  function commitQuery() {
+    const typed = query.trim().toLowerCase();
+    const exact = options.find((c) => c.toLowerCase() === typed);
+    const only = typed && matches.length === 1 ? matches[0] : undefined;
+    if (exact) choose(exact);
+    else if (only) choose(only);
+    else setQuery(value);
+    inputRef.current?.setCustomValidity("");
+    setOpen(false);
+  }
 
   const inputClass =
     className ||
@@ -39,6 +57,7 @@ export function CountrySelect({
   return (
     <div className="relative">
       <input
+        ref={inputRef}
         type="text"
         value={open ? query : value}
         placeholder={placeholder}
@@ -50,13 +69,29 @@ export function CountrySelect({
           setOpen(true);
         }}
         onChange={(e) => {
-          setQuery(e.target.value);
+          const next = e.target.value;
+          setQuery(next);
           setOpen(true);
-          onChange(e.target.value); // keep free-text in sync
+          const typed = next.trim().toLowerCase();
+          const list = typed ? options.filter((c) => c.toLowerCase().includes(typed)) : [];
+          const allowed = typed === "" || list.length === 1 || options.some((c) => c.toLowerCase() === typed);
+          e.target.setCustomValidity(allowed ? "" : "Choose a country from the list");
         }}
-        onBlur={() => {
-          blurTimer.current = setTimeout(() => setOpen(false), 150);
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            const typed = e.currentTarget.value.trim().toLowerCase();
+            const list = typed ? options.filter((c) => c.toLowerCase().includes(typed)) : [];
+            if (list.length === 1) {
+              e.preventDefault();
+              choose(list[0]);
+            } else if (list.length > 1) e.preventDefault();
+          }
+          if (e.key === "Escape") {
+            setQuery(value);
+            setOpen(false);
+          }
         }}
+        onBlur={commitQuery}
       />
       {open && matches.length > 0 ? (
         <ul className="absolute z-20 mt-1 max-h-56 w-full overflow-auto rounded-lg border border-stone-200 bg-white py-1 shadow-lg">
@@ -68,10 +103,7 @@ export function CountrySelect({
                 onMouseDown={(e) => {
                   // onMouseDown fires before input blur, so selection sticks.
                   e.preventDefault();
-                  onChange(c);
-                  setQuery(c);
-                  setOpen(false);
-                  if (blurTimer.current) clearTimeout(blurTimer.current);
+                  choose(c);
                 }}
               >
                 {c}
