@@ -20,7 +20,7 @@ export default async function HiringTeamPage({ params }: { params: Promise<{ tok
   const [submissions, config] = await Promise.all([listHiringSubmissions(), loadHiringConfig()]);
 
   return (
-    <main className="flex h-dvh flex-col overflow-hidden bg-white px-4 py-5 md:px-6">
+    <main className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-white px-4 pt-5 md:px-6 md:pb-5">
       <header className="mb-4 flex items-center gap-3">
         <img src="/the-maine-logo.png" alt="The Maine" className="h-9 w-auto" />
         <div className="border-l border-stone-200 pl-3">

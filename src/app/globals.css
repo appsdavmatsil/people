@@ -30,11 +30,11 @@ dialog[open] {
 @media (max-width: 767px) {
   /* Pages run under the floating navigation bar. The bar covers the bottom
      of the screen, so the page's own scroll area keeps its last row clear. */
-  main :is(.overflow-y-auto, .overflow-auto).min-h-0.flex-1:not(:is(dialog, [role="dialog"]) *) {
+  [data-app-shell] main :is(.overflow-y-auto, .overflow-auto).min-h-0.flex-1:not(:is(dialog, [role="dialog"]) *) {
     padding-bottom: calc(5rem + env(safe-area-inset-bottom)) !important;
   }
 
-  main :is(.overflow-y-auto, .overflow-auto) :is(.overflow-y-auto, .overflow-auto).min-h-0.flex-1:not(:is(dialog, [role="dialog"]) *) {
+  [data-app-shell] main :is(.overflow-y-auto, .overflow-auto) :is(.overflow-y-auto, .overflow-auto).min-h-0.flex-1:not(:is(dialog, [role="dialog"]) *) {
     padding-bottom: revert !important;
   }
 

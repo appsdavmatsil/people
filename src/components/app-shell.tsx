@@ -269,7 +269,7 @@ export function AppShell({
     : 1 - mobileNavCompact * (1 - mobileNavMinimumScale);
 
   return (
-    <div ref={shellRef} className="flex h-[calc(100dvh+var(--viewport-gap,0px))] min-h-0 flex-1 overflow-hidden">
+    <div ref={shellRef} data-app-shell className="flex h-[calc(100dvh+var(--viewport-gap,0px))] min-h-0 flex-1 overflow-hidden">
       <div
         aria-hidden="true"
         className={`pointer-events-none fixed left-1/2 z-50 grid size-9 -translate-x-1/2 place-items-center rounded-full border border-white/60 bg-white/90 text-stone-700 shadow-lg backdrop-blur-xl transition-opacity duration-150 md:hidden ${
