@@ -57,7 +57,9 @@ export async function proxy(request: NextRequest) {
     path.startsWith("/auth") ||
     path.startsWith("/onboarding") ||
     path.startsWith("/staff-details") ||
+    path.startsWith("/hiring-details") ||
     path === "/api/staff-intake" ||
+    path === "/api/hiring" ||
     // Self-service edit steps (each verifies its own code/token).
     /^\/api\/staff-intake\/edit\/(start|verify|save)$/.test(path) ||
     path === "/install" ||

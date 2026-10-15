@@ -1,6 +1,6 @@
 import { createServiceClient } from "@/lib/supabase/service";
 
-export type FieldType = "text" | "email" | "tel" | "phone" | "date";
+export type FieldType = "text" | "email" | "tel" | "phone" | "date" | "textarea" | "select" | "country";
 
 export type ConfigTextField = {
   name: string;
@@ -10,6 +10,10 @@ export type ConfigTextField = {
   autoComplete?: string;
   /** Optional instruction/help text shown under the field on the form. */
   help?: string;
+  /** Options for type "select" (dropdown). Ignored by other types. */
+  options?: string[];
+  /** Optional section heading this field belongs to (groups the public form). */
+  section?: string;
 };
 
 export type ConfigDocument = {

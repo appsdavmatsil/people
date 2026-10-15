@@ -699,10 +699,30 @@ const pageIcons = {
   "/staffdeployment": DeploymentIcon,
   "/events": EventsIcon,
   "/insights": InsightsIcon,
+  "/benefits": BenefitsIcon,
   "/form": FormIcon,
+  "/hiringform": HiringIcon,
   "/settings": SettingsIcon,
   "/profile": ProfileIcon,
 } as const;
+
+function BenefitsIcon() {
+  return (
+    <svg className="size-5 shrink-0" viewBox="0 0 16 16" aria-hidden="true" fill="none">
+      <path d="M8 14s-5-3.1-5-7a2.6 2.6 0 0 1 5-1 2.6 2.6 0 0 1 5 1c0 3.9-5 7-5 7z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function HiringIcon() {
+  return (
+    <svg className="size-5 shrink-0" viewBox="0 0 16 16" aria-hidden="true" fill="none">
+      <circle cx="6" cy="5" r="2.3" stroke="currentColor" strokeWidth="1.4" />
+      <path d="M2.5 13.5a3.5 3.5 0 0 1 7 0" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+      <path d="M12 5v4M14 7h-4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+    </svg>
+  );
+}
 
 function FormIcon() {
   return (
