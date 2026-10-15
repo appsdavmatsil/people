@@ -14,6 +14,8 @@ export type ConfigTextField = {
   options?: string[];
   /** Optional section heading this field belongs to (groups the public form). */
   section?: string;
+  /** Starts a new page of the public form at this field. */
+  pageBreak?: boolean;
 };
 
 export type ConfigDocument = {

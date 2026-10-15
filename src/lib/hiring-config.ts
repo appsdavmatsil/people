@@ -19,10 +19,11 @@ export const DEFAULT_HIRING_CONFIG: FormConfig = {
     { name: "joiningAvailability", label: "Joining Availability", type: "select", required: true, options: ["Immediately", "15 Days Notice Period", "30 Days Notice Period", "60 Days Notice Period", "Other"] },
     { name: "otherLanguages", label: "Other Languages", type: "text", required: false, help: "e.g. Arabic, French, Spanish" },
     { name: "currentPosition", label: "Current / Last Position", type: "text", required: true, help: "e.g. Demi Chef" },
+    { name: "salaryExpectation", label: "Salary Expectation (AED/month)", type: "text", required: true, help: "e.g. 4500" },
     { name: "experienceYears", label: "Years of Experience", type: "text", required: true, help: "e.g. 5" },
+    { name: "employmentStatus", label: "Employment Status", type: "select", required: true, options: ["Currently Working", "Currently Not Working"] },
     { name: "currentWorkplace", label: "Current / Last Workplace", type: "text", required: false, help: "Restaurant name & city" },
     { name: "previousWorkplaces", label: "Previous Workplaces", type: "textarea", required: false, help: "One per line: workplace, position, dates" },
-    { name: "salaryExpectation", label: "Salary Expectation (AED/month)", type: "text", required: true, help: "e.g. 4500" },
     { name: "education", label: "Highest Education Level", type: "text", required: true, help: "e.g. Culinary Diploma, Bachelor's in Hospitality" },
     { name: "coursesWorkshops", label: "Courses & Workshops", type: "textarea", required: false, help: "Any relevant training (optional)" },
     { name: "skillsExpertise", label: "Skills & Expertise", type: "textarea", required: true, help: "Describe your skills, specialties, and what makes you stand out…" },
@@ -37,6 +38,7 @@ export const DEFAULT_HIRING_CONFIG: FormConfig = {
   documents: [
     { field: "profilePhoto", label: "Profile Photo", required: true, help: "A clear, recent photo of your face." },
     { field: "cv", label: "CV / Resume", required: true, help: "PDF preferred." },
+    { field: "portfolio", label: "Portfolio", required: false, help: "One document showing your best work — the dishes, cooking style and techniques that define you. Optional, 4 MB max." },
   ],
   naming: {
     folderPattern: "{name}",

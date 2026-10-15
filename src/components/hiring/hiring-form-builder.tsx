@@ -108,6 +108,13 @@ export function HiringFormBuilder({ config }: { config: FormConfig }) {
         <div className="space-y-2">
           {fields.map((f, i) => (
             <Fragment key={i}>
+              {i > 0 && f.pageBreak && (
+                <div className="flex items-center gap-3 pt-4 text-[11px] font-semibold uppercase tracking-wide text-stone-500">
+                  <span className="h-px flex-1 border-t border-dashed border-stone-300" />
+                  Page {fields.slice(1, i + 1).filter((field) => field.pageBreak).length + 1} starts here
+                  <span className="h-px flex-1 border-t border-dashed border-stone-300" />
+                </div>
+              )}
               {(i === 0 || fields[i - 1].section !== f.section) && f.section && (
                 <h3 className="mt-4 border-b border-stone-200 pb-1 text-xs font-semibold uppercase tracking-wide text-[#063f3b] first:mt-0">
                   {f.section}
@@ -139,14 +146,26 @@ export function HiringFormBuilder({ config }: { config: FormConfig }) {
                   </option>
                 ))}
               </select>
-              <label className="flex items-center gap-1.5 px-2 text-xs text-stone-600">
-                <input
-                  type="checkbox"
-                  checked={f.required}
-                  onChange={(e) => updateField(i, { required: e.target.checked })}
-                />
-                Required
-              </label>
+              <div className="flex flex-col justify-center gap-0.5 px-2 text-xs text-stone-600">
+                <label className="flex items-center gap-1.5">
+                  <input
+                    type="checkbox"
+                    checked={f.required}
+                    onChange={(e) => updateField(i, { required: e.target.checked })}
+                  />
+                  Required
+                </label>
+                {i > 0 && (
+                  <label className="flex items-center gap-1.5" title="Start a new page of the public form at this field">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(f.pageBreak)}
+                      onChange={(e) => updateField(i, { pageBreak: e.target.checked || undefined })}
+                    />
+                    New page
+                  </label>
+                )}
+              </div>
               <div className="flex items-center gap-1">
                 <button type="button" className={btn} onClick={() => moveField(i, -1)} aria-label="Move up">↑</button>
                 <button type="button" className={btn} onClick={() => moveField(i, 1)} aria-label="Move down">↓</button>

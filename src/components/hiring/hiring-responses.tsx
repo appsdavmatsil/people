@@ -244,7 +244,7 @@ export function HiringResponses({ submissions }: { submissions: HiringSubmission
       <h2>Details</h2>
       <table>${rows.filter(([, v]) => v).map(([k, v]) => `<tr><td class="k">${esc(k)}</td><td>${esc(v)}</td></tr>`).join("")}</table>
       <h2>Documents</h2><p style="font-size:13px">${docLinks || "None"}</p>
-      ${dataRows.length ? `<h2>Application</h2>${dataRows.map(([k, v]) => `<div class="q"><div class="ql">${esc(k.replace(/_/g, " "))}</div><div class="qa">${esc(v)}</div></div>`).join("")}` : ""}
+      ${dataRows.length ? `<h2>Application</h2>${dataRows.map(([k, v]) => `<div class="q"><div class="ql">${esc(fieldTitle(k))}</div><div class="qa">${esc(v)}</div></div>`).join("")}` : ""}
       <script>window.onload=function(){setTimeout(function(){window.print()},400)}</script>
       </body></html>`;
 
@@ -574,7 +574,7 @@ export function HiringResponses({ submissions }: { submissions: HiringSubmission
                 <h3 className="text-xs font-semibold uppercase tracking-wide text-stone-400">Application details</h3>
                 {Object.entries(detail.data).filter(([k, v]) => !["source", "source_id"].includes(k) && v).map(([k, v]) => (
                   <div key={k}>
-                    <p className="text-xs font-medium capitalize text-stone-500">{k.replace(/_/g, " ")}</p>
+                    <p className="text-xs font-medium capitalize text-stone-500">{fieldTitle(k)}</p>
                     <p className="whitespace-pre-wrap text-sm text-stone-700">{String(v)}</p>
                   </div>
                 ))}
@@ -953,4 +953,8 @@ function NationalityByContinent({
       </div>
     </div>
   );
+}
+
+function fieldTitle(key: string) {
+  return key.replace(/_/g, " ").replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, (c) => c.toUpperCase());
 }
