@@ -121,6 +121,7 @@ export function HiringApplicationForm({
   const [error, setError] = useState("");
   const [step, setStep] = useState(0);
   const [started, setStarted] = useState(false);
+  const [stage, setStage] = useState<"welcome" | "disclaimer">("welcome");
   const [showMissing, setShowMissing] = useState(false);
   const formTop = useRef<HTMLDivElement>(null);
 
@@ -299,6 +300,43 @@ export function HiringApplicationForm({
     </div>
   );
 
+  if (!started && stage === "disclaimer") {
+    return (
+      <div className="space-y-6">
+        <div ref={formTop} className="scroll-mt-6" />
+        {header}
+        {progress}
+        <div className="overflow-hidden rounded-2xl border border-amber-300 bg-white shadow-sm">
+          <div className="flex items-start gap-3 border-b border-amber-200 bg-amber-50 px-6 py-5">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className="mt-0.5 size-6 shrink-0 text-amber-600">
+              <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+              <line x1="12" y1="9" x2="12" y2="13" />
+              <line x1="12" y1="17" x2="12.01" y2="17" />
+            </svg>
+            <div>
+              {landing.disclaimerTitle && <h2 className="text-lg font-semibold text-amber-900">{landing.disclaimerTitle}</h2>}
+              <p className="mt-0.5 text-xs font-medium uppercase tracking-wide text-amber-700">Please read carefully</p>
+            </div>
+          </div>
+          <div className="px-6 py-6">
+            {landing.disclaimerBody && (
+              <p className="whitespace-pre-line text-sm leading-relaxed text-stone-700">{landing.disclaimerBody}</p>
+            )}
+            <div className="mt-6 flex flex-col gap-2 sm:flex-row-reverse">
+              <button type="button" onClick={() => { setStarted(true); requestAnimationFrame(() => formTop.current?.scrollIntoView({ block: "start" })); }} className={primaryButtonClass}>
+                I understand — Continue
+              </button>
+              <button type="button" onClick={() => { setStage("welcome"); requestAnimationFrame(() => formTop.current?.scrollIntoView({ block: "start" })); }}
+                className="inline-flex h-11 items-center justify-center rounded-lg border border-stone-300 px-4 text-sm font-medium text-stone-700 hover:bg-stone-50">
+                Back
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (!started) {
     const requiredDocs = documents.filter((d) => d.required).map((d) => d.label);
     const optionalDocs = documents.filter((d) => !d.required).map((d) => d.label);
@@ -349,7 +387,15 @@ export function HiringApplicationForm({
               </span>
             </p>
           </div>
-          <button type="button" onClick={() => { setStarted(true); requestAnimationFrame(() => formTop.current?.scrollIntoView({ block: "start" })); }} className={primaryButtonClass}>
+          <button type="button" onClick={() => {
+            const hasDisclaimer = Boolean((landing.disclaimerTitle || "").trim() || (landing.disclaimerBody || "").trim());
+            if (hasDisclaimer && stage === "welcome") {
+              setStage("disclaimer");
+            } else {
+              setStarted(true);
+            }
+            requestAnimationFrame(() => formTop.current?.scrollIntoView({ block: "start" }));
+          }} className={primaryButtonClass}>
             Start application
           </button>
         </div>

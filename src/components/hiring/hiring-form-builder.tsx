@@ -439,6 +439,20 @@ function LandingEditor({ landing, onChange }: { landing: LandingConfig; onChange
           <span className="text-xs font-medium text-stone-600">Closing note</span>
           <textarea rows={2} className={`${fieldClass} mt-1`} value={landing.note} onChange={(e) => onChange({ note: e.target.value })} />
         </label>
+
+        <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50/50 p-3">
+          <p className="text-xs font-semibold text-amber-800">Disclaimer screen (shown after Welcome)</p>
+          <p className="mt-0.5 text-[11px] text-amber-700">Applicants see this alert and press Continue before the form. Leave both empty to skip it.</p>
+          <label className="mt-2 block">
+            <span className="text-xs font-medium text-stone-600">Disclaimer title</span>
+            <input className={`${labelFieldClass} mt-1`} value={landing.disclaimerTitle} onChange={(e) => onChange({ disclaimerTitle: e.target.value })} />
+          </label>
+          <label className="mt-2 block">
+            <span className="text-xs font-medium text-stone-600">Disclaimer text</span>
+            <textarea rows={4} className={`${fieldClass} mt-1`} value={landing.disclaimerBody} onChange={(e) => onChange({ disclaimerBody: e.target.value })} />
+          </label>
+        </div>
+
         <p className="text-xs text-stone-400">Leave a box empty to hide it. The step list and documents list are added automatically.</p>
       </div>
     </section>

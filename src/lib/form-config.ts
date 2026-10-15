@@ -45,6 +45,9 @@ export type LandingConfig = {
   headerLogo: string;
   /** Image URL or data URL shown in the footer under the form. Empty hides it. */
   logo: string;
+  /** Disclaimer screen shown after Welcome, before the form. Empty title+body hides it. */
+  disclaimerTitle: string;
+  disclaimerBody: string;
   successTitle: string;
   successMessage: string;
   successNote: string;

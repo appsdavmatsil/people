@@ -10,6 +10,9 @@ export const DEFAULT_HIRING_LANDING: LandingConfig = {
   note: "We are currently hiring for multiple positions. Please follow the instructions to submit your application.",
   headerLogo: "/the-maine-logo.png",
   logo: "/the-maine-seal.png",
+  disclaimerTitle: "Please read before you begin",
+  disclaimerBody:
+    "Complete every section carefully and follow the instructions for each question. Answer honestly and in full, upload clear and legible documents, and make sure your contact details are correct.\n\nApplications that are incomplete, inaccurate, or not filled out according to the instructions will be automatically disqualified and will not be reviewed. Take your time and submit only when you are confident everything is correct.",
   successTitle: "Application received",
   successMessage: "Thank you for applying to The Maine. Our team will review your application and be in touch.",
   successNote: "Please visit our website for more information, and don't forget to follow our social channels.",
