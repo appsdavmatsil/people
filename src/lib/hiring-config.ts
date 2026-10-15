@@ -74,22 +74,75 @@ export async function loadHiringConfig(): Promise<FormConfig> {
     return DEFAULT_HIRING_CONFIG;
   }
 
-  return data.config;
+  return withDirectoryOptions(supabase, data.config);
+}
+
+type ServiceClient = NonNullable<ReturnType<typeof createServiceClient>>;
+
+/** Replaces options of fields linked to the Staff Directory with its positions, in directory order. */
+async function withDirectoryOptions(supabase: ServiceClient, config: FormConfig): Promise<FormConfig> {
+  if (!config.textFields.some((f) => f.optionsSource === "directory-positions")) return config;
+
+  const { data } = await supabase
+    .from("workspace_documents")
+    .select("payload")
+    .eq("doc_key", "people.directory-lookups")
+    .maybeSingle();
+  let lookups: { departments?: { id: string; name: string }[]; positions?: { departmentId: string; name: string }[] } = {};
+  try {
+    lookups = typeof data?.payload === "string" ? JSON.parse(data.payload) : (data?.payload ?? {});
+  } catch {
+    return config;
+  }
+  const departmentName = new Map((lookups.departments ?? []).map((d) => [d.id, d.name]));
+  const positionsFor = (department?: string) =>
+    (lookups.positions ?? [])
+      .filter((p) => !department || departmentName.get(p.departmentId)?.toLowerCase() === department.toLowerCase())
+      .map((p) => p.name.trim())
+      .filter((name, index, all) => name && all.indexOf(name) === index);
+
+  return {
+    ...config,
+    textFields: config.textFields.map((f) => {
+      if (f.optionsSource !== "directory-positions") return f;
+      const options = positionsFor(f.optionsDepartment);
+      return options.length ? { ...f, options } : f;
+    }),
+  };
 }
 
 /** Saves a new hiring form config (service role). */
-export async function saveHiringConfig(config: FormConfig): Promise<{ error?: string }> {
+export async function saveHiringConfig(
+  config: FormConfig,
+  expectedVersion?: string | null,
+): Promise<{ error?: string; stale?: boolean; version?: string }> {
   const supabase = createServiceClient();
   if (!supabase) {
     return { error: "Server not configured." };
   }
 
+  if (expectedVersion !== undefined) {
+    const current = await loadHiringConfigVersion();
+    if (current && current !== expectedVersion) {
+      return { stale: true, error: "The form was changed somewhere else since this page was opened. Reload the page to get the latest version, then make your changes again." };
+    }
+  }
+
+  const version = new Date().toISOString();
   const { error } = await supabase
     .from("hiring_form_config")
-    .upsert({ id: true, config, updated_at: new Date().toISOString() });
+    .upsert({ id: true, config, updated_at: version });
 
   if (error) {
     return { error: error.message };
   }
-  return {};
+  return { version: await loadHiringConfigVersion() ?? version };
+}
+
+/** The saved config's last-updated timestamp, used to reject saves from stale builder pages. */
+export async function loadHiringConfigVersion(): Promise<string | null> {
+  const supabase = createServiceClient();
+  if (!supabase) return null;
+  const { data } = await supabase.from("hiring_form_config").select("updated_at").eq("id", true).maybeSingle();
+  return data?.updated_at ? new Date(data.updated_at).toISOString() : null;
 }

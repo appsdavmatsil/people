@@ -16,6 +16,10 @@ export type ConfigTextField = {
   section?: string;
   /** Starts a new page of the public form at this field. */
   pageBreak?: boolean;
+  /** Fills the options from the Staff Directory positions instead of the stored list. */
+  optionsSource?: "directory-positions";
+  /** Department whose positions are used when optionsSource is "directory-positions". */
+  optionsDepartment?: string;
 };
 
 export type ConfigDocument = {

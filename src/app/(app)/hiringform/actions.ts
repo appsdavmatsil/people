@@ -12,20 +12,21 @@ import { HIRING_STATUSES, type HiringStatus } from "@/lib/hiring-status";
  */
 export async function saveHiringConfigAction(
   config: FormConfig,
-): Promise<{ ok: boolean; error?: string }> {
+  expectedVersion?: string | null,
+): Promise<{ ok: boolean; error?: string; version?: string }> {
   const supabase = await createClient();
   const { data } = await supabase.auth.getClaims();
   if (typeof data?.claims?.sub !== "string") {
     return { ok: false, error: "Not authorized." };
   }
 
-  const result = await saveHiringConfig(config);
+  const result = await saveHiringConfig(config, expectedVersion);
   if (result.error) {
     return { ok: false, error: result.error };
   }
 
   revalidatePath("/hiringform");
-  return { ok: true };
+  return { ok: true, version: result.version };
 }
 
 /** Updates the status of one or more hiring submissions. Requires an app session. */

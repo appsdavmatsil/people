@@ -20,7 +20,8 @@ const primary =
 
 const FIELD_TYPES: FieldType[] = ["text", "email", "phone", "date", "textarea", "select", "radio", "country"];
 
-export function HiringFormBuilder({ config }: { config: FormConfig }) {
+export function HiringFormBuilder({ config, version }: { config: FormConfig; version: string | null }) {
+  const [savedVersion, setSavedVersion] = useState(version);
   const [fields, setFields] = useState<ConfigTextField[]>(config.textFields);
   const [docs, setDocs] = useState<ConfigDocument[]>(config.documents);
   const [status, setStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
@@ -66,8 +67,9 @@ export function HiringFormBuilder({ config }: { config: FormConfig }) {
   async function save() {
     setStatus("saving");
     setMessage("");
-    const result = await saveHiringConfigAction({ textFields: fields, documents: docs, naming: config.naming });
+    const result = await saveHiringConfigAction({ textFields: fields, documents: docs, naming: config.naming }, savedVersion);
     if (result.ok) {
+      setSavedVersion(result.version ?? savedVersion);
       setStatus("saved");
     } else {
       setStatus("error");
@@ -178,12 +180,26 @@ export function HiringFormBuilder({ config }: { config: FormConfig }) {
                 onChange={(e) => updateField(i, { help: e.target.value })}
               />
               {(f.type === "select" || f.type === "radio") && (
-                <input
-                  className={`${fieldClass} sm:col-span-5`}
-                  value={(f.options ?? []).join(", ")}
-                  placeholder={f.type === "radio" ? "Choices, comma-separated — radio questions in a row with the same choices show as one grid" : "Dropdown options, comma-separated (e.g. Yes, No)"}
-                  onChange={(e) => updateField(i, { options: e.target.value.split(",").map((o) => o.trim()).filter(Boolean) })}
-                />
+                <div className="space-y-1.5 sm:col-span-5">
+                  <OptionTags
+                    options={f.options ?? []}
+                    locked={f.optionsSource === "directory-positions"}
+                    onChange={(options) => updateField(i, { options })}
+                  />
+                  <label className="flex items-center gap-1.5 text-xs text-stone-600">
+                    <input
+                      type="checkbox"
+                      checked={f.optionsSource === "directory-positions"}
+                      onChange={(e) =>
+                        updateField(i, e.target.checked
+                          ? { optionsSource: "directory-positions", optionsDepartment: "Culinary" }
+                          : { optionsSource: undefined, optionsDepartment: undefined })
+                      }
+                    />
+                    Use Staff Directory positions{f.optionsDepartment ? ` (${f.optionsDepartment})` : ""}, in directory order
+                    {f.optionsSource === "directory-positions" && <span className="text-stone-400">— edit them in Settings; changes appear on the form automatically</span>}
+                  </label>
+                </div>
               )}
             </div>
             </Fragment>
@@ -298,6 +314,46 @@ function ShareLink() {
           Open
         </a>
       </div>
+    </div>
+  );
+}
+
+function OptionTags({ options, locked, onChange }: { options: string[]; locked: boolean; onChange: (options: string[]) => void }) {
+  const [draft, setDraft] = useState("");
+  const add = (raw: string) => {
+    const additions = raw.split(",").map((o) => o.trim()).filter((o) => o && !options.includes(o));
+    if (additions.length) onChange([...options, ...additions]);
+    setDraft("");
+  };
+  return (
+    <div className={`flex min-h-10 flex-wrap items-center gap-1.5 rounded-lg border px-2 py-1.5 ${locked ? "border-stone-200 bg-stone-50" : "border-stone-300 bg-white focus-within:border-stone-950"}`}>
+      {options.map((option) => (
+        <span key={option} className="inline-flex items-center gap-1 rounded-full border border-stone-200 bg-stone-100 py-0.5 pr-1.5 pl-2.5 text-xs font-medium text-stone-800">
+          {option}
+          {!locked && (
+            <button type="button" onClick={() => onChange(options.filter((o) => o !== option))} aria-label={`Remove ${option}`} className="text-stone-400 hover:text-stone-900">
+              ×
+            </button>
+          )}
+        </span>
+      ))}
+      {!locked && (
+        <input
+          value={draft}
+          onChange={(e) => (e.target.value.includes(",") ? add(e.target.value) : setDraft(e.target.value))}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              add(draft);
+            } else if (e.key === "Backspace" && !draft && options.length) {
+              onChange(options.slice(0, -1));
+            }
+          }}
+          onBlur={() => draft.trim() && add(draft)}
+          placeholder={options.length ? "Add choice…" : "Type a choice and press Enter"}
+          className="min-w-32 flex-1 bg-transparent px-1 py-0.5 text-sm outline-none"
+        />
+      )}
     </div>
   );
 }

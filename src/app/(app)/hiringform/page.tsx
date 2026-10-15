@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { loadHiringConfig } from "@/lib/hiring-config";
+import { loadHiringConfig, loadHiringConfigVersion } from "@/lib/hiring-config";
 import { listHiringSubmissions } from "@/lib/hiring-records";
 import { HiringFormBuilder } from "@/components/hiring/hiring-form-builder";
 import { HiringResponses } from "@/components/hiring/hiring-responses";
@@ -23,8 +23,8 @@ export default async function HiringFormPage({
   const active: Tab = tabs.includes(tab as Tab) ? (tab as Tab) : "responses";
 
   if (active === "builder") {
-    const config = await loadHiringConfig();
-    return <HiringFormBuilder config={config} />;
+    const [config, version] = await Promise.all([loadHiringConfig(), loadHiringConfigVersion()]);
+    return <HiringFormBuilder config={config} version={version} />;
   }
 
   const submissions = await listHiringSubmissions();
