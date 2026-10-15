@@ -331,12 +331,12 @@ export function HiringResponses({
         />
       ) : null}
       {/* Status pills */}
-      <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-start">
+      <div className="flex flex-wrap items-center justify-center gap-1.5 sm:justify-start sm:gap-2">
         {(["all", ...STATUS_OPTIONS] as const).map((s) => (
           <button
             key={s}
             onClick={() => setStatusFilter(s)}
-            className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+            className={`rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors sm:px-3 sm:py-1 sm:text-xs ${
               s === "all"
                 ? statusFilter === s ? "border-stone-900 bg-stone-900 text-white" : "border-stone-200 bg-white text-stone-600 hover:border-stone-400"
                 : statusFilter === s ? HIRING_STATUS_ACTIVE_STYLE[s] : `${STATUS_STYLE[s]} hover:brightness-95`
@@ -348,7 +348,7 @@ export function HiringResponses({
         {dupInfo.map.size > 0 && (
           <button
             onClick={() => setDupsOnly((v) => !v)}
-            className={`ml-1 flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+            className={`flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors sm:ml-1 sm:px-3 sm:py-1 sm:text-xs ${
               dupsOnly ? "border-orange-500 bg-orange-500 text-white" : "border-orange-200 bg-orange-50 text-orange-700 hover:border-orange-400"
             }`}
             title="Applicants who applied more than once (matched by email/phone)"
@@ -360,7 +360,7 @@ export function HiringResponses({
 
       {/* Breakdown — position first, then nationality */}
       {(posCounts.length > 0 || natCounts.length > 0) && (
-        <div className="mt-4 grid grid-cols-2 gap-2 sm:hidden">
+        <div className="mt-3 grid grid-cols-2 gap-1.5 sm:hidden">
           <SearchableFilter
             label="Position"
             data={posCounts.filter((seg) => seg.name !== "Not specified")}
@@ -392,14 +392,14 @@ export function HiringResponses({
       )}
 
       {/* Search + view toggle + filters */}
-      <div className="mt-4 flex flex-wrap items-center gap-2">
+      <div className="mt-1.5 flex flex-wrap items-center gap-1.5 sm:mt-4 sm:gap-2">
         <div className="relative min-w-[200px] flex-1">
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Escape") setSearch(""); }}
             placeholder="Search any field — name, phone, languages, experience…"
-            className="h-9 w-full rounded-lg border border-stone-200 bg-white pr-8 pl-3 text-sm outline-none focus:border-stone-400"
+            className="h-8 w-full rounded-lg border border-stone-200 bg-white pr-8 pl-3 text-sm outline-none focus:border-stone-400 sm:h-9"
           />
           {search ? (
             <button
@@ -428,10 +428,10 @@ export function HiringResponses({
             </button>
           </div>
           <div className="flex items-center gap-0.5 rounded-lg border border-stone-200 bg-white p-0.5">
-            <button onClick={() => setView("grid")} className={`grid size-8 place-items-center rounded-md ${view === "grid" ? "bg-stone-900 text-white" : "text-stone-500 hover:bg-stone-100"}`} aria-label="Grid">
+            <button onClick={() => setView("grid")} className={`grid size-7 place-items-center sm:size-8 rounded-md ${view === "grid" ? "bg-stone-900 text-white" : "text-stone-500 hover:bg-stone-100"}`} aria-label="Grid">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
             </button>
-            <button onClick={() => setView("list")} className={`grid size-8 place-items-center rounded-md ${view === "list" ? "bg-stone-900 text-white" : "text-stone-500 hover:bg-stone-100"}`} aria-label="List">
+            <button onClick={() => setView("list")} className={`grid size-7 place-items-center sm:size-8 rounded-md ${view === "list" ? "bg-stone-900 text-white" : "text-stone-500 hover:bg-stone-100"}`} aria-label="List">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
             </button>
           </div>
@@ -530,8 +530,14 @@ export function HiringResponses({
                   <div className="grid size-9 shrink-0 place-items-center rounded-full bg-stone-100 text-stone-300">—</div>
                 )}
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-stone-900">{s.full_name}</p>
-                  <p className="flex items-center gap-1 truncate text-xs text-stone-400"><span>{flagFor(s.nationality)}</span>{s.position_applied} · {s.nationality} · {s.email}</p>
+                  <p className="flex items-baseline gap-1.5 text-sm font-medium text-stone-900">
+                    <span className="truncate">{s.full_name}</span>
+                    {ageOf(s.date_of_birth) !== null && <span className="shrink-0 text-xs font-normal tabular-nums text-stone-500">{ageOf(s.date_of_birth)} y/o</span>}
+                  </p>
+                  <p className="flex items-center gap-1 text-xs text-stone-400">
+                    <span className="shrink-0">{flagFor(s.nationality)}</span>
+                    <span className="truncate">{[s.nationality, s.current_position, addressPart(s.current_address, "country")].filter(Boolean).join(" | ")}</span>
+                  </p>
                 </div>
                 <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-medium ${STATUS_STYLE[s.status]}`}>{HIRING_STATUS_LABEL[s.status]}</span>
                 {selected.has(s.id) && <span aria-hidden="true" className="pointer-events-none absolute inset-0 rounded-[inherit] ring-2 ring-red-600 ring-inset" />}
@@ -852,7 +858,7 @@ function AgeRangeSlider({ bounds, value, onChange }: { bounds: [number, number];
   const percent = (age: number) => ((age - min) / span) * 100;
 
   return (
-    <div className={`flex h-9 items-center gap-3 rounded-lg border bg-white px-3 text-xs ${value ? "border-stone-900" : "border-stone-200"}`}>
+    <div className={`flex h-8 items-center gap-3 rounded-lg border bg-white px-3 text-xs sm:h-9 ${value ? "border-stone-900" : "border-stone-200"}`}>
       <span className="shrink-0 text-stone-600">Age</span>
       <div
         ref={trackRef}
@@ -987,7 +993,7 @@ function SearchableFilter({
         onBlur={() => setTimeout(() => setOpen(false), 150)}
         placeholder={open ? `Search ${label.toLowerCase()}…` : `${label}: All`}
         aria-label={label}
-        className={`h-9 w-full truncate rounded-lg border pr-7 pl-2.5 text-xs outline-none ${isActive && !open ? "border-stone-900 bg-stone-900 text-white" : "border-stone-200 bg-white text-stone-700 placeholder:text-stone-600 focus:border-stone-400"}`}
+        className={`h-8 w-full truncate rounded-lg border pr-7 pl-2.5 text-xs sm:h-9 outline-none ${isActive && !open ? "border-stone-900 bg-stone-900 text-white" : "border-stone-200 bg-white text-stone-700 placeholder:text-stone-600 focus:border-stone-400"}`}
       />
       {isActive && !open ? (
         <button type="button" onClick={() => onPick(active)} aria-label={`Clear ${label}`} className="absolute top-1/2 right-1.5 grid size-6 -translate-y-1/2 place-items-center text-sm text-white/80">×</button>

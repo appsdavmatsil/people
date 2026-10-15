@@ -25,12 +25,15 @@ export function SectionTabs({
   label,
   onSelect,
   idPrefix,
+  compact = false,
 }: {
   tabs: readonly SectionTab[];
   active: string;
   label: string;
   onSelect?: (id: string) => void;
   idPrefix?: string;
+  /** Hides tab icons and tightens padding on phones. */
+  compact?: boolean;
 }) {
   const isNav = tabs.every((tab) => tab.href);
   const Container = isNav ? "nav" : "div";
@@ -45,7 +48,7 @@ export function SectionTabs({
         {tabs.map((tab, index) => {
           const selected = active === tab.id;
           const startsGroup = index > 0 && tabs[index - 1].group !== tab.group;
-          const className = `inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-sm transition-colors ${
+          const className = `inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-lg transition-colors ${compact ? "px-2.5 text-[13px] sm:px-3 sm:text-sm" : "px-3 text-sm"} ${
             selected
               ? "bg-white font-medium text-stone-950 shadow-sm ring-1 ring-stone-200"
               : "text-stone-500 hover:bg-white/60 hover:text-stone-900"
@@ -59,7 +62,7 @@ export function SectionTabs({
                 strokeWidth={2}
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                className={`size-4 shrink-0 ${selected ? "text-[#063f3b]" : ""}`}
+                className={`size-4 shrink-0 ${compact ? "hidden sm:block" : ""} ${selected ? "text-[#063f3b]" : ""}`}
                 aria-hidden="true"
               >
                 <path d={tab.icon} />

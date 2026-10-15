@@ -88,7 +88,7 @@ export function SettingsScreen({ initialTab = "directory" }: { initialTab?: Sett
   }, [privacy.ready, privacy.snapshot.isOwner, settingsTab]);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 py-5 md:px-6">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 pt-5 md:px-6 md:pb-5">
       <SectionTabs
         label="Settings"
         idPrefix="settings"

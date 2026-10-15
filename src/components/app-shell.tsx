@@ -346,7 +346,7 @@ export function AppShell({
       </aside>
 
       <div
-        className={`flex min-h-0 min-w-0 flex-1 flex-col pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-0 ${
+        className={`flex min-h-0 min-w-0 flex-1 flex-col ${
           pulling ? "" : "transition-transform duration-300 ease-out"
         } ${
           collapsed ? "md:pl-14" : "md:pl-52"
