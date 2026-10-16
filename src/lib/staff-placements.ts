@@ -7,11 +7,18 @@ export const eventPlacementsEvent = "people-event-placements";
 
 export type StaffPlacement = {
   id: string;
+  /** Directory employee this card belongs to. Omitted on older rows, where `id` is the employee id. */
+  employeeId?: string;
   name: string;
   locationId: string | null;
   position?: string;
   salary?: number | null;
 };
+
+export function placementEmployeeId(person: Pick<StaffPlacement, "id" | "employeeId">) {
+  const employeeId = person.employeeId?.trim();
+  return employeeId || person.id;
+}
 
 export function emptyPlacements() {
   return [] as StaffPlacement[];
@@ -160,7 +167,26 @@ function normalizePlacements(value: unknown): StaffPlacement[] {
     ids.add(id);
     const locationId =
       typeof item.locationId === "string" && item.locationId.trim() ? item.locationId : null;
-    placements.push({ id, name, locationId });
+    const employeeId =
+      typeof item.employeeId === "string" && item.employeeId.trim() ? item.employeeId.trim() : undefined;
+    const position =
+      typeof item.position === "string" && item.position.trim()
+        ? normalizePlacementName(item.position)
+        : undefined;
+    const salary =
+      typeof item.salary === "number" && Number.isFinite(item.salary)
+        ? item.salary
+        : item.salary === null
+          ? null
+          : undefined;
+    placements.push({
+      id,
+      name,
+      locationId,
+      ...(employeeId ? { employeeId } : {}),
+      ...(position ? { position } : {}),
+      ...(salary !== undefined ? { salary } : {}),
+    });
   }
 
   return placements;

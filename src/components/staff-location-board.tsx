@@ -52,10 +52,20 @@ import {
 } from "@/lib/staff";
 import {
   normalizePlacementName,
+  placementEmployeeId,
   type StaffPlacement,
 } from "@/lib/staff-placements";
 
 const unassignedDropId = "unassigned";
+const eventSourceDragPrefix = "event-source:";
+
+function eventSourceDragId(employeeId: string) {
+  return `${eventSourceDragPrefix}${employeeId}`;
+}
+
+function eventSourceEmployeeId(dragId: string) {
+  return dragId.startsWith(eventSourceDragPrefix) ? dragId.slice(eventSourceDragPrefix.length) : null;
+}
 
 const fieldClass =
   "mt-1.5 h-9 w-full rounded-lg border border-stone-300 bg-white px-3 text-sm text-stone-950 outline-none focus:border-stone-950";
@@ -285,17 +295,9 @@ export function EventsManningBoard() {
     updateIds(next.map((item) => item.id));
   }
 
-  const onBoard = new Set(ids);
-  const placedIds = new Set(
-    placements.flatMap((person) =>
-      person.locationId && onBoard.has(person.locationId) ? [person.id] : [],
-    ),
-  );
-  const staffChoices = employees.filter((employee) => !employee.archived).flatMap((employee) =>
-    placedIds.has(employee.id)
-      ? []
-      : [{ id: employee.id, name: employee.fullName, position: employee.position }],
-  );
+  const staffChoices = employees
+    .filter((employee) => !employee.archived)
+    .map((employee) => ({ id: employee.id, name: employee.fullName, position: employee.position }));
 
   return (
     <PlacementBoard
@@ -610,6 +612,55 @@ function PlacementBoard({
       }
 
       const current = placementsRef.current;
+      const sourceEmployeeId = kind === "event" ? eventSourceEmployeeId(staffId) : null;
+      if (sourceEmployeeId) {
+        const sourcePerson = eventSourceSnapshot.find((item) => item.id === sourceEmployeeId);
+        const to = slot.locationId;
+        if (!sourcePerson || !to || !known.has(to)) {
+          return;
+        }
+
+        const alreadyOnEvent = current.some(
+          (item) =>
+            placementEmployeeId(item) === sourceEmployeeId && resolvedLocationId(item, known) === to,
+        );
+        if (alreadyOnEvent) {
+          setStatus(`${sourcePerson.name} is already on this event.`);
+          return;
+        }
+
+        const placementId = crypto.randomUUID();
+        const currentLabels = labelsRef.current;
+        const currentOrders = ordersRef.current;
+        const targetRows = visualRows(
+          to,
+          placementId,
+          current,
+          known,
+          currentOrders,
+          currentLabels,
+          hiringRolesRef.current,
+          currentLocations,
+        );
+        const inserted = insertStaff(targetRows, placementId, slot.beforeItemId);
+        updatePlacements([
+          ...current,
+          {
+            id: placementId,
+            employeeId: sourceEmployeeId,
+            name: sourcePerson.name,
+            locationId: to,
+            position: sourcePerson.position,
+            salary: sourcePerson.salary,
+          },
+        ]);
+        updateLabels(reanchorLabels(currentLabels, to, inserted));
+        updateOrders({ ...currentOrders, [columnOrderKey(to)]: persistedOrder(inserted) });
+        const place = currentLocations.find((location) => location.id === to)?.nickname ?? "an event";
+        setStatus(`Allocated ${sourcePerson.name} to ${place}.`);
+        return;
+      }
+
       const person = current.find((item) => item.id === staffId);
       if (!person) {
         const sourcePerson =
@@ -641,6 +692,19 @@ function PlacementBoard({
 
       const from = resolvedLocationId(person, known);
       const to = slot.locationId;
+      if (kind === "event" && to && from !== to) {
+        const employeeId = placementEmployeeId(person);
+        const alreadyOnEvent = current.some(
+          (item) =>
+            item.id !== person.id &&
+            placementEmployeeId(item) === employeeId &&
+            resolvedLocationId(item, known) === to,
+        );
+        if (alreadyOnEvent) {
+          setStatus(`${person.name} is already on this event.`);
+          return;
+        }
+      }
       const currentLabels = labelsRef.current;
       const currentOrders = ordersRef.current;
       const sourceRows = visualRows(
@@ -1065,13 +1129,46 @@ function PlacementBoard({
     event.preventDefault();
     const person = staffChoices.find((item) => item.id === selectedStaffId);
     if (!person) {
-      setFormError(staffChoices.length === 0 ? "No unassigned employees." : "Choose an employee.");
+      setFormError(
+        staffChoices.length === 0
+          ? kind === "event"
+            ? "No employees in the directory."
+            : "No unassigned employees."
+          : "Choose an employee.",
+      );
       return;
     }
 
     const locationId = staffLocation && knownIds.has(staffLocation) ? staffLocation : null;
-    if (kind === "event" && !locationId) {
-      setFormError(locations.length === 0 ? "Add an event first." : "Choose an event.");
+    if (kind === "event") {
+      if (!locationId) {
+        setFormError(locations.length === 0 ? "Add an event first." : "Choose an event.");
+        return;
+      }
+
+      const alreadyOnEvent = placements.some(
+        (item) => placementEmployeeId(item) === person.id && resolvedLocationId(item, knownIds) === locationId,
+      );
+      if (alreadyOnEvent) {
+        setFormError(`${person.name} is already on this event.`);
+        return;
+      }
+
+      const employee = employees.find((item) => item.id === person.id);
+      updatePlacements([
+        ...placements,
+        {
+          id: crypto.randomUUID(),
+          employeeId: person.id,
+          name: person.name,
+          locationId,
+          position: employee?.position ?? person.position,
+          salary: employee?.salary ?? null,
+        },
+      ]);
+      setDialog(null);
+      const label = locations.find((location) => location.id === locationId)?.nickname ?? "an event";
+      setStatus(`Allocated ${person.name} to ${label}.`);
       return;
     }
 
@@ -1084,8 +1181,7 @@ function PlacementBoard({
     updatePlacements(next);
     setDialog(null);
     const label = locationId
-      ? (locations.find((location) => location.id === locationId)?.nickname ??
-        (kind === "event" ? "an event" : "a venue"))
+      ? (locations.find((location) => location.id === locationId)?.nickname ?? "a venue")
       : "Not placed";
     setStatus(`Added ${person.name} to ${label}.`);
   }
@@ -1327,6 +1423,20 @@ function PlacementBoard({
         ),
       );
     } else {
+      if (kind === "event" && locationId) {
+        const currentPlacement = placements.find((item) => item.id === editForm.id);
+        const employeeId = placementEmployeeId(currentPlacement ?? { id: editForm.id });
+        const alreadyOnEvent = placements.some(
+          (item) =>
+            item.id !== editForm.id &&
+            placementEmployeeId(item) === employeeId &&
+            resolvedLocationId(item, knownIds) === locationId,
+        );
+        if (alreadyOnEvent) {
+          setFormError(`${name} is already on this event.`);
+          return;
+        }
+      }
       updatePlacements(
         placements.map((person) =>
           person.id === editForm.id
@@ -1750,6 +1860,37 @@ function PlacementBoard({
     setStatus(`Removed ${person.name}.`);
   }
 
+  function removeAllocationsForEmployee(employeeId: string) {
+    const matches = placements.filter((item) => placementEmployeeId(item) === employeeId);
+    if (matches.length === 0) {
+      return;
+    }
+
+    const idSet = new Set(matches.map((item) => item.id));
+    updateLabels(
+      labels.map((label) =>
+        label.beforeId && idSet.has(label.beforeId) ? { ...label, beforeId: null } : label,
+      ),
+    );
+    updateCardLabels(cardLabels.filter((item) => !idSet.has(item.staffId)));
+    updateCardTags(cardTags.filter((item) => !idSet.has(item.staffId)));
+    const nextOrders = { ...orders };
+    for (const key of Object.keys(nextOrders)) {
+      const remaining = nextOrders[key].filter((item) => !idSet.has(item));
+      if (remaining.length === 0) {
+        delete nextOrders[key];
+      } else {
+        nextOrders[key] = remaining;
+      }
+    }
+    updateOrders(nextOrders);
+    updatePlacements(placements.filter((item) => !idSet.has(item.id)));
+    const name = matches[0]?.name ?? "staff";
+    setStatus(
+      matches.length === 1 ? `Removed ${name}.` : `Removed ${name} from ${matches.length} events.`,
+    );
+  }
+
   function removeVenue(id: string) {
     updateLocations(locations.filter((location) => location.id !== id));
     updatePlacements(
@@ -2089,20 +2230,25 @@ function PlacementBoard({
       <>
         {rows.map((row) => {
           const itemId = boardItemId(row);
+          const employeeId = row.kind === "staff" ? placementEmployeeId(row.person) : "";
           const employee =
-            row.kind === "staff"
-              ? employees.find((item) => item.id === row.person.id)
-              : undefined;
+            row.kind === "staff" ? employees.find((item) => item.id === employeeId) : undefined;
           const outsourced =
+            row.kind === "staff" ? outsourcedPeople.find((item) => item.id === employeeId) : undefined;
+          const shownPerson =
             row.kind === "staff"
-              ? outsourcedPeople.find((item) => item.id === row.person.id)
-              : undefined;
+              ? {
+                  ...row.person,
+                  position: row.person.position || employee?.position || "",
+                  salary: row.person.salary ?? employee?.salary ?? null,
+                }
+              : null;
           return (
             <Fragment key={`${row.kind}-${itemId}`}>
               {slot?.beforeItemId === itemId ? <DropLine /> : null}
               {row.kind === "staff" ? (
                 <StaffCard
-                  person={row.person}
+                  person={shownPerson ?? row.person}
                   displayName={employeeCardName(employee, row.person.name)}
                   photo={employee?.photo ?? outsourced?.photo ?? null}
                   terminated={Boolean(employee?.terminationDate)}
@@ -2112,7 +2258,7 @@ function PlacementBoard({
                     cardTags.find((item) => item.staffId === row.person.id)?.text ?? ""
                   }
                   outsourcedCompany={outsourced?.company ?? ""}
-                  onOpenProfile={() => openProfile(row.person.id)}
+                  onOpenProfile={() => openProfile(employeeId)}
                   promotion={
                     kind === "venue" && !outsourced && showPromotions && includePromotions
                       ? pendingPromotion(promotions, row.person.id, today)
@@ -2171,17 +2317,20 @@ function PlacementBoard({
   }
 
   const draggedLabel = drag ? labels.find((label) => label.id === drag.staffId) : null;
+  const draggedSourceEmployeeId = drag ? eventSourceEmployeeId(drag.staffId) : null;
   const dragged =
     drag && !draggedLabel
       ? placements.find((person) => person.id === drag.staffId) ??
-        eventSourceSnapshot.find((person) => person.id === drag.staffId) ??
+        eventSourceSnapshot.find(
+          (person) => person.id === (draggedSourceEmployeeId ?? drag.staffId),
+        ) ??
         null
       : null;
   const draggedEmployee = dragged
-    ? employees.find((employee) => employee.id === dragged.id)
+    ? employees.find((employee) => employee.id === placementEmployeeId(dragged))
     : undefined;
   const draggedOutsourced = dragged
-    ? outsourcedPeople.find((person) => person.id === dragged.id)
+    ? outsourcedPeople.find((person) => person.id === placementEmployeeId(dragged))
     : undefined;
   const draggedCardName = dragged ? employeeCardName(draggedEmployee, dragged.name) : "";
   const draggedHiring =
@@ -2216,7 +2365,7 @@ function PlacementBoard({
   const searchHits = new Set<string>();
   if (searching) {
     for (const person of placements) {
-      const employee = employees.find((item) => item.id === person.id);
+      const employee = employees.find((item) => item.id === placementEmployeeId(person));
       const promotion =
         kind === "venue" && showPromotions ? pendingPromotion(promotions, person.id, today) : null;
       const fields: Array<string | number | null | undefined> = [
@@ -2251,7 +2400,7 @@ function PlacementBoard({
     }
     if (kind === "event") {
       for (const person of eventSourceSnapshot) {
-        const employee = employees.find((item) => item.id === person.id);
+        const employee = employees.find((item) => item.id === placementEmployeeId(person));
         if (
           matchesBoardSearch(boardSearch, [
             person.name,
@@ -2493,7 +2642,7 @@ function PlacementBoard({
           <div className="pointer-events-none absolute inset-0 z-0 bg-stone-950/55" aria-hidden="true" />
         ) : null}
         {kind === "event" ? (
-          <section className="relative z-[1] flex min-w-64 flex-none flex-col overflow-hidden rounded-2xl border border-emerald-200 bg-emerald-50/40 shadow-sm">
+          <section className="relative z-[1] flex w-48 shrink-0 flex-col overflow-hidden rounded-2xl border border-emerald-200 bg-emerald-50/40 shadow-sm">
             <div className="shrink-0 border-b border-emerald-200 bg-white/90 p-3">
               <label className="block text-xs font-medium text-stone-600">
                 Current venue
@@ -2514,7 +2663,7 @@ function PlacementBoard({
               </label>
               <button
                 type="button"
-                className="mt-2 inline-flex h-9 w-full items-center justify-center gap-2 rounded-lg border border-emerald-300 bg-emerald-100 px-3 text-sm font-medium text-emerald-900 hover:bg-emerald-200"
+                className="mt-2 inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-lg border border-emerald-300 bg-emerald-100 px-2 text-xs font-medium text-emerald-900 hover:bg-emerald-200"
                 onClick={() => {
                   setEventSourceSnapshot(eventSourcePlacements);
                   setStatus("Updated venue staff from Staff Deployment.");
@@ -2525,7 +2674,7 @@ function PlacementBoard({
               </button>
             </div>
             <div className="border-b border-emerald-200 px-3 py-2 text-xs text-emerald-900">
-              Drag employees from this venue into an event.
+              Drag into an event. The same person can be on more than one.
             </div>
             <ul className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto p-3">
               {eventSourceSnapshot.filter((person) => person.locationId === eventSourceLocationId)
@@ -2538,12 +2687,13 @@ function PlacementBoard({
                   .filter((person) => person.locationId === eventSourceLocationId)
                   .map((person) => {
                     const employee = employees.find((item) => item.id === person.id);
-                    const allocated = placements.some(
+                    const allocations = placements.filter(
                       (placement) =>
-                        placement.id === person.id &&
+                        placementEmployeeId(placement) === person.id &&
                         placement.locationId &&
                         knownIds.has(placement.locationId),
                     );
+                    const dragId = eventSourceDragId(person.id);
                     return (
                       <StaffCard
                         key={person.id}
@@ -2551,11 +2701,15 @@ function PlacementBoard({
                         displayName={employeeCardName(employee, person.name)}
                         photo={employee?.photo ?? null}
                         terminated={Boolean(employee?.terminationDate)}
-                        allocated={allocated}
-                        onRemoveAllocation={allocated ? () => removeStaff(person.id) : undefined}
+                        allocated={allocations.length > 0}
+                        allocationCount={allocations.length}
+                        dragId={dragId}
+                        onRemoveAllocation={
+                          allocations.length > 0 ? () => removeAllocationsForEmployee(person.id) : undefined
+                        }
                         hideSalary={hideSalary(person.position ?? "")}
                         spotlight={searching && searchHits.has(person.id)}
-                        dragging={drag?.staffId === person.id || htmlDragId === person.id}
+                        dragging={drag?.staffId === dragId || htmlDragId === dragId}
                         movable
                         onOpenProfile={() => openProfile(person.id)}
                         onPointerDown={startDrag}
@@ -2856,7 +3010,7 @@ function PlacementBoard({
               title="Add staff"
               description={
                 kind === "event"
-                  ? "They land on the event you pick. Drag the card to move them."
+                  ? "The same person can be on more than one event. Drag a card to move that allocation."
                   : "They land in the location you pick. Drag the card to move them."
               }
               icon={<AddStaffIcon />}
@@ -2867,9 +3021,10 @@ function PlacementBoard({
                 people={staffChoices}
                 selectedId={selectedStaffId}
                 onSelect={setSelectedStaffId}
+                placeholder={kind === "event" ? "Search employees" : "Search unassigned employees"}
                 emptyLabel={
                   kind === "event"
-                    ? "Everyone in the directory is already on an event."
+                    ? "No employees in the directory."
                     : "Everyone in the directory is already on a venue."
                 }
               />
@@ -4323,6 +4478,8 @@ function StaffCard({
   dragging,
   movable = true,
   allocated = false,
+  allocationCount = 0,
+  dragId,
   onRemoveAllocation,
   onOpenProfile,
   onPointerDown,
@@ -4346,6 +4503,8 @@ function StaffCard({
   dragging: boolean;
   movable?: boolean;
   allocated?: boolean;
+  allocationCount?: number;
+  dragId?: string;
   onRemoveAllocation?: () => void;
   onOpenProfile: () => void;
   onPointerDown: (event: React.PointerEvent<HTMLElement>, staffId: string) => void;
@@ -4357,6 +4516,7 @@ function StaffCard({
   const labeled = cardLabel.trim().length > 0;
   const tagged = cardTag.trim().length > 0;
   const shownName = displayName.trim() || person.name;
+  const itemDragId = dragId ?? person.id;
   return (
     <li
       data-item-id={person.id}
@@ -4366,10 +4526,10 @@ function StaffCard({
       className={`relative flex touch-auto overflow-visible select-none ${
         movable ? "cursor-grab active:cursor-grabbing" : ""
       } ${dragging ? "opacity-40" : ""} ${spotlight ? "z-20" : ""}`}
-      onPointerDown={(event) => onPointerDown(event, person.id)}
+      onPointerDown={(event) => onPointerDown(event, itemDragId)}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
-      onDragStart={(event) => onHtmlDragStart(event, person.id)}
+      onDragStart={(event) => onHtmlDragStart(event, itemDragId)}
       onDragEnd={onHtmlDragEnd}
     >
       {tagged ? <CardStamp text={cardTag} /> : null}
@@ -4428,9 +4588,9 @@ function StaffCard({
           ) : null}
           <PromotionTag promotion={promotion} hideSalary={hidePromotionSalary} />
           {allocated ? (
-            <span className="mt-1 flex items-center gap-1.5">
+            <span className="mt-1 flex flex-wrap items-center gap-1.5">
               <span className="inline-flex rounded-full bg-emerald-700 px-2 py-0.5 text-[10px] font-medium text-white">
-                Allocated to event
+                {allocationCount > 1 ? `On ${allocationCount} events` : "Allocated to event"}
               </span>
               {onRemoveAllocation ? (
                 <button
@@ -5227,11 +5387,13 @@ function StaffCombobox({
   selectedId,
   onSelect,
   emptyLabel,
+  placeholder = "Search unassigned employees",
 }: {
   people: UnassignedPerson[];
   selectedId: string;
   onSelect: (id: string) => void;
   emptyLabel: string;
+  placeholder?: string;
 }) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
@@ -5267,7 +5429,7 @@ function StaffCombobox({
             setOpen(true);
           }}
           onBlur={() => setOpen(false)}
-          placeholder="Search unassigned employees"
+          placeholder={placeholder}
           className={fieldClass}
           role="combobox"
           aria-expanded={open}
@@ -5650,7 +5812,7 @@ function staffDropUnchanged(
   const person = placements.find((item) => item.id === staffId);
   const role = hiring.find((item) => item.id === staffId);
   if (!person && !role) {
-    return true;
+    return !staffId.startsWith(eventSourceDragPrefix);
   }
 
   const from = person ? resolvedLocationId(person, known) : locationIdForRole(role as HiringRole, locations);
