@@ -2264,7 +2264,7 @@ function PlacementBoard({
                       ? pendingPromotion(promotions, row.person.id, today)
                       : null
                   }
-                  hideSalary={hideSalary(row.person.position ?? "")}
+                  hideSalary={kind === "event" || hideSalary(row.person.position ?? "")}
                   spotlight={searching && searchHits.has(row.person.id)}
                   hidePromotionSalary={hideSalary(
                     (kind === "venue" && !outsourced && showPromotions && includePromotions
@@ -2376,7 +2376,7 @@ function PlacementBoard({
         person.position,
         employee?.position,
       ];
-      if (!hideSalary(person.position ?? "")) {
+      if (kind !== "event" && !hideSalary(person.position ?? "")) {
         fields.push(person.salary, salarySearchText(person.salary));
       }
       if (promotion) {
@@ -2408,7 +2408,6 @@ function PlacementBoard({
             employee?.firstName,
             employee?.lastName,
             person.position,
-            hideSalary(person.position ?? "") ? null : person.salary,
           ])
         ) {
           searchHits.add(person.id);
@@ -2444,7 +2443,9 @@ function PlacementBoard({
         </div>
         <div className="flex min-w-0 items-center justify-end gap-2">
           <label className="relative min-w-0 flex-1 sm:w-64 sm:flex-none">
-            <span className="sr-only">Search staff by name, position, or salary</span>
+            <span className="sr-only">
+              {kind === "event" ? "Search staff by name or position" : "Search staff by name, position, or salary"}
+            </span>
             <span className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-stone-400">
               <SearchIcon />
             </span>
@@ -2457,7 +2458,7 @@ function PlacementBoard({
                   setBoardQuery("");
                 }
               }}
-              placeholder="Name, position, salary"
+              placeholder={kind === "event" ? "Name, position" : "Name, position, salary"}
               className="h-9 w-full rounded-lg border border-stone-300 bg-white pr-8 pl-8 text-sm text-stone-950 outline-none placeholder:text-stone-400 focus:border-stone-950 [&::-webkit-search-cancel-button]:hidden"
             />
             {boardQuery ? (
@@ -2655,8 +2656,8 @@ function PlacementBoard({
                     <option value="">No venues available</option>
                   ) : null}
                   {eventSourceLocations.map((venue) => (
-                    <option key={venue.id} value={venue.id}>
-                      {venue.nickname} — {venue.venueName}
+                    <option key={venue.id} value={venue.id} title={venue.venueName}>
+                      {venue.nickname}
                     </option>
                   ))}
                 </select>
@@ -2707,7 +2708,7 @@ function PlacementBoard({
                         onRemoveAllocation={
                           allocations.length > 0 ? () => removeAllocationsForEmployee(person.id) : undefined
                         }
-                        hideSalary={hideSalary(person.position ?? "")}
+                        hideSalary
                         spotlight={searching && searchHits.has(person.id)}
                         dragging={drag?.staffId === dragId || htmlDragId === dragId}
                         movable
@@ -3269,7 +3270,7 @@ function PlacementBoard({
                     textValue(right.effectiveDate).localeCompare(textValue(left.effectiveDate)),
                   )}
                 showPromotions={showPromotions}
-                salaryIsHidden={hideSalary}
+                salaryIsHidden={kind === "event" ? () => true : hideSalary}
                 onClose={dismissDialog}
               />
             </div>
@@ -4590,7 +4591,7 @@ function StaffCard({
           {allocated ? (
             <span className="mt-1 flex flex-wrap items-center gap-1.5">
               <span className="inline-flex rounded-full bg-emerald-700 px-2 py-0.5 text-[10px] font-medium text-white">
-                {allocationCount > 1 ? `On ${allocationCount} events` : "Allocated to event"}
+                {allocationCount === 1 ? "1 Event" : `${allocationCount} Events`}
               </span>
               {onRemoveAllocation ? (
                 <button
