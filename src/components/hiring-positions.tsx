@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
+import { ApplicationPanel } from "@/components/hiring/application-panel";
 import {
   DeleteConfirmDialog,
   DialogHeading,
@@ -34,10 +35,11 @@ import {
   type HiringRole,
   type HiringStatus,
 } from "@/lib/hiring";
-import { venueNickname } from "@/lib/locations";
+import { locationMatches, venueNickname, type LocationReference } from "@/lib/locations";
 import { buildHiringWorkbook, importHiringWorkbook } from "@/lib/hiring-workbook";
 import { type OutsourcedPerson } from "@/lib/outsourced";
-import { formatSalary, splitFullName, splitSalary, type SortDirection, type StaffEmployee } from "@/lib/staff";
+import { formatSalary, splitFullName, splitSalary, type SortDirection, type StaffDocument, type StaffEmployee } from "@/lib/staff";
+import type { HiringSubmission } from "@/lib/hiring-records";
 import type { IntakeSubmission } from "@/lib/staff-intake-records";
 
 const fieldClass =
@@ -46,6 +48,8 @@ const secondaryButtonClass =
   "inline-flex h-9 items-center justify-center rounded-lg border border-stone-300 bg-white px-3 text-sm font-medium text-stone-800 hover:bg-stone-50 disabled:opacity-60";
 const primaryButtonClass =
   "inline-flex h-9 items-center justify-center rounded-lg bg-stone-950 px-3 text-sm font-medium text-white hover:bg-stone-800 disabled:opacity-60";
+const importButtonClass =
+  "flex h-9 w-full items-center rounded-lg border border-stone-300 bg-white px-3 text-left text-sm font-medium text-stone-800 hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-50";
 
 const emptyOutsourcedForm = {
   fullName: "",
@@ -85,7 +89,7 @@ const hiringColumns = [
 
 type HiringColumnKey = (typeof hiringColumns)[number]["key"];
 
-export function HiringPositions({ submissions = [] }: { submissions?: IntakeSubmission[] }) {
+export function HiringPositions({ submissions = [], applications = [] }: { submissions?: IntakeSubmission[]; applications?: HiringSubmission[] }) {
   const { lookups } = useDirectoryLookups();
   const { locations } = useLocations();
   const { roles, update } = useHiring();
@@ -95,6 +99,8 @@ export function HiringPositions({ submissions = [] }: { submissions?: IntakeSubm
   const kindRef = useRef<HTMLDialogElement>(null);
   const outsourcedRef = useRef<HTMLDialogElement>(null);
   const intakeRef = useRef<HTMLDialogElement>(null);
+  const hiringRef = useRef<HTMLDialogElement>(null);
+  const linkedRef = useRef<HTMLDialogElement>(null);
   const importRef = useRef<HTMLInputElement>(null);
   const formToken = useRef(0);
   const keepHire = useRef(false);
@@ -105,7 +111,7 @@ export function HiringPositions({ submissions = [] }: { submissions?: IntakeSubm
   const [busy, setBusy] = useState<"import" | "export" | null>(null);
   const [showArchived, setShowArchived] = useState(false);
   const [filters, setFilters] = useState(() => blankColumnFilters(hiringColumns));
-  const [sortKey, setSortKey] = useState<HiringColumnKey>("position");
+  const [sortKey, setSortKey] = useState<HiringColumnKey>("venue");
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const [pendingDelete, setPendingDelete] = useState<HiringRole | null>(null);
   const [hireRole, setHireRole] = useState<HiringRole | null>(null);
@@ -114,6 +120,9 @@ export function HiringPositions({ submissions = [] }: { submissions?: IntakeSubm
   const [outsourcedError, setOutsourcedError] = useState("");
   const [intakeSearch, setIntakeSearch] = useState("");
   const [selectedSubmissionId, setSelectedSubmissionId] = useState("");
+  const [hiringSearch, setHiringSearch] = useState("");
+  const [selectedHiringId, setSelectedHiringId] = useState("");
+  const [openApplicationId, setOpenApplicationId] = useState<string | null>(null);
   const positionGroups = useMemo(
     () =>
       lookups.departments
@@ -133,9 +142,10 @@ export function HiringPositions({ submissions = [] }: { submissions?: IntakeSubm
     [roles, showArchived],
   );
   const filtersActive = hiringColumns.some((column) => filters[column.key].trim());
+  const positionOrder = useMemo(() => lookups.positions.map((position) => position.name), [lookups]);
   const visible = useMemo(
-    () => sortHiring(filterHiring(listed, filters, locations), sortKey, sortDirection, locations),
-    [listed, filters, locations, sortKey, sortDirection],
+    () => sortHiring(filterHiring(listed, filters, locations), sortKey, sortDirection, locations, positionOrder),
+    [listed, filters, locations, sortKey, sortDirection, positionOrder],
   );
   const countLabel = filtersActive
     ? `${visible.length} of ${listed.length} ${listed.length === 1 ? "position" : "positions"}`
@@ -312,52 +322,89 @@ export function HiringPositions({ submissions = [] }: { submissions?: IntakeSubm
     outsourcedRef.current?.showModal();
   }
 
-  function openIntakeImport() {
+  function openImport(source: "docs" | "hiring" | "linked") {
+    const role = hireRole;
+    if (!role) return;
+    if (source === "linked" && !applications.some((item) => item.id === role.applicationId)) return;
     keepHire.current = true;
     kindRef.current?.close();
-    setIntakeSearch("");
-    setSelectedSubmissionId(submissions[0]?.id ?? "");
-    intakeRef.current?.showModal();
+    if (source === "docs") {
+      setIntakeSearch("");
+      setSelectedSubmissionId(submissions[0]?.id ?? "");
+      intakeRef.current?.showModal();
+      return;
+    }
+    if (source === "hiring") {
+      setHiringSearch("");
+      setSelectedHiringId(applications.find((item) => item.id !== role.applicationId)?.id ?? "");
+      hiringRef.current?.showModal();
+      return;
+    }
+    linkedRef.current?.showModal();
   }
 
-  function importSubmission(kind: "in-house" | "outsourced") {
-    const submission = submissions.find((item) => item.id === selectedSubmissionId);
+  function fillFromImport(kind: "in-house" | "outsourced", fullName: string, seed: EmployeeFormSeed, documents: StaffDocument[] | undefined, source: string) {
     const role = hireRole;
-    if (!submission || !role) return;
-    intakeRef.current?.close();
+    if (!role) return;
     if (kind === "in-house") {
-      const name = splitFullName(submission.full_name);
       formToken.current += 1;
       setEmployeeRequest({
         token: formToken.current,
         employee: null,
-        seed: {
-          ...seedFromRole(role),
-          fullName: submission.full_name,
-          firstName: name.firstName,
-          lastName: name.lastName,
-          nationality: submission.nationality ?? "",
-          email: submission.email,
-          phone: submission.phone ?? "",
-          whatsapp: submission.whatsapp ?? "",
-          dateOfBirth: submission.date_of_birth ?? "",
-          joiningDate: submission.joining_date ?? "",
-          passportNumber: submission.passport_number ?? "",
-          passportExpiry: submission.passport_expiry ?? "",
-          emiratesIdNumber: submission.emirates_id_number ?? "",
-          emiratesIdExpiry: submission.emirates_id_expiry ?? "",
-          visaExpiry: submission.visa_expiry ?? "",
-        },
-        documents: submission.documents.map((document) => ({ label: document.label, fileId: document.file_id, fileName: document.file_name, webViewLink: document.web_view_link })),
-        description: `Imported from the details form and replacing the ${role.position} hiring card.`,
+        seed: { ...seedFromRole(role), ...seed },
+        documents,
+        description: `Imported from ${source} and replacing the ${role.position} hiring card.`,
       });
       return;
     }
     const position = lookups.positions.find((item) => sameText(item.name, role.position));
     const venue = locations.find((item) => sameText(item.venueName, role.venue) || sameText(item.nickname, role.venue));
-    setOutsourcedForm({ fullName: submission.full_name, company: "", positionId: position?.id ?? "", position: role.position, venueId: venue?.id ?? "", venue: venue?.venueName || role.venue });
+    setOutsourcedForm({ fullName, company: "", positionId: position?.id ?? "", position: role.position, venueId: venue?.id ?? "", venue: venue?.venueName || role.venue });
     setOutsourcedError("");
     outsourcedRef.current?.showModal();
+  }
+
+  function importSubmission(kind: "in-house" | "outsourced") {
+    const submission = submissions.find((item) => item.id === selectedSubmissionId);
+    if (!submission) return;
+    const name = splitFullName(submission.full_name);
+    intakeRef.current?.close();
+    fillFromImport(kind, submission.full_name, {
+      fullName: submission.full_name,
+      firstName: name.firstName,
+      lastName: name.lastName,
+      nationality: submission.nationality ?? "",
+      email: submission.email,
+      phone: submission.phone ?? "",
+      whatsapp: submission.whatsapp ?? "",
+      dateOfBirth: submission.date_of_birth ?? "",
+      joiningDate: submission.joining_date ?? "",
+      passportNumber: submission.passport_number ?? "",
+      passportExpiry: submission.passport_expiry ?? "",
+      emiratesIdNumber: submission.emirates_id_number ?? "",
+      emiratesIdExpiry: submission.emirates_id_expiry ?? "",
+      visaExpiry: submission.visa_expiry ?? "",
+    }, submission.documents.map((document) => ({ label: document.label, fileId: document.file_id, fileName: document.file_name, webViewLink: document.web_view_link })), "Doc's Form");
+  }
+
+  function importHiring(kind: "in-house" | "outsourced", submission: HiringSubmission | undefined) {
+    if (!submission) return;
+    const name = splitFullName(submission.full_name);
+    const photo = submission.documents.find((document) => /photo/i.test(document.label));
+    const whatsapp = submission.data?.whatsapp;
+    hiringRef.current?.close();
+    linkedRef.current?.close();
+    fillFromImport(kind, submission.full_name, {
+      fullName: submission.full_name,
+      firstName: submission.first_name || name.firstName,
+      lastName: submission.last_name || name.lastName,
+      nationality: submission.nationality ?? "",
+      email: submission.email ?? "",
+      phone: submission.phone ?? "",
+      whatsapp: typeof whatsapp === "string" ? whatsapp : "",
+      dateOfBirth: submission.date_of_birth ?? "",
+      photo: photo?.web_view_link ?? undefined,
+    }, submission.documents.map((document) => ({ label: document.label, fileId: document.file_id, fileName: document.file_name, webViewLink: document.web_view_link })), "the hiring form");
   }
 
   function seedFromRole(role: HiringRole): EmployeeFormSeed {
@@ -592,16 +639,42 @@ export function HiringPositions({ submissions = [] }: { submissions?: IntakeSubm
                 </td>
               </tr>
             ) : (
-              visible.map((role) => (
+              visible.map((role) => {
+                const venue = locations.find((item) => locationMatches(item, role.venue));
+                return (
                 <tr
                   key={role.id}
-                  className={`cursor-pointer hover:bg-stone-50 ${isArchived(role) ? "opacity-60" : ""}`}
+                  className={`cursor-pointer hover:brightness-95 ${isArchived(role) ? "opacity-60" : ""}`}
+                  style={{ backgroundColor: fadeColor(venue?.color, 0.1) }}
                   onClick={() => openRole(role)}
                 >
                   <td className="border-b border-stone-100 px-3 py-2 font-medium text-stone-950">
                     {role.position}
                   </td>
-                  <td className="border-b border-stone-100 px-3 py-2 text-stone-700">{role.candidateName || "—"}</td>
+                  <td className="border-b border-stone-100 px-3 py-2 text-stone-700">
+                    {role.candidateName ? (
+                      <span className="flex min-w-0 items-center gap-1.5">
+                        {role.applicationId ? (
+                          <button
+                            type="button"
+                            title={`Open ${role.candidateName}'s application`}
+                            aria-label={`Open ${role.candidateName}'s application`}
+                            className="grid size-5 shrink-0 place-items-center rounded-md text-stone-500 hover:bg-stone-200 hover:text-stone-950"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              setOpenApplicationId(role.applicationId ?? null);
+                            }}
+                          >
+                            <svg aria-hidden="true" viewBox="0 0 24 24" className="size-3.5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                              <path d="M10 13a5 5 0 0 0 7.07 0l2.83-2.83a5 5 0 0 0-7.07-7.07L11.5 4.5" />
+                              <path d="M14 11a5 5 0 0 0-7.07 0L4.1 13.83a5 5 0 0 0 7.07 7.07l1.33-1.4" />
+                            </svg>
+                          </button>
+                        ) : null}
+                        <span className="truncate">{role.candidateName}</span>
+                      </span>
+                    ) : "—"}
+                  </td>
                   <td className="border-b border-stone-100 px-3 py-2 text-stone-700">{role.department}</td>
                   <td className="border-b border-stone-100 px-3 py-2 text-stone-700">
                     {venueNickname(role.venue, locations) || "—"}
@@ -627,7 +700,8 @@ export function HiringPositions({ submissions = [] }: { submissions?: IntakeSubm
                     />
                   </td>
                 </tr>
-              ))
+                );
+              })
             )}
           </tbody>
         </table>
@@ -842,24 +916,72 @@ export function HiringPositions({ submissions = [] }: { submissions?: IntakeSubm
             </p>
           </div>
         </div>
+        <div className="space-y-3 border-t border-stone-200 px-5 py-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-stone-400">Start blank</p>
+            <div className="mt-2 flex gap-2">
+              <button type="button" className={`${secondaryButtonClass} flex-1`} onClick={() => chooseHireKind("outsourced")}>Outsourced</button>
+              <button type="button" className={`${primaryButtonClass} flex-1`} onClick={() => chooseHireKind("in-house")}>In-house</button>
+            </div>
+          </div>
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-stone-400">Import, then choose in-house or outsourced</p>
+            <div className="mt-2 space-y-2">
+              <button
+                type="button"
+                disabled={!applications.some((item) => item.id === hireRole?.applicationId)}
+                onClick={() => openImport("linked")}
+                title={applications.some((item) => item.id === hireRole?.applicationId) ? undefined : "This position has no linked hiring form"}
+                className={importButtonClass}
+              >
+                Import from linked Hiring Form
+                {(() => {
+                  const linked = applications.find((item) => item.id === hireRole?.applicationId);
+                  return linked ? <span className="ml-auto truncate pl-3 text-xs font-normal text-stone-500">{linked.full_name}</span> : null;
+                })()}
+              </button>
+              <button type="button" className={importButtonClass} onClick={() => openImport("hiring")}>Import from other Hiring Form</button>
+              <button type="button" className={importButtonClass} onClick={() => openImport("docs")}>Import from Doc&apos;s Form</button>
+            </div>
+          </div>
+        </div>
+        <div className="flex justify-end border-t border-stone-200 px-5 py-4">
+          <button type="button" className={secondaryButtonClass} onClick={() => kindRef.current?.close()}>Cancel</button>
+        </div>
+      </dialog>
+
+      <dialog ref={linkedRef} aria-labelledby="linked-import-title" className="m-auto h-fit w-[min(100%-2rem,28rem)] rounded-2xl border border-stone-200 bg-white p-0 text-stone-950 shadow-xl backdrop:bg-stone-950/40" onClick={(event) => { if (event.target === event.currentTarget) event.currentTarget.close(); }}>
+        <div className="px-5 py-4">
+          <h2 id="linked-import-title" className="font-semibold">Import from linked Hiring Form</h2>
+          <p className="mt-1 text-sm text-stone-500">
+            {applications.find((item) => item.id === hireRole?.applicationId)?.full_name ?? "This application"}
+            {hireRole ? ` · ${hireRole.position}` : ""}. Choose the kind of staff.
+          </p>
+        </div>
         <div className="flex justify-end gap-2 border-t border-stone-200 px-5 py-4">
-          <button type="button" className={secondaryButtonClass} onClick={() => kindRef.current?.close()}>
-            Cancel
-          </button>
-          <button type="button" className={secondaryButtonClass} onClick={() => chooseHireKind("outsourced")}>
-            Outsourced
-          </button>
-          <button type="button" className={secondaryButtonClass} onClick={openIntakeImport}>
-            Details form
-          </button>
-          <button type="button" className={primaryButtonClass} onClick={() => chooseHireKind("in-house")}>
-            In-house
-          </button>
+          <button type="button" className={secondaryButtonClass} onClick={() => linkedRef.current?.close()}>Cancel</button>
+          <button type="button" className={secondaryButtonClass} onClick={() => importHiring("outsourced", applications.find((item) => item.id === hireRole?.applicationId))}>Outsourced</button>
+          <button type="button" className={primaryButtonClass} onClick={() => importHiring("in-house", applications.find((item) => item.id === hireRole?.applicationId))}>In-house</button>
+        </div>
+      </dialog>
+
+      <dialog ref={hiringRef} aria-labelledby="hiring-import-title" className="m-auto h-fit max-h-[calc(100dvh-2rem)] w-[min(100%-2rem,42rem)] overflow-hidden rounded-2xl border border-stone-200 bg-white p-0 text-stone-950 shadow-xl backdrop:bg-stone-950/40">
+        <div className="border-b border-stone-200 px-5 py-4"><h2 id="hiring-import-title" className="font-semibold">Import from other Hiring Form</h2><p className="mt-1 text-sm text-stone-500">Search and select an application, then choose in-house or outsourced.</p></div>
+        <div className="space-y-3 px-5 py-4">
+          <input value={hiringSearch} onChange={(event) => setHiringSearch(event.target.value)} placeholder="Search name, position, or phone…" autoFocus className={fieldClass} />
+          <select value={selectedHiringId} onChange={(event) => setSelectedHiringId(event.target.value)} size={8} className="w-full rounded-xl border border-stone-300 bg-white p-2 text-sm">
+            {applications.filter((item) => item.id !== hireRole?.applicationId).filter((item) => { const query = hiringSearch.trim().toLowerCase(); return !query || `${item.full_name} ${item.position_applied ?? ""} ${item.phone ?? ""}`.toLowerCase().includes(query); }).map((item) => <option key={item.id} value={item.id}>{item.full_name} — {item.position_applied || "No position"}</option>)}
+          </select>
+        </div>
+        <div className="flex justify-end gap-2 border-t border-stone-200 px-5 py-4">
+          <button type="button" className={secondaryButtonClass} onClick={() => hiringRef.current?.close()}>Cancel</button>
+          <button type="button" disabled={!selectedHiringId} className={secondaryButtonClass} onClick={() => importHiring("outsourced", applications.find((item) => item.id === selectedHiringId))}>Outsourced</button>
+          <button type="button" disabled={!selectedHiringId} className={primaryButtonClass} onClick={() => importHiring("in-house", applications.find((item) => item.id === selectedHiringId))}>In-house</button>
         </div>
       </dialog>
 
       <dialog ref={intakeRef} aria-labelledby="intake-import-title" className="m-auto h-fit max-h-[calc(100dvh-2rem)] w-[min(100%-2rem,42rem)] overflow-hidden rounded-2xl border border-stone-200 bg-white p-0 text-stone-950 shadow-xl backdrop:bg-stone-950/40">
-        <div className="border-b border-stone-200 px-5 py-4"><h2 id="intake-import-title" className="font-semibold">Import from details collection form</h2><p className="mt-1 text-sm text-stone-500">Search and select a submitted person.</p></div>
+        <div className="border-b border-stone-200 px-5 py-4"><h2 id="intake-import-title" className="font-semibold">Import from Doc&apos;s Form</h2><p className="mt-1 text-sm text-stone-500">Search and select a submitted person, then choose in-house or outsourced.</p></div>
         <div className="space-y-3 px-5 py-4">
           <input value={intakeSearch} onChange={(event) => setIntakeSearch(event.target.value)} placeholder="Search name, email, or phone…" autoFocus className={fieldClass} />
           <select value={selectedSubmissionId} onChange={(event) => setSelectedSubmissionId(event.target.value)} size={8} className="w-full rounded-xl border border-stone-300 bg-white p-2 text-sm">
@@ -1011,6 +1133,9 @@ export function HiringPositions({ submissions = [] }: { submissions?: IntakeSubm
           }
         }}
       />
+      {openApplicationId ? (
+        <ApplicationPanel applicationId={openApplicationId} onClose={() => setOpenApplicationId(null)} />
+      ) : null}
     </div>
   );
 }
@@ -1093,11 +1218,32 @@ function filterHiring(
   );
 }
 
+function fadeColor(color: string | undefined, alpha: number) {
+  const match = /^#([0-9a-f]{6})$/i.exec(color?.trim() ?? "");
+  if (!match) return undefined;
+  const value = match[1];
+  const channel = (start: number) => parseInt(value.slice(start, start + 2), 16);
+  return `rgba(${channel(0)}, ${channel(2)}, ${channel(4)}, ${alpha})`;
+}
+
+/** Settings position order; unknown names sort after the known ones, alphabetically. */
+function positionOrderIndex(name: string, order: string[]) {
+  const norm = (value: string) =>
+    value.toLowerCase().replace(/\bcdp\b/g, "chef de partie").replace(/\bjunior\b/g, "jnr").replace(/\bsenior\b/g, "snr").replace(/[^a-z0-9]+/g, " ").trim();
+  const key = norm(name.split(/\s+[–—-]\s+/)[0] ?? name);
+  const index = order.findIndex((item) => {
+    const normalized = norm(item);
+    return normalized === key || normalized.startsWith(`${key} `);
+  });
+  return index < 0 ? order.length : index;
+}
+
 function sortHiring(
   roles: HiringRole[],
   key: HiringColumnKey,
   direction: SortDirection,
-  locations: { nickname: string; venueName: string }[],
+  locations: LocationReference[],
+  positionOrder: string[],
 ) {
   const factor = direction === "asc" ? 1 : -1;
   return [...roles].sort((left, right) => {
@@ -1107,7 +1253,8 @@ function sortHiring(
     }
 
     if (compared.value === 0) {
-      return left.position.localeCompare(right.position, undefined, { sensitivity: "base" });
+      const rank = positionOrderIndex(left.position, positionOrder) - positionOrderIndex(right.position, positionOrder);
+      return rank || left.position.localeCompare(right.position, undefined, { sensitivity: "base" });
     }
 
     return compared.value * factor;
@@ -1118,10 +1265,18 @@ function compareHiring(
   left: HiringRole,
   right: HiringRole,
   key: HiringColumnKey,
-  locations: { nickname: string; venueName: string }[],
+  locations: LocationReference[],
 ) {
   if (key === "openings") {
     return { blank: 0, value: left.openings - right.openings };
+  }
+
+  if (key === "venue") {
+    const index = (role: HiringRole) => {
+      const found = locations.findIndex((location) => locationMatches(location, role.venue));
+      return found < 0 ? locations.length : found;
+    };
+    return { blank: 0, value: index(left) - index(right) };
   }
 
   if (key === "salary") {
@@ -1135,15 +1290,11 @@ function compareHiring(
   const leftValue =
     key === "status"
       ? hiringStatusLabel(left.status)
-      : key === "venue"
-        ? venueNickname(left.venue, locations)
-        : (left[key] ?? "").trim();
+      : (left[key] ?? "").trim();
   const rightValue =
     key === "status"
       ? hiringStatusLabel(right.status)
-      : key === "venue"
-        ? venueNickname(right.venue, locations)
-        : (right[key] ?? "").trim();
+      : (right[key] ?? "").trim();
   if (!leftValue || !rightValue) {
     return { blank: blankLast(!leftValue, !rightValue), value: 0 };
   }

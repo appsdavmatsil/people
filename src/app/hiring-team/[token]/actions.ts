@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { updateHiringStatuses } from "@/lib/hiring-records";
+import { setHiringInterview, updateHiringStatuses } from "@/lib/hiring-records";
 import { isValidHiringShareToken } from "@/lib/hiring-share";
 import { runWorkplaceSearch, type WorkplaceSearchResult } from "@/lib/workplace-search";
 
@@ -11,6 +11,16 @@ export async function searchWorkplaceSharedAction(token: string, query: string):
     return { ok: false, error: "This link is no longer active. Ask HR for a new one." };
   }
   return runWorkplaceSearch(query);
+}
+
+/** Interview booking from the team link. The link's token is the only access check. */
+export async function scheduleInterviewSharedAction(token: string, id: string, slot: string | null): Promise<{ ok: boolean; error?: string }> {
+  if (!(await isValidHiringShareToken(token))) {
+    return { ok: false, error: "This link is no longer active. Ask HR for a new one." };
+  }
+  const result = await setHiringInterview(id, slot);
+  if (result.ok) revalidatePath("/hiringform");
+  return result;
 }
 
 /** Status change from the team link. The link's token is the only access check. */

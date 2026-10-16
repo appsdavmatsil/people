@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { loadHiringConfig, saveHiringConfig } from "@/lib/hiring-config";
 import type { ConfigTextField } from "@/lib/form-config";
 import type { FormConfig } from "@/lib/form-config";
-import { listHiringSubmissions, updateHiringStatuses, type HiringSubmission } from "@/lib/hiring-records";
+import { listHiringSubmissions, setHiringInterview, updateHiringStatuses, type HiringSubmission } from "@/lib/hiring-records";
 import { setHiringShareToken } from "@/lib/hiring-share";
 import { runWorkplaceSearch, type WorkplaceSearchResult } from "@/lib/workplace-search";
 
@@ -58,6 +58,18 @@ export async function loadHiringApplicationsAction(): Promise<
   }
   const [submissions, config] = await Promise.all([listHiringSubmissions(), loadHiringConfig()]);
   return { ok: true, submissions, fields: config.textFields };
+}
+
+/** Books or clears an interview slot. Requires an app session. */
+export async function scheduleInterviewAction(id: string, slot: string | null): Promise<{ ok: boolean; error?: string }> {
+  const supabase = await createClient();
+  const { data } = await supabase.auth.getClaims();
+  if (typeof data?.claims?.sub !== "string") {
+    return { ok: false, error: "Not authorized." };
+  }
+  const result = await setHiringInterview(id, slot);
+  if (result.ok) revalidatePath("/hiringform");
+  return result;
 }
 
 /** Web results for a candidate's workplace. Requires an app session. */

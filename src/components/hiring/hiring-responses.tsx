@@ -1,16 +1,19 @@
 "use client";
 
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type TouchEvent } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type MouseEvent, type TouchEvent } from "react";
 import type { HiringSubmission } from "@/lib/hiring-records";
 import type { ConfigTextField } from "@/lib/form-config";
 import { positionRank } from "@/lib/position-rank";
 import { continentFor, continents, flagFor, normalizeNationality } from "@/lib/hiring-nationality";
 import { countryFlag, countryNames } from "@/lib/countries";
 import { HIRING_STATUSES, HIRING_STATUS_ACTIVE_STYLE, HIRING_STATUS_LABEL, HIRING_STATUS_MENU_STYLE, HIRING_STATUS_STYLE, normalizeHiringStatus, type HiringStatus } from "@/lib/hiring-status";
-import { updateHiringStatusAction, deleteHiringSubmissionAction, searchWorkplaceAction } from "@/app/(app)/hiringform/actions";
-import { updateHiringStatusSharedAction, searchWorkplaceSharedAction } from "@/app/hiring-team/[token]/actions";
+import { updateHiringStatusAction, deleteHiringSubmissionAction, scheduleInterviewAction, searchWorkplaceAction } from "@/app/(app)/hiringform/actions";
+import { updateHiringStatusSharedAction, scheduleInterviewSharedAction, searchWorkplaceSharedAction } from "@/app/hiring-team/[token]/actions";
+import { InterviewScheduler, type InterviewBooking } from "@/components/hiring/interview-scheduler";
+import { formatInterview, interviewOf } from "@/lib/interview-slots";
 import type { AboutPanel, WebResult } from "@/lib/workplace-search";
 import { useHiring } from "@/components/use-hiring";
+import { useDirectoryLookups } from "@/components/use-directory-lookups";
 import { useLocations } from "@/components/use-locations";
 import { useCardTags } from "@/components/use-card-tags";
 import { useCardLabels } from "@/components/use-card-labels";
@@ -68,11 +71,38 @@ export function HiringResponses({
   const [viewer, setViewer] = useState<{ url: string; label: string } | null>(null);
   const [workplaceSearch, setWorkplaceSearch] = useState<{ name: string; query: string } | null>(null);
   const [linkingFor, setLinkingFor] = useState<HiringSubmission | null>(null);
+  const [scheduling, setScheduling] = useState<HiringSubmission | null>(null);
+  const bookings = useMemo<InterviewBooking[]>(
+    () => records.flatMap((r) => {
+      const slot = interviewOf(r);
+      return slot ? [{ id: r.id, name: r.full_name, position: r.position_applied, slot }] : [];
+    }),
+    [records],
+  );
+
+  async function bookInterview(s: HiringSubmission, slot: string | null) {
+    const result = shareToken ? await scheduleInterviewSharedAction(shareToken, s.id, slot) : await scheduleInterviewAction(s.id, slot);
+    if (!result.ok) return result;
+    const apply = (r: HiringSubmission): HiringSubmission => {
+      if (r.id !== s.id) return r;
+      const data = { ...r.data };
+      if (slot) data.interview = slot;
+      else delete data.interview;
+      const keepStatus = r.status === "stand_by" || r.status === "selected";
+      return { ...r, data, status: slot && !keepStatus ? "need_interview" : r.status };
+    };
+    setRecords((prev) => prev.map(apply));
+    setDetail((cur) => (cur ? apply(cur) : cur));
+    return result;
+  }
   const { roles: hiringRoles, update: updateHiringRoles } = useHiring();
+  const { lookups } = useDirectoryLookups();
+  const positionOrder = useMemo(() => lookups.positions.map((position) => position.name), [lookups]);
   const { locations } = useLocations();
   const { tags: cardTags } = useCardTags();
   const { labels: cardLabels } = useCardLabels();
   const [zoom, setZoom] = useState(1);
+  const [breakdownHidden, setBreakdownHidden] = useBreakdownHidden();
   const [menu, setMenu] = useState<{ ids: string[]; x: number; y: number } | null>(null);
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
   const lastPicked = useRef<string | null>(null);
@@ -142,8 +172,8 @@ export function HiringResponses({
     }
     return Array.from(m.entries())
       .map(([name, count]) => ({ name, count }))
-      .sort((a, b) => positionRank(a.name) - positionRank(b.name) || b.count - a.count || a.name.localeCompare(b.name));
-  }, [records, searchIndex, search, statusFilter, nationalityFilter, matchesExtra]);
+      .sort((a, b) => settingsPositionRank(a.name, positionOrder) - settingsPositionRank(b.name, positionOrder) || b.count - a.count || a.name.localeCompare(b.name));
+  }, [records, searchIndex, search, statusFilter, nationalityFilter, matchesExtra, positionOrder]);
 
   // Duplicate detection: group applications by normalized email (fallback phone).
   // Lets HR see when the same person has applied more than once.
@@ -434,6 +464,8 @@ export function HiringResponses({
           })()}
           name={menu.ids.length > 1 ? `${menu.ids.length} candidates selected` : records.find((r) => r.id === menu.ids[0])?.full_name ?? ""}
           onPick={(status) => { void changeStatus(menu.ids, status); setMenu(null); }}
+          interview={menu.ids.length === 1 ? (() => { const r = records.find((x) => x.id === menu.ids[0]); return r ? interviewOf(r) : null; })() : null}
+          onSchedule={menu.ids.length === 1 ? () => { setScheduling(records.find((r) => r.id === menu.ids[0]) ?? null); setMenu(null); } : undefined}
           onClose={() => setMenu(null)}
         />
       ) : null}
@@ -508,23 +540,21 @@ export function HiringResponses({
           />
         </div>
       )}
-      {(posCounts.length > 0 || natCounts.length > 0) && (
-        <div className="mt-4 hidden gap-3 sm:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
-          <PositionBreakdown
-            data={posCounts}
-            active={positionFilter}
-            onPick={(name) => setPositionFilter(positionFilter === name || name === "Not specified" ? "all" : name)}
-          />
-          <NationalityByContinent
-            data={natCounts}
-            active={nationalityFilter}
-            onPick={(name) => setNationalityFilter(nationalityFilter === name ? "all" : name)}
-          />
-        </div>
-      )}
 
       {/* Search + view toggle + filters */}
       <div className="mt-1.5 flex flex-wrap items-center gap-1.5 sm:mt-4 sm:flex-nowrap sm:gap-2">
+        {posCounts.length > 0 || natCounts.length > 0 ? (
+          <button
+            type="button"
+            onClick={() => setBreakdownHidden(!breakdownHidden)}
+            aria-expanded={!breakdownHidden}
+            title={breakdownHidden ? "Show the position and nationality boxes" : "Hide the position and nationality boxes"}
+            className={`hidden h-9 shrink-0 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-medium sm:inline-flex ${breakdownHidden ? "border-stone-200 bg-white text-stone-600 hover:border-stone-400 hover:text-stone-900" : "border-stone-900 bg-stone-900 text-white"}`}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" className={`transition-transform ${breakdownHidden ? "" : "rotate-180"}`}><path d="m6 9 6 6 6-6" /></svg>
+            Breakdown
+          </button>
+        ) : null}
         <div className="relative min-w-[200px] flex-1 sm:min-w-[140px]">
           <input
             value={search}
@@ -569,6 +599,21 @@ export function HiringResponses({
         </div>
 
       </div>
+
+      {!breakdownHidden && (posCounts.length > 0 || natCounts.length > 0) && (
+        <div className="mt-3 hidden gap-3 sm:grid lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+          <PositionBreakdown
+            data={posCounts}
+            active={positionFilter}
+            onPick={(name) => setPositionFilter(positionFilter === name || name === "Not specified" ? "all" : name)}
+          />
+          <NationalityByContinent
+            data={natCounts}
+            active={nationalityFilter}
+            onPick={(name) => setNationalityFilter(nationalityFilter === name ? "all" : name)}
+          />
+        </div>
+      )}
 
       <div className="mt-2 flex h-5 items-center gap-3 text-xs text-stone-500">
         <p>
@@ -639,6 +684,12 @@ export function HiringResponses({
                       {s.salary_expectation && <span>AED {s.salary_expectation}</span>}
                     </p>
                   )}
+                  {interviewOf(s) && (
+                    <p className="flex items-center gap-1 truncate rounded bg-pink-100 px-1.5 py-0.5 text-[10px] font-semibold text-pink-800" title={`Interview ${formatInterview(interviewOf(s)!)}`}>
+                      <CalendarGlyph className="size-3 shrink-0" />
+                      <span className="truncate">{formatInterview(interviewOf(s)!)}</span>
+                    </p>
+                  )}
                   {s.created_at && (
                     <p className="truncate text-[10px] text-stone-400">
                       Applied {new Date(s.created_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short" })}
@@ -692,6 +743,12 @@ export function HiringResponses({
                     <span className="truncate">{[s.nationality, s.current_position, addressPart(s.current_address, "country")].filter(Boolean).join(" | ")}</span>
                   </p>
                 </div>
+                {interviewOf(s) ? (
+                  <span className="hidden shrink-0 items-center gap-1 rounded-full bg-pink-100 px-2 py-0.5 text-[10px] font-semibold text-pink-800 sm:inline-flex">
+                    <CalendarGlyph className="size-3 shrink-0" />
+                    {formatInterview(interviewOf(s)!)}
+                  </span>
+                ) : null}
                 <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-medium ${STATUS_STYLE[s.status]}`}>{HIRING_STATUS_LABEL[s.status]}</span>
                 {selected.has(s.id) && <span aria-hidden="true" className="pointer-events-none absolute inset-0 rounded-[inherit] ring-2 ring-red-600 ring-inset" />}
               </button>
@@ -792,6 +849,19 @@ export function HiringResponses({
                 Download
               </button>
             </div>
+            {detail.status === "need_interview" || interviewOf(detail) ? (
+              <div className="mt-2">
+                <button
+                  type="button"
+                  onClick={() => setScheduling(detail)}
+                  title={interviewOf(detail) ? "Change or cancel the interview" : "Book an interview slot"}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-pink-300 bg-white px-2.5 py-1 text-xs font-semibold text-pink-800 hover:bg-pink-50"
+                >
+                  <CalendarGlyph />
+                  {interviewOf(detail) ? formatInterview(interviewOf(detail)!) : "Schedule interview"}
+                </button>
+              </div>
+            ) : null}
 
             {pages[0] && (
               <div className="mt-5 space-y-4 border-t border-stone-200 pt-4">
@@ -930,6 +1000,16 @@ export function HiringResponses({
 
       {workplaceSearch && <WorkplaceSearchDialog {...workplaceSearch} shareToken={shareToken} onClose={() => setWorkplaceSearch(null)} />}
 
+      {scheduling && (
+        <InterviewScheduler
+          applicant={{ id: scheduling.id, name: scheduling.full_name, position: scheduling.position_applied }}
+          current={interviewOf(records.find((r) => r.id === scheduling.id) ?? scheduling)}
+          bookings={bookings}
+          onBook={(slot) => bookInterview(scheduling, slot)}
+          onClose={() => setScheduling(null)}
+        />
+      )}
+
       {linkingFor && (
         <LinkHiringDialog
           applicant={linkingFor}
@@ -1028,6 +1108,43 @@ function isOutsideUae(r: HiringSubmission) {
 /** Phones always get 3 per row; the size buttons only show from the sm breakpoint. */
 const PAGE_SIZE = 50;
 
+const BREAKDOWN_KEY = "people.hiring-breakdown-hidden";
+const BREAKDOWN_EVENT = "people:hiring-breakdown";
+
+function subscribeBreakdown(onChange: () => void) {
+  window.addEventListener("storage", onChange);
+  window.addEventListener(BREAKDOWN_EVENT, onChange);
+  return () => {
+    window.removeEventListener("storage", onChange);
+    window.removeEventListener(BREAKDOWN_EVENT, onChange);
+  };
+}
+
+/** Whether the position/nationality boxes are hidden, remembered on this device. */
+function useBreakdownHidden(): [boolean, (hidden: boolean) => void] {
+  const hidden = useSyncExternalStore(
+    subscribeBreakdown,
+    () => {
+      try {
+        return window.localStorage.getItem(BREAKDOWN_KEY) === "1";
+      } catch {
+        return false;
+      }
+    },
+    () => false,
+  );
+  const setHidden = useCallback((next: boolean) => {
+    try {
+      if (next) window.localStorage.setItem(BREAKDOWN_KEY, "1");
+      else window.localStorage.removeItem(BREAKDOWN_KEY);
+    } catch {
+      // Storage unavailable: the choice just isn't remembered.
+    }
+    window.dispatchEvent(new Event(BREAKDOWN_EVENT));
+  }, []);
+  return [hidden, setHidden];
+}
+
 function Pager({ page, pageCount, onPage, className = "" }: { page: number; pageCount: number; onPage: (page: number) => void; className?: string }) {
   if (pageCount <= 1) return null;
   const step = "h-8 rounded-lg border border-stone-200 bg-white px-3 text-xs font-medium text-stone-700 hover:border-stone-400 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-stone-200";
@@ -1058,9 +1175,18 @@ const GRID_SIZES = [
   "grid-cols-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4",
 ];
 
-function StatusMenu({ x, y, current, name, onPick, onClose }: { x: number; y: number; current: HiringStatus | null; name: string; onPick: (status: HiringStatus) => void; onClose: () => void }) {
-  const width = 200;
-  const height = 44 + DECISION_OPTIONS.length * 34;
+function CalendarGlyph({ className = "size-3.5 shrink-0" }: { className?: string }) {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <rect x="3" y="5" width="18" height="16" rx="2" />
+      <path d="M16 3v4M8 3v4M3 10h18" />
+    </svg>
+  );
+}
+
+function StatusMenu({ x, y, current, name, onPick, onClose, interview = null, onSchedule }: { x: number; y: number; current: HiringStatus | null; name: string; onPick: (status: HiringStatus) => void; onClose: () => void; interview?: string | null; onSchedule?: () => void }) {
+  const width = onSchedule ? 230 : 200;
+  const height = 44 + DECISION_OPTIONS.length * 34 + (onSchedule ? 34 : 0);
   const left = Math.min(x, window.innerWidth - width - 8);
   const top = Math.min(y, window.innerHeight - height - 8);
   return (
@@ -1080,8 +1206,8 @@ function StatusMenu({ x, y, current, name, onPick, onClose }: { x: number; y: nu
       >
         <p className="truncate px-2 pt-1 pb-1 text-[11px] font-medium text-stone-400">{name}</p>
         {DECISION_OPTIONS.map((status, index) => (
+          <Fragment key={status}>
           <button
-            key={status}
             type="button"
             role="menuitemradio"
             aria-checked={current === status}
@@ -1094,6 +1220,20 @@ function StatusMenu({ x, y, current, name, onPick, onClose }: { x: number; y: nu
             <span className="flex-1">{HIRING_STATUS_LABEL[status]}</span>
             {current === status ? <span aria-hidden="true">✓</span> : null}
           </button>
+          {status === "need_interview" && onSchedule ? (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={onSchedule}
+              title={interview ? `Interview ${formatInterview(interview)} — click to change` : "Book an interview slot"}
+              className="flex h-8 w-full items-center gap-2 rounded-lg pr-2.5 pl-7 text-left text-xs font-semibold text-pink-800 outline-none hover:bg-pink-50 focus-visible:bg-pink-50"
+            >
+              <CalendarGlyph />
+              <span className="min-w-0 flex-1 truncate">{interview ? formatInterview(interview) : "Schedule interview…"}</span>
+              {interview ? <span className="shrink-0 text-[10px] font-medium text-pink-600">Change</span> : null}
+            </button>
+          ) : null}
+          </Fragment>
         ))}
       </div>
     </div>
@@ -1109,7 +1249,26 @@ function genderOf(s: HiringSubmission): string | null {
 }
 
 function displayPosition(position: string | null): string | null {
-  return position && /^(jnr|junior) sous( chef)?$/i.test(position.trim()) ? "Jnr Sous" : position;
+  if (!position) return position;
+  const value = position.trim();
+  if (/^(jnr|junior) sous( chef)?$/i.test(value)) return "Jnr Sous";
+  if (/^commis (2|ii)\s*[–—-]/i.test(value)) return "Commis 2";
+  return position;
+}
+
+/**
+ * Sort key following the Settings position order. Applicant wording is matched loosely
+ * ("CDP" = Chef de Partie, "Jnr Sous" = Jnr Sous Chef); "CDP – Pastry" sits just after CDP.
+ * Positions not in Settings go last, by kitchen seniority.
+ */
+function settingsPositionRank(name: string, order: string[]) {
+  const norm = (value: string) =>
+    value.toLowerCase().replace(/\bcdp\b/g, "chef de partie").replace(/\bjunior\b/g, "jnr").replace(/\bsenior\b/g, "snr").replace(/[^a-z0-9]+/g, " ").trim();
+  const [base, ...variant] = name.split(/\s+[–—-]\s+/);
+  const key = norm(base);
+  let index = order.findIndex((item) => norm(item) === key);
+  if (index < 0) index = order.findIndex((item) => norm(item).startsWith(`${key} `));
+  return index < 0 ? order.length + positionRank(name) / 100 : index + (variant.length ? 0.5 : 0);
 }
 
 function workplaceOf(s: HiringSubmission): string | null {
@@ -1556,17 +1715,18 @@ function PositionBreakdown({
           By Position
         </h2>
       </div>
-      <div className="grid max-h-[7.5rem] grid-cols-1 gap-x-6 gap-y-0.5 overflow-x-hidden overflow-y-auto pr-1 sm:grid-cols-2">
+      <div className="flex flex-wrap gap-1">
         {data.map((seg) => (
           <button
             key={seg.name}
             onClick={() => onPick(seg.name)}
-            className={`flex w-full min-w-0 items-center gap-1.5 rounded-md px-1.5 py-px text-left text-[11px] ${
-              seg.name === active ? "bg-stone-900 font-semibold text-white" : "text-stone-600 hover:bg-white hover:text-stone-900"
+            aria-pressed={seg.name === active}
+            className={`inline-flex items-center gap-1 rounded-full border px-2 py-px text-[11px] ${
+              seg.name === active ? "border-stone-900 bg-stone-900 font-semibold text-white" : "border-stone-200 bg-white text-stone-700 hover:border-stone-400 hover:text-stone-950"
             }`}
           >
-            <span className="truncate">{seg.name}</span>
-            <span className={`ml-auto shrink-0 tabular-nums ${seg.name === active ? "text-white/70" : "text-stone-400"}`}>{seg.count}</span>
+            <span>{seg.name}</span>
+            <span className={`tabular-nums ${seg.name === active ? "text-white/70" : "text-stone-400"}`}>{seg.count}</span>
           </button>
         ))}
       </div>
@@ -1598,24 +1758,26 @@ function NationalityByContinent({
           By Nationality
         </h2>
       </div>
-      <div className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3 xl:grid-cols-4">
+      <div className="divide-y divide-stone-200">
         {groups.map((group) => (
-          <div key={group.continent} className="min-w-0">
-            <div className="mb-1 flex items-center justify-between border-b border-stone-200 pb-1 text-[11px] font-semibold text-stone-900">
-              <span>{group.continent}</span>
+          <div key={group.continent} className="flex items-start gap-3 py-1.5 first:pt-0 last:pb-0">
+            <div className="flex w-24 shrink-0 items-baseline justify-between gap-2 pt-0.5 text-[11px] font-semibold text-stone-900">
+              <span className="truncate">{group.continent}</span>
               <span className="tabular-nums text-stone-400">{group.count}</span>
             </div>
-            <div className="max-h-24 space-y-0.5 overflow-x-hidden overflow-y-auto pr-1">
+            <div className="flex min-w-0 flex-1 flex-wrap gap-1">
               {group.countries.map((seg) => (
                 <button
                   key={seg.name}
                   onClick={() => onPick(seg.name)}
-                  className={`flex w-full min-w-0 items-center gap-1.5 rounded-md px-1.5 py-px text-left text-[11px] ${
-              seg.name === active ? "bg-stone-900 font-semibold text-white" : "text-stone-600 hover:bg-white hover:text-stone-900"
-            }`}
+                  aria-pressed={seg.name === active}
+                  className={`inline-flex items-center gap-1 rounded-full border px-2 py-px text-[11px] ${
+                    seg.name === active ? "border-stone-900 bg-stone-900 font-semibold text-white" : "border-stone-200 bg-white text-stone-700 hover:border-stone-400 hover:text-stone-950"
+                  }`}
                 >
-                  <span className="truncate">{flagFor(seg.name)} {seg.name}</span>
-                  <span className={`ml-auto shrink-0 tabular-nums ${seg.name === active ? "text-white/70" : "text-stone-400"}`}>{seg.count}</span>
+                  <span>{flagFor(seg.name)}</span>
+                  <span>{seg.name}</span>
+                  <span className={`tabular-nums ${seg.name === active ? "text-white/70" : "text-stone-400"}`}>{seg.count}</span>
                 </button>
               ))}
             </div>

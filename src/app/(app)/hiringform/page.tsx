@@ -3,6 +3,7 @@ import { landingOf, loadHiringConfig, loadHiringConfigVersion } from "@/lib/hiri
 import { listHiringSubmissions } from "@/lib/hiring-records";
 import { HiringFormBuilder } from "@/components/hiring/hiring-form-builder";
 import { HiringResponses } from "@/components/hiring/hiring-responses";
+import { InterviewCalendar } from "@/components/hiring/interview-calendar";
 export const metadata: Metadata = {
   title: "Hiring Form",
 };
@@ -10,7 +11,7 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 // Keep in sync with HiringSectionNav (first tab is the default).
-const tabs = ["responses", "builder"] as const;
+const tabs = ["responses", "calendar", "builder"] as const;
 type Tab = (typeof tabs)[number];
 
 export default async function HiringFormPage({
@@ -27,5 +28,8 @@ export default async function HiringFormPage({
   }
 
   const [submissions, config] = await Promise.all([listHiringSubmissions(), loadHiringConfig()]);
+  if (active === "calendar") {
+    return <InterviewCalendar submissions={submissions} fields={config.textFields} />;
+  }
   return <HiringResponses submissions={submissions} fields={config.textFields} openApplicationId={application} />;
 }
