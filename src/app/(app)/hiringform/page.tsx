@@ -16,9 +16,9 @@ type Tab = (typeof tabs)[number];
 export default async function HiringFormPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string }>;
+  searchParams: Promise<{ tab?: string; application?: string }>;
 }) {
-  const { tab } = await searchParams;
+  const { tab, application } = await searchParams;
   const active: Tab = tabs.includes(tab as Tab) ? (tab as Tab) : "responses";
 
   if (active === "builder") {
@@ -27,5 +27,5 @@ export default async function HiringFormPage({
   }
 
   const [submissions, config] = await Promise.all([listHiringSubmissions(), loadHiringConfig()]);
-  return <HiringResponses submissions={submissions} fields={config.textFields} />;
+  return <HiringResponses submissions={submissions} fields={config.textFields} openApplicationId={application} />;
 }

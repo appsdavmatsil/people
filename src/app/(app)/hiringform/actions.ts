@@ -2,9 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { saveHiringConfig } from "@/lib/hiring-config";
+import { loadHiringConfig, saveHiringConfig } from "@/lib/hiring-config";
+import type { ConfigTextField } from "@/lib/form-config";
 import type { FormConfig } from "@/lib/form-config";
-import { updateHiringStatuses } from "@/lib/hiring-records";
+import { listHiringSubmissions, updateHiringStatuses, type HiringSubmission } from "@/lib/hiring-records";
 import { setHiringShareToken } from "@/lib/hiring-share";
 import { runWorkplaceSearch, type WorkplaceSearchResult } from "@/lib/workplace-search";
 
@@ -44,6 +45,19 @@ export async function updateHiringStatusAction(
   const result = await updateHiringStatuses(ids, status);
   if (result.ok) revalidatePath("/hiringform");
   return result;
+}
+
+/** Applications and form fields for opening an application outside Form Responses. Requires an app session. */
+export async function loadHiringApplicationsAction(): Promise<
+  { ok: true; submissions: HiringSubmission[]; fields: ConfigTextField[] } | { ok: false; error: string }
+> {
+  const supabase = await createClient();
+  const { data } = await supabase.auth.getClaims();
+  if (typeof data?.claims?.sub !== "string") {
+    return { ok: false, error: "Not authorized." };
+  }
+  const [submissions, config] = await Promise.all([listHiringSubmissions(), loadHiringConfig()]);
+  return { ok: true, submissions, fields: config.textFields };
 }
 
 /** Web results for a candidate's workplace. Requires an app session. */

@@ -19,6 +19,7 @@ import { privacyUnlockAction } from "@/lib/privacy-actions";
 import { DateField, keepDialogForDatePicker } from "@/components/date-field";
 import { HireIcon, PencilIcon, PlusIcon, TrashIcon } from "@/components/directory-actions";
 import { HiringOpeningActions } from "@/components/hiring-opening-actions";
+import { ApplicationPanel } from "@/components/hiring/application-panel";
 import { useDirectoryLookups } from "@/components/use-directory-lookups";
 import { useHiring } from "@/components/use-hiring";
 import { useOutsourced } from "@/components/use-outsourced";
@@ -4553,6 +4554,8 @@ function HiringCard({
 }) {
   const labeled = cardLabel.trim().length > 0;
   const tagged = cardTag.trim().length > 0;
+  const [applicationOpen, setApplicationOpen] = useState(false);
+  const closeApplication = useCallback(() => setApplicationOpen(false), []);
   return (
     <li
       data-item-id={role.id}
@@ -4579,14 +4582,64 @@ function HiringCard({
         </span>
       ) : null}
       <span className="block px-2.5 py-2">
-        <span className="block truncate text-sm font-medium text-stone-950">{role.position}</span>
+        {role.candidateName ? (
+          <span className="flex min-w-0 items-center gap-1">
+            {role.applicationId ? (
+              <button
+                type="button"
+                draggable={false}
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setApplicationOpen(true);
+                }}
+                title={`Open ${role.candidateName}'s application`}
+                aria-label={`Open ${role.candidateName}'s application`}
+                className="grid size-5 shrink-0 place-items-center rounded-md text-amber-800 hover:bg-amber-200 hover:text-amber-950"
+              >
+                <svg aria-hidden="true" viewBox="0 0 24 24" className="size-3.5" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M10 13a5 5 0 0 0 7.07 0l2.83-2.83a5 5 0 0 0-7.07-7.07L11.5 4.5" /><path d="M14 11a5 5 0 0 0-7.07 0L4.1 13.83a5 5 0 0 0 7.07 7.07l1.33-1.4" /></svg>
+              </button>
+            ) : null}
+            <span
+              className="inline-flex min-w-0 items-center gap-1 rounded-md bg-amber-200/80 px-1.5 py-0.5 text-[11px] font-semibold leading-4 text-amber-900"
+              title={`Candidate: ${role.candidateName}`}
+            >
+              <svg aria-hidden="true" viewBox="0 0 16 16" className="size-3 shrink-0" fill="currentColor"><path d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm-5 6c0-2.2 2.2-4 5-4s5 1.8 5 4v.5H3V14Z" /></svg>
+              <span className="truncate">{role.candidateName}</span>
+            </span>
+          </span>
+        ) : (
+          <span className="block truncate text-sm font-medium text-stone-950" title={role.position}>{role.position}</span>
+        )}
         <span className="mt-0.5 flex items-baseline justify-between gap-2 text-xs text-stone-600">
-          <span>Hiring</span>
+          {role.candidateName ? (
+            <span className="min-w-0 truncate" title={role.position}>
+              <span className="font-medium text-stone-950">{role.position}</span> · Hiring
+            </span>
+          ) : (
+            <span>Hiring</span>
+          )}
           <span className="shrink-0 tabular-nums">
             {hideSalary || role.salary == null ? "—" : formatBoardSalary(role.salary)}
           </span>
         </span>
       </span>
+      {applicationOpen && role.applicationId
+        ? createPortal(
+            // Portal events still bubble to the card, so keep them from starting a drag.
+            <div
+              onPointerDown={(event) => event.stopPropagation()}
+              onPointerMove={(event) => event.stopPropagation()}
+              onPointerUp={(event) => event.stopPropagation()}
+              onClick={(event) => event.stopPropagation()}
+              onContextMenu={(event) => event.stopPropagation()}
+              onDragStart={(event) => event.stopPropagation()}
+            >
+              <ApplicationPanel applicationId={role.applicationId} onClose={closeApplication} />
+            </div>,
+            document.body,
+          )
+        : null}
     </li>
   );
 }
@@ -6159,6 +6212,15 @@ function PromotionTag({
     return null;
   }
 
+  const increase =
+    promotion.currentSalary && promotion.currentSalary > 0
+      ? ((promotion.newSalary - promotion.currentSalary) / promotion.currentSalary) * 100
+      : null;
+  const increaseLabel =
+    increase == null || !Number.isFinite(increase) || Math.abs(increase) < 0.05
+      ? null
+      : `${increase > 0 ? "+" : increase < 0 ? "−" : ""}${Math.abs(increase).toFixed(Math.abs(increase) < 10 && !Number.isInteger(increase) ? 1 : 0)}%`;
+
   return (
     <span className="mt-1 inline-flex max-w-full items-baseline gap-1.5 rounded-md bg-emerald-100 px-1.5 py-0.5 text-xs font-medium leading-4 text-emerald-800">
       <span aria-hidden="true">↑</span>
@@ -6169,6 +6231,14 @@ function PromotionTag({
         <>
           <span aria-hidden="true">-</span>
           <span className="shrink-0 tabular-nums">{formatBoardSalary(promotion.newSalary)}</span>
+          {increaseLabel ? (
+            <span
+              className="shrink-0 rounded bg-emerald-600/15 px-1 text-[11px] font-semibold tabular-nums"
+              title={`Increase from ${formatBoardSalary(promotion.currentSalary ?? 0)}`}
+            >
+              {increaseLabel}
+            </span>
+          ) : null}
         </>
       )}
     </span>

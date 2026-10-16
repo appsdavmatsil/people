@@ -10,6 +10,14 @@ import { HIRING_STATUSES, HIRING_STATUS_ACTIVE_STYLE, HIRING_STATUS_LABEL, HIRIN
 import { updateHiringStatusAction, deleteHiringSubmissionAction, searchWorkplaceAction } from "@/app/(app)/hiringform/actions";
 import { updateHiringStatusSharedAction, searchWorkplaceSharedAction } from "@/app/hiring-team/[token]/actions";
 import type { AboutPanel, WebResult } from "@/lib/workplace-search";
+import { useHiring } from "@/components/use-hiring";
+import { useLocations } from "@/components/use-locations";
+import { useCardTags } from "@/components/use-card-tags";
+import { useCardLabels } from "@/components/use-card-labels";
+import { hiringStatusLabel, type HiringRole } from "@/lib/hiring";
+import { locationMatches, type LocationReference } from "@/lib/locations";
+import type { CardLabel } from "@/lib/card-labels";
+import type { CardTag } from "@/lib/card-tags";
 
 const STATUS_OPTIONS = HIRING_STATUSES;
 const DECISION_OPTIONS = HIRING_STATUSES.filter((status) => status !== "new");
@@ -26,11 +34,19 @@ export function HiringResponses({
   submissions,
   fields,
   shareToken,
+  openApplicationId,
+  panelOnly = false,
+  onClose,
 }: {
   submissions: HiringSubmission[];
   fields: ConfigTextField[];
   /** Set when opened from the team link: status changes go through the link, and deleting is hidden. */
   shareToken?: string;
+  /** Opens this application on load, e.g. from a linked hiring card. */
+  openApplicationId?: string;
+  /** Renders only the application panel (and its dialogs), e.g. over the staff board. */
+  panelOnly?: boolean;
+  onClose?: () => void;
 }) {
   const pages = useMemo(() => detailPages(fields), [fields]);
   const [records, setRecords] = useState(() => submissions.map((s) => ({ ...s, status: normalizeHiringStatus(s.status), position_applied: displayPosition(s.position_applied) })));
@@ -47,10 +63,15 @@ export function HiringResponses({
   const [visaFilter, setVisaFilter] = useState("all");
   const [outsideOnly, setOutsideOnly] = useState(false);
   const [immediateOnly, setImmediateOnly] = useState(false);
-  const [detail, setDetail] = useState<HiringSubmission | null>(null);
+  const [detail, setDetail] = useState<HiringSubmission | null>(() => (openApplicationId ? records.find((r) => r.id === openApplicationId) ?? null : null));
   const [pendingDelete, setPendingDelete] = useState<HiringSubmission | null>(null);
   const [viewer, setViewer] = useState<{ url: string; label: string } | null>(null);
   const [workplaceSearch, setWorkplaceSearch] = useState<{ name: string; query: string } | null>(null);
+  const [linkingFor, setLinkingFor] = useState<HiringSubmission | null>(null);
+  const { roles: hiringRoles, update: updateHiringRoles } = useHiring();
+  const { locations } = useLocations();
+  const { tags: cardTags } = useCardTags();
+  const { labels: cardLabels } = useCardLabels();
   const [zoom, setZoom] = useState(1);
   const [menu, setMenu] = useState<{ ids: string[]; x: number; y: number } | null>(null);
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
@@ -191,13 +212,54 @@ export function HiringResponses({
   const visibleSelected = filtered.filter((r) => selected.has(r.id)).map((r) => r.id);
 
   const hasSelection = selected.size > 0;
-  const overlayOpen = Boolean(menu || detail || viewer || pendingDelete || workplaceSearch);
+  const overlayOpen = Boolean(menu || detail || viewer || pendingDelete || workplaceSearch || linkingFor);
   useEffect(() => {
     if (!workplaceSearch) return;
     const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setWorkplaceSearch(null); };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [workplaceSearch]);
+  useEffect(() => {
+    if (!linkingFor) return;
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setLinkingFor(null); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [linkingFor]);
+
+  const linkedRoleOf = (s: HiringSubmission) => hiringRoles.find((role) => role.applicationId === s.id && !role.archived) ?? null;
+
+  /** Puts the applicant on the chosen opening; a multi-opening role gives up one opening to a new linked card. */
+  function linkToRole(s: HiringSubmission, roleId: string) {
+    const name = s.full_name.trim();
+    updateHiringRoles((current) => {
+      const released = current.map((role) =>
+        role.applicationId === s.id
+          ? { ...role, applicationId: undefined, candidateName: role.candidateName === name ? "" : role.candidateName }
+          : role,
+      );
+      const target = released.find((role) => role.id === roleId);
+      if (!target) return current;
+      if (target.openings > 1) {
+        return [
+          ...released.map((role) => (role.id === roleId ? { ...role, openings: role.openings - 1 } : role)),
+          { ...target, id: crypto.randomUUID(), openings: 1, candidateName: name, applicationId: s.id },
+        ];
+      }
+      return released.map((role) => (role.id === roleId ? { ...role, candidateName: name, applicationId: s.id } : role));
+    });
+    setLinkingFor(null);
+  }
+
+  function unlinkRole(s: HiringSubmission) {
+    const name = s.full_name.trim();
+    updateHiringRoles((current) =>
+      current.map((role) =>
+        role.applicationId === s.id
+          ? { ...role, applicationId: undefined, candidateName: role.candidateName === name ? "" : role.candidateName }
+          : role,
+      ),
+    );
+  }
   useEffect(() => {
     if (!hasSelection || overlayOpen) return;
     const onKey = (event: KeyboardEvent) => {
@@ -288,7 +350,7 @@ export function HiringResponses({
   async function doDelete(id: string) {
     setRecords((prev) => prev.filter((r) => r.id !== id));
     setPendingDelete(null);
-    if (detail?.id === id) setDetail(null);
+    if (detail?.id === id) closeDetail();
     await deleteHiringSubmissionAction(id);
   }
 
@@ -340,10 +402,16 @@ export function HiringResponses({
   }
 
   const activeFilters = [statusFilter !== "new", nationalityFilter !== "all", positionFilter !== "all", search !== "", ageRange !== null, genderFilter !== "all", visaFilter !== "all", outsideOnly, immediateOnly].filter(Boolean).length;
+  const closeDetail = () => {
+    setDetail(null);
+    onClose?.();
+  };
+
   const clearAll = () => { setSearch(""); setStatusFilter("new"); setNationalityFilter("all"); setPositionFilter("all"); setAgeRange(null); setGenderFilter("all"); setVisaFilter("all"); setOutsideOnly(false); setImmediateOnly(false); };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className={panelOnly ? "contents" : "flex min-h-0 flex-1 flex-col"}>
+      {!panelOnly && (<>
       {menu ? (
         <StatusMenu
           x={menu.x}
@@ -617,10 +685,21 @@ export function HiringResponses({
         </div>
       )}
 
+      </>)}
+
       {/* Detail drawer */}
       {detail && (
-        <div className="fixed inset-0 z-[80] flex justify-end bg-stone-950/40" onClick={() => setDetail(null)}>
+        <div className="fixed inset-0 z-[80] flex justify-end bg-stone-950/40" onClick={closeDetail}>
           <div className="h-full w-full max-w-2xl overflow-y-auto bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <header className="sticky top-0 z-10 flex items-center justify-between gap-4 bg-[#063f3b] px-6 py-4 text-white shadow-sm">
+              <h2 className="min-w-0 truncate text-xl font-semibold tracking-tight">
+                {detail.full_name}
+                {ageOf(detail.date_of_birth) !== null ? (
+                  <span className="ml-2 text-sm font-medium text-white/70">{ageOf(detail.date_of_birth)} y/o</span>
+                ) : null}
+              </h2>
+              <button onClick={closeDetail} aria-label="Close" className="grid size-8 shrink-0 place-items-center rounded-lg text-white/70 hover:bg-white/10 hover:text-white">×</button>
+            </header>
             <div className="border-b border-stone-200 bg-stone-100 p-6">
             <div className="flex items-start justify-between gap-4">
               <div className="flex items-center gap-4">
@@ -628,7 +707,7 @@ export function HiringResponses({
                   <button
                     type="button"
                     onClick={() => { setZoom(1); setViewer({ url: photoOf(detail)!, label: "Profile Photo" }); }}
-                    className="group relative h-20 w-20 shrink-0 overflow-hidden rounded-xl"
+                    className="group relative h-36 w-28 shrink-0 overflow-hidden rounded-xl shadow-sm ring-1 ring-stone-200"
                     title="Click to zoom"
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -637,15 +716,9 @@ export function HiringResponses({
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
                     </span>
                   </button>
-                ) : <div className="grid h-20 w-20 place-items-center rounded-xl bg-stone-100 text-stone-300">—</div>}
+                ) : <div className="grid h-36 w-28 shrink-0 place-items-center rounded-xl bg-stone-200/60 text-stone-400">—</div>}
                 <div>
-                  <h2 className="text-lg font-semibold text-stone-900">
-                    {detail.full_name}
-                    {ageOf(detail.date_of_birth) !== null ? (
-                      <span className="ml-2 text-sm font-medium text-stone-500">{ageOf(detail.date_of_birth)} y/o</span>
-                    ) : null}
-                  </h2>
-                  <p className="text-sm text-stone-500">{detail.position_applied}</p>
+                  <p className="text-base font-medium text-stone-800">{detail.position_applied}</p>
                   <p className="mt-0.5 flex items-center gap-1 text-xs text-stone-400">
                     <span>{flagFor(detail.nationality)}</span>{detail.nationality}
                     {detail.created_at && <span className="ml-1">· Applied {new Date(detail.created_at).toLocaleDateString("en-GB")}</span>}
@@ -664,7 +737,6 @@ export function HiringResponses({
                   </p>
                 </div>
               </div>
-              <button onClick={() => setDetail(null)} className="grid size-8 place-items-center rounded-lg text-stone-500 hover:bg-white">×</button>
             </div>
 
             <div className="mt-4 flex items-center gap-2">
@@ -672,6 +744,29 @@ export function HiringResponses({
               <select value={detail.status} onChange={(e) => changeStatus(detail.id, e.target.value)} className={`rounded-lg border px-2 py-1 text-xs font-medium ${STATUS_STYLE[detail.status]}`}>
                 {STATUS_OPTIONS.map((o) => <option key={o} value={o}>{HIRING_STATUS_LABEL[o]}</option>)}
               </select>
+              {detail.status === "selected" && !shareToken ? (() => {
+                const linked = linkedRoleOf(detail);
+                const venue = linked ? locations.find((location) => locationMatches(location, linked.venue)) : null;
+                return linked ? (
+                  <span className="inline-flex min-w-0 items-center gap-1 rounded-lg border border-green-200 bg-white py-0.5 pr-1 pl-2 text-xs">
+                    <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: venue?.color || "#a8a29e" }} aria-hidden="true" />
+                    <span className="truncate font-medium text-stone-800" title={`${venue?.nickname ?? linked.venue} · ${linked.position}`}>
+                      {venue?.nickname ?? linked.venue} · {linked.position}
+                    </span>
+                    <button type="button" onClick={() => setLinkingFor(detail)} className="rounded px-1.5 py-0.5 font-medium text-stone-500 hover:bg-stone-100 hover:text-stone-900">Change</button>
+                    <button type="button" onClick={() => unlinkRole(detail)} aria-label="Unlink hiring position" title="Unlink hiring position" className="grid size-5 place-items-center rounded text-stone-400 hover:bg-red-50 hover:text-red-600">×</button>
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setLinkingFor(detail)}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-green-300 bg-white px-2.5 py-1 text-xs font-semibold text-green-800 hover:bg-green-50"
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.07 0l2.83-2.83a5 5 0 0 0-7.07-7.07L11.5 4.5" /><path d="M14 11a5 5 0 0 0-7.07 0L4.1 13.83a5 5 0 0 0 7.07 7.07l1.33-1.4" /></svg>
+                    Link to hiring position
+                  </button>
+                );
+              })() : null}
               <button
                 onClick={() => downloadApplication(detail)}
                 className="ml-auto inline-flex items-center gap-1.5 rounded-lg bg-[#063f3b] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#052f2c]"
@@ -817,6 +912,19 @@ export function HiringResponses({
       })()}
 
       {workplaceSearch && <WorkplaceSearchDialog {...workplaceSearch} shareToken={shareToken} onClose={() => setWorkplaceSearch(null)} />}
+
+      {linkingFor && (
+        <LinkHiringDialog
+          applicant={linkingFor}
+          roles={hiringRoles}
+          locations={locations}
+          tags={cardTags}
+          labels={cardLabels}
+          linkedRoleId={linkedRoleOf(linkingFor)?.id ?? null}
+          onPick={(roleId) => linkToRole(linkingFor, roleId)}
+          onClose={() => setLinkingFor(null)}
+        />
+      )}
 
       {pendingDelete && (
         <div className="fixed inset-0 z-[90] grid place-items-center bg-stone-950/40 p-4" onClick={() => setPendingDelete(null)}>
@@ -1564,12 +1672,22 @@ function WhatsAppIcon() {
 const RESIDENCE_FIELDS = new Set(["currentCountry", "currentCity", "currentAddress"]);
 const isResidence = (f: ConfigTextField) => RESIDENCE_FIELDS.has(f.name) || /\bresiden|^current (country|city|address)\b/i.test(f.label);
 
+/** Moves the matching field to sit right after Nationality, when both are in the list. */
+function besideNationality(fields: ConfigTextField[], matches: (f: ConfigTextField) => boolean) {
+  const moving = fields.find(matches);
+  const anchor = fields.findIndex((f) => f.name === "nationality");
+  if (!moving || anchor < 0) return fields;
+  const rest = fields.filter((f) => f !== moving);
+  const at = rest.findIndex((f) => f.name === "nationality") + 1;
+  return [...rest.slice(0, at), moving, ...rest.slice(at)];
+}
+
 function AnswerSection({ section, submission, showTitle }: { section: DetailSection; submission: HiringSubmission; showTitle: boolean }) {
   const isScale = (f: ConfigTextField) => /^english\b/i.test(f.label.trim()) && (f.options?.length ?? 0) > 1;
   const fields = section.fields.filter((f) => f.name !== "salaryExpectation" && !/^salary expectation/i.test(f.label.trim()));
   if (fields.length === 0) return null;
   const scales = fields.filter(isScale);
-  const short = fields.filter((f) => f.type !== "textarea" && !isScale(f));
+  const short = besideNationality(fields.filter((f) => f.type !== "textarea" && !isScale(f)), (f) => f.name === "instagram" || /instagram/i.test(f.label));
   const long = fields.filter((f) => f.type === "textarea");
   return (
     <div className="space-y-3">
@@ -1673,6 +1791,140 @@ function AnswerSection({ section, submission, showTitle }: { section: DetailSect
           <p className={`whitespace-pre-wrap text-sm ${answerOf(submission, f.name) ? "text-stone-700" : "text-stone-300"}`}>{answerOf(submission, f.name) ?? "—"}</p>
         </div>
       ))}
+    </div>
+  );
+}
+
+function openRolesAt(roles: HiringRole[], venue: LocationReference) {
+  return roles
+    .filter((role) => !role.archived && role.status !== "filled" && locationMatches(venue, role.venue))
+    .sort((a, b) => (b.salary ?? 0) - (a.salary ?? 0) || a.position.localeCompare(b.position));
+}
+
+function samePosition(a: string | null | undefined, b: string) {
+  const clean = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  return Boolean(a) && clean(displayPosition(a ?? "") ?? "") === clean(displayPosition(b) ?? "");
+}
+
+function LinkHiringDialog({
+  applicant,
+  roles,
+  locations,
+  tags,
+  labels,
+  linkedRoleId,
+  onPick,
+  onClose,
+}: {
+  applicant: HiringSubmission;
+  roles: HiringRole[];
+  locations: LocationReference[];
+  tags: CardTag[];
+  labels: CardLabel[];
+  linkedRoleId: string | null;
+  onPick: (roleId: string) => void;
+  onClose: () => void;
+}) {
+  const linked = roles.find((role) => role.id === linkedRoleId) ?? null;
+  const [venueId, setVenueId] = useState<string | null>(() => (linked ? locations.find((location) => locationMatches(location, linked.venue))?.id ?? null : null));
+  const venue = locations.find((location) => location.id === venueId) ?? null;
+  const tagOf = new Map(tags.filter((tag) => tag.text).map((tag) => [tag.staffId, tag.text]));
+  const labelOf = new Map(labels.map((label) => [label.staffId, label.text]));
+  const money = (value: number | null) => (value == null ? "—" : new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(value));
+  const open = venue ? openRolesAt(roles, venue) : [];
+
+  return (
+    <div className="fixed inset-0 z-[90] grid place-items-center bg-stone-950/40 p-4" onClick={onClose}>
+      <div role="dialog" aria-modal="true" aria-labelledby="link-hiring-title" className="flex max-h-[min(85dvh,720px)] w-full max-w-lg flex-col overflow-hidden rounded-2xl bg-white shadow-xl" onClick={(event) => event.stopPropagation()}>
+        <div className="flex items-start justify-between gap-3 border-b border-stone-200 px-5 py-4">
+          <div className="min-w-0">
+            <h2 id="link-hiring-title" className="text-base font-semibold text-stone-950">Link to hiring position</h2>
+            <p className="mt-0.5 truncate text-sm text-stone-500">
+              {applicant.full_name}
+              {applicant.position_applied ? ` · applied for ${applicant.position_applied}` : ""}
+            </p>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Close" className="grid size-8 shrink-0 place-items-center rounded-lg text-stone-500 hover:bg-stone-100">×</button>
+        </div>
+
+        <div className="flex items-center gap-2 border-b border-stone-100 bg-stone-50 px-5 py-2 text-xs font-medium">
+          <button type="button" onClick={() => setVenueId(null)} className={venue ? "text-stone-500 hover:text-stone-900" : "text-stone-900"}>1. Venue</button>
+          <span className="text-stone-300" aria-hidden="true">›</span>
+          <span className={venue ? "text-stone-900" : "text-stone-400"}>2. Position{venue ? ` at ${venue.nickname}` : ""}</span>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto p-3">
+          {!venue ? (
+            <ul className="grid gap-2 sm:grid-cols-2">
+              {locations.map((location) => {
+                const count = openRolesAt(roles, location).reduce((total, role) => total + role.openings, 0);
+                return (
+                  <li key={location.id}>
+                    <button
+                      type="button"
+                      onClick={() => setVenueId(location.id)}
+                      disabled={count === 0}
+                      className="flex w-full items-center gap-3 rounded-xl border border-stone-200 px-3 py-2.5 text-left transition-colors hover:border-stone-400 hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:border-stone-200 disabled:hover:bg-white"
+                    >
+                      <span className="size-3 shrink-0 rounded-full" style={{ backgroundColor: location.color }} aria-hidden="true" />
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-sm font-semibold text-stone-950">{location.nickname}</span>
+                        <span className="block truncate text-xs text-stone-500">{location.venueName}</span>
+                      </span>
+                      <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold tabular-nums ${count ? "bg-yellow-100 text-yellow-800" : "bg-stone-100 text-stone-400"}`}>
+                        {count} open
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : open.length === 0 ? (
+            <p className="px-3 py-10 text-center text-sm text-stone-500">No open hiring positions at {venue.nickname}.</p>
+          ) : (
+            <ul className="space-y-2">
+              {open.map((role) => {
+                const isLinked = role.id === linkedRoleId;
+                const otherCandidate = role.candidateName && !isLinked ? role.candidateName : "";
+                const label = labelOf.get(role.id);
+                const tag = tagOf.get(role.id);
+                return (
+                  <li key={role.id}>
+                    <button
+                      type="button"
+                      onClick={() => onPick(role.id)}
+                      className={`w-full rounded-xl border px-3 py-2.5 text-left transition-colors ${
+                        isLinked ? "border-green-400 bg-green-50" : "border-yellow-200 bg-yellow-50 hover:border-yellow-400 hover:bg-yellow-100"
+                      }`}
+                    >
+                      <span className="flex items-baseline justify-between gap-3">
+                        <span className="min-w-0 truncate text-sm font-semibold text-stone-950">{role.position}</span>
+                        <span className="shrink-0 text-sm font-semibold tabular-nums text-stone-900">AED {money(role.salary)}</span>
+                      </span>
+                      <span className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px]">
+                        {role.department ? <span className="rounded bg-white/80 px-1.5 py-0.5 text-stone-600">{role.department}</span> : null}
+                        <span className="rounded bg-white/80 px-1.5 py-0.5 text-stone-600">{role.openings} opening{role.openings === 1 ? "" : "s"}</span>
+                        {role.status !== "open" ? <span className="rounded bg-amber-100 px-1.5 py-0.5 font-medium text-amber-800">{hiringStatusLabel(role.status)}</span> : null}
+                        {label ? <span className="rounded bg-stone-800 px-1.5 py-0.5 font-medium text-white">{label}</span> : null}
+                        {tag ? <span className="rounded border border-red-300 bg-white px-1.5 py-0.5 font-semibold uppercase tracking-wide text-red-700">{tag}</span> : null}
+                        {samePosition(applicant.position_applied, role.position) ? <span className="rounded bg-emerald-100 px-1.5 py-0.5 font-medium text-emerald-800">Matches application</span> : null}
+                        {isLinked ? <span className="rounded bg-green-600 px-1.5 py-0.5 font-medium text-white">Linked</span> : null}
+                      </span>
+                      {otherCandidate ? (
+                        <span className="mt-1.5 block text-xs text-amber-800">
+                          Already has candidate {otherCandidate}{role.openings > 1 ? " — one opening will be split off" : " — they'll be replaced"}
+                        </span>
+                      ) : role.openings > 1 ? (
+                        <span className="mt-1.5 block text-xs text-stone-500">One of the {role.openings} openings will become a card for {applicant.full_name}.</span>
+                      ) : null}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

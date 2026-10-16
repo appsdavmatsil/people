@@ -237,6 +237,7 @@ export function HiringPositions({ submissions = [] }: { submissions?: IntakeSubm
       id: editingId ?? crypto.randomUUID(),
       position,
       candidateName: form.candidateName.trim(),
+      ...(previous?.applicationId && (previous.candidateName ?? "") === form.candidateName.trim() ? { applicationId: previous.applicationId } : {}),
       department,
       venue,
       openings,

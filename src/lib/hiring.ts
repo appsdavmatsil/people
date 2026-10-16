@@ -15,6 +15,8 @@ export type HiringRole = {
   id: string;
   position: string;
   candidateName?: string;
+  /** Hiring-form application this opening was filled from. */
+  applicationId?: string;
   department: string;
   venue: string;
   openings: number;
@@ -130,10 +132,12 @@ function normalizeRole(value: unknown): HiringRole | null {
   }
 
   const id = typeof value.id === "string" && value.id.trim() ? value.id : crypto.randomUUID();
+  const applicationId = typeof value.applicationId === "string" && value.applicationId.trim() ? value.applicationId : undefined;
   return {
     id,
     position,
     candidateName,
+    ...(applicationId ? { applicationId } : {}),
     department,
     venue,
     openings,
