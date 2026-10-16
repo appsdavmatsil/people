@@ -123,6 +123,7 @@ export function HiringApplicationForm({
   const [started, setStarted] = useState(false);
   const [stage, setStage] = useState<"welcome" | "disclaimer">("welcome");
   const [showMissing, setShowMissing] = useState(false);
+  const [referenceError, setReferenceError] = useState("");
   const formTop = useRef<HTMLDivElement>(null);
 
   const pages: ConfigTextField[][] = [];
@@ -163,6 +164,14 @@ export function HiringApplicationForm({
 
     if (currentStep < lastStep) {
       goTo(currentStep + 1);
+      return;
+    }
+
+    if (!values.referenceFromTeam || (values.referenceFromTeam === "Yes" && !values.referenceName?.trim())) {
+      setReferenceError("Please answer the reference question before submitting.");
+      setStage("disclaimer");
+      setStarted(false);
+      requestAnimationFrame(() => formTop.current?.scrollIntoView({ block: "start" }));
       return;
     }
 
@@ -322,8 +331,59 @@ export function HiringApplicationForm({
             {landing.disclaimerBody && (
               <p className="whitespace-pre-line text-sm leading-relaxed text-stone-700">{landing.disclaimerBody}</p>
             )}
+            <fieldset className="mt-6 border-t border-stone-200 pt-5">
+              <legend className="sr-only">Reference from The Maine team</legend>
+              <p className="text-sm font-medium text-stone-800">
+                Do you have a reference from someone currently working at The Maine? <span className="text-red-500">*</span>
+              </p>
+              <div role="radiogroup" aria-label="Reference from The Maine team" className="mt-2 flex gap-2">
+                {["Yes", "No"].map((option) => (
+                  <label
+                    key={option}
+                    className={`flex h-10 flex-1 cursor-pointer items-center justify-center gap-2 rounded-lg border text-sm font-medium transition-colors ${
+                      values.referenceFromTeam === option ? "border-[#063f3b] bg-[#063f3b]/5 text-[#063f3b]" : "border-stone-300 bg-white text-stone-700 hover:bg-stone-50"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="referenceFromTeam"
+                      value={option}
+                      checked={values.referenceFromTeam === option}
+                      onChange={() => {
+                        setReferenceError("");
+                        setValues((cur) => ({ ...cur, referenceFromTeam: option, referenceName: option === "Yes" ? cur.referenceName ?? "" : "" }));
+                      }}
+                      className="accent-[#063f3b]"
+                    />
+                    {option}
+                  </label>
+                ))}
+              </div>
+              {values.referenceFromTeam === "Yes" && (
+                <label className="mt-4 block text-sm font-medium text-stone-800">
+                  Name of the employee <span className="text-red-500">*</span>
+                  <input
+                    value={values.referenceName ?? ""}
+                    onChange={(e) => { setReferenceError(""); setVal("referenceName", e.target.value); }}
+                    placeholder="Full name of the team member"
+                    autoComplete="off"
+                    className={fieldClass}
+                  />
+                </label>
+              )}
+              {referenceError && <p className="mt-2 text-sm font-medium text-red-600">{referenceError}</p>}
+            </fieldset>
             <div className="mt-6 flex flex-col gap-2 sm:flex-row-reverse">
-              <button type="button" onClick={() => { setStarted(true); requestAnimationFrame(() => formTop.current?.scrollIntoView({ block: "start" })); }} className={primaryButtonClass}>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!values.referenceFromTeam) return setReferenceError("Please tell us if you have a reference from The Maine team.");
+                  if (values.referenceFromTeam === "Yes" && !values.referenceName?.trim()) return setReferenceError("Please enter the name of the employee who referred you.");
+                  setStarted(true);
+                  requestAnimationFrame(() => formTop.current?.scrollIntoView({ block: "start" }));
+                }}
+                className={primaryButtonClass}
+              >
                 I understand — Continue
               </button>
               <button type="button" onClick={() => { setStage("welcome"); requestAnimationFrame(() => formTop.current?.scrollIntoView({ block: "start" })); }}

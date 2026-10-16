@@ -7,8 +7,9 @@ import { positionRank } from "@/lib/position-rank";
 import { continentFor, continents, flagFor, normalizeNationality } from "@/lib/hiring-nationality";
 import { countryFlag, countryNames } from "@/lib/countries";
 import { HIRING_STATUSES, HIRING_STATUS_ACTIVE_STYLE, HIRING_STATUS_LABEL, HIRING_STATUS_MENU_STYLE, HIRING_STATUS_STYLE, normalizeHiringStatus, type HiringStatus } from "@/lib/hiring-status";
-import { updateHiringStatusAction, deleteHiringSubmissionAction } from "@/app/(app)/hiringform/actions";
-import { updateHiringStatusSharedAction } from "@/app/hiring-team/[token]/actions";
+import { updateHiringStatusAction, deleteHiringSubmissionAction, searchWorkplaceAction } from "@/app/(app)/hiringform/actions";
+import { updateHiringStatusSharedAction, searchWorkplaceSharedAction } from "@/app/hiring-team/[token]/actions";
+import type { AboutPanel, WebResult } from "@/lib/workplace-search";
 
 const STATUS_OPTIONS = HIRING_STATUSES;
 const DECISION_OPTIONS = HIRING_STATUSES.filter((status) => status !== "new");
@@ -49,6 +50,7 @@ export function HiringResponses({
   const [detail, setDetail] = useState<HiringSubmission | null>(null);
   const [pendingDelete, setPendingDelete] = useState<HiringSubmission | null>(null);
   const [viewer, setViewer] = useState<{ url: string; label: string } | null>(null);
+  const [workplaceSearch, setWorkplaceSearch] = useState<{ name: string; query: string } | null>(null);
   const [zoom, setZoom] = useState(1);
   const [menu, setMenu] = useState<{ ids: string[]; x: number; y: number } | null>(null);
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
@@ -189,7 +191,13 @@ export function HiringResponses({
   const visibleSelected = filtered.filter((r) => selected.has(r.id)).map((r) => r.id);
 
   const hasSelection = selected.size > 0;
-  const overlayOpen = Boolean(menu || detail || viewer || pendingDelete);
+  const overlayOpen = Boolean(menu || detail || viewer || pendingDelete || workplaceSearch);
+  useEffect(() => {
+    if (!workplaceSearch) return;
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setWorkplaceSearch(null); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [workplaceSearch]);
   useEffect(() => {
     if (!hasSelection || overlayOpen) return;
     const onKey = (event: KeyboardEvent) => {
@@ -555,7 +563,19 @@ export function HiringResponses({
                   )}
                   {(workplaceOf(s) || livingCountryOf(s)) && (
                     <p className="flex items-center gap-1 rounded bg-stone-100 px-1.5 py-0.5 text-[10px] text-stone-600">
-                      <span className="min-w-0 flex-1 truncate" title={workplaceOf(s) ? `Current / Last Workplace: ${workplaceOf(s)}` : undefined}>{workplaceOf(s)}</span>
+                      {workplaceOf(s) ? (
+                        <span
+                          role="link"
+                          tabIndex={0}
+                          title={`Look up ${workplaceOf(s)}`}
+                          onClick={(event) => { event.stopPropagation(); setWorkplaceSearch(workplaceQuery(s)); }}
+                          onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); event.stopPropagation(); setWorkplaceSearch(workplaceQuery(s)); } }}
+                          className="flex min-w-0 flex-1 cursor-pointer items-center gap-1 hover:text-stone-900 hover:underline"
+                        >
+                          <span className="truncate">{workplaceOf(s)}</span>
+                          <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" aria-hidden="true" className="shrink-0 opacity-60"><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></svg>
+                        </span>
+                      ) : <span className="flex-1" />}
                       {livingCountryOf(s) && <span className="shrink-0" title={`Lives in ${livingCountryOf(s)}`}>{countryFlag(livingCountryOf(s)!)}</span>}
                     </p>
                   )}
@@ -634,6 +654,12 @@ export function HiringResponses({
                     Salary expectation{" "}
                     <span className={`font-semibold ${detail.salary_expectation ? "text-stone-900" : "text-stone-300"}`}>
                       {detail.salary_expectation ? `AED ${detail.salary_expectation}` : "—"}
+                    </span>
+                  </p>
+                  <p className="mt-1 text-xs text-stone-500">
+                    The Maine reference{" "}
+                    <span className={`font-semibold ${maineReferenceOf(detail) ? "text-stone-900" : "text-stone-300"}`}>
+                      {maineReferenceOf(detail) || "—"}
                     </span>
                   </p>
                 </div>
@@ -790,6 +816,8 @@ export function HiringResponses({
         );
       })()}
 
+      {workplaceSearch && <WorkplaceSearchDialog {...workplaceSearch} shareToken={shareToken} onClose={() => setWorkplaceSearch(null)} />}
+
       {pendingDelete && (
         <div className="fixed inset-0 z-[90] grid place-items-center bg-stone-950/40 p-4" onClick={() => setPendingDelete(null)}>
           <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
@@ -938,6 +966,198 @@ function displayPosition(position: string | null): string | null {
 function workplaceOf(s: HiringSubmission): string | null {
   const value = s.data?.currentWorkplace ?? s.data?.current_workplace;
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function workplaceQuery(s: HiringSubmission) {
+  const name = workplaceOf(s) ?? "";
+  const country = livingCountryOf(s);
+  const query = country && !name.toLowerCase().includes(country.toLowerCase()) ? `${name} ${country}` : name;
+  return { name, query };
+}
+
+/** Google search pages refuse to load inside another site, so results are fetched on the server and Google Maps is embedded beside them. */
+function WorkplaceSearchDialog({ name, query, shareToken, onClose }: { name: string; query: string; shareToken?: string; onClose: () => void }) {
+  const q = encodeURIComponent(query);
+  const [search, setSearch] = useState<{ query: string; results?: WebResult[]; about?: AboutPanel; error?: string } | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    (shareToken ? searchWorkplaceSharedAction(shareToken, query) : searchWorkplaceAction(query))
+      .then((result) => { if (!cancelled) setSearch({ query, results: result.results, about: result.about, error: result.ok ? undefined : result.error }); })
+      .catch(() => { if (!cancelled) setSearch({ query, error: "Web results are unavailable right now." }); });
+    return () => { cancelled = true; };
+  }, [query, shareToken]);
+  const loaded = search?.query === query ? search : null;
+  const [page, setPage] = useState<{ url: string; title: string; embedUrl?: string } | null>(null);
+  const openPage = (event: MouseEvent<HTMLAnchorElement>, url: string, title: string) => {
+    if (event.metaKey || event.ctrlKey || event.shiftKey) return;
+    event.preventDefault();
+    const result = loaded?.results?.find((r) => r.url === url);
+    setPage({ url, title, embedUrl: result?.embedUrl ?? (/wikipedia\.org\/wiki\//.test(url) ? url : undefined) });
+  };
+
+  return (
+    <div className="fixed inset-0 z-[90] grid place-items-center bg-stone-950/40 p-4" onClick={onClose}>
+      <div role="dialog" aria-label={`Search for ${name}`} className="flex h-[min(85dvh,760px)] w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-3 border-b border-stone-200 px-4 py-3">
+          <div className="min-w-0 flex-1">
+            <h2 className="truncate font-semibold text-stone-900">{name}</h2>
+            <p className="truncate text-xs text-stone-500">Current / Last Workplace · {query}</p>
+          </div>
+          <a href={`https://www.google.com/search?q=${q}`} target="_blank" rel="noreferrer" className="inline-flex h-8 shrink-0 items-center rounded-lg border border-stone-300 px-3 text-xs font-medium text-stone-700 hover:bg-stone-50">
+            Google search ↗
+          </a>
+          <button type="button" onClick={onClose} aria-label="Close" className="grid size-8 shrink-0 place-items-center rounded-lg text-lg text-stone-500 hover:bg-stone-100 hover:text-stone-900">×</button>
+        </div>
+        <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+          {page ? (
+            <div className="flex min-h-0 flex-1 flex-col border-b border-stone-200 md:border-r md:border-b-0">
+              <div className="flex items-center gap-2 border-b border-stone-200 px-3 py-2">
+                <button type="button" onClick={() => setPage(null)} className="inline-flex h-8 shrink-0 items-center gap-1 rounded-lg px-2 text-xs font-medium text-stone-700 hover:bg-stone-100">
+                  ← Results
+                </button>
+                <span className="min-w-0 flex-1 truncate text-xs text-stone-500" title={page.url}>{page.title}</span>
+                <a href={page.url} target="_blank" rel="noreferrer" className="inline-flex h-8 shrink-0 items-center rounded-lg border border-stone-300 px-2.5 text-xs font-medium text-stone-700 hover:bg-stone-50">
+                  New tab ↗
+                </a>
+              </div>
+              {page.embedUrl ? (
+                <iframe
+                  key={page.embedUrl}
+                  title={page.title}
+                  src={page.embedUrl}
+                  sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
+                  referrerPolicy="no-referrer"
+                  className="min-h-0 w-full flex-1 border-0 bg-white"
+                />
+              ) : (
+                <div className="grid flex-1 place-items-center p-6 text-center">
+                  <div>
+                    <p className="text-sm text-stone-600"><span className="font-medium text-stone-900">{new URL(page.url).hostname.replace(/^www\./, "")}</span> doesn&apos;t allow being shown inside another page.</p>
+                    <a href={page.url} target="_blank" rel="noreferrer" className="mt-3 inline-flex h-9 items-center rounded-lg bg-stone-900 px-4 text-sm font-medium text-white hover:bg-stone-800">
+                      Open in new tab ↗
+                    </a>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+          <div className="min-h-0 flex-1 overflow-y-auto border-b border-stone-200 px-5 py-4 font-[Arial,Helvetica,sans-serif] md:border-r md:border-b-0">
+            {!loaded ? (
+              <div className="space-y-6" aria-label="Loading results">
+                <div className="grid h-40 animate-pulse grid-cols-4 grid-rows-2 gap-1 overflow-hidden rounded-2xl">
+                  <div className="col-span-2 row-span-2 bg-stone-200" />
+                  {Array.from({ length: 4 }, (_, i) => <div key={i} className="bg-stone-100" />)}
+                </div>
+                {Array.from({ length: 4 }, (_, i) => (
+                  <div key={i} className="animate-pulse space-y-2">
+                    <div className="flex items-center gap-2"><div className="size-7 rounded-full bg-stone-100" /><div className="h-2.5 w-1/3 rounded bg-stone-100" /></div>
+                    <div className="h-4 w-3/4 rounded bg-stone-200" />
+                    <div className="h-2.5 w-full rounded bg-stone-100" />
+                  </div>
+                ))}
+              </div>
+            ) : loaded.error || !loaded.results?.length ? (
+              <p className="pt-2 text-sm text-[#4d5156]">
+                {loaded.error ?? "No web results found."}{" "}
+                <a href={`https://www.google.com/search?q=${q}`} target="_blank" rel="noreferrer" className="text-[#1a0dab] underline">Search on Google</a>
+              </p>
+            ) : (
+              <>
+                <SearchImageStrip results={loaded.results} about={loaded.about} onOpen={openPage} />
+                {loaded.about && (
+                  <section className="mb-6 border-b border-stone-200 pb-5">
+                    <h3 className="text-[22px] leading-7 text-[#202124]">{loaded.about.title}</h3>
+                    {loaded.about.description && <p className="mt-0.5 text-sm text-[#70757a] first-letter:uppercase">{loaded.about.description}</p>}
+                    <h4 className="mt-3 text-base font-medium text-[#202124]">About</h4>
+                    <p className="mt-1 line-clamp-5 text-sm leading-[22px] text-[#202124]">
+                      {loaded.about.extract}{" "}
+                      <a href={loaded.about.url} onClick={(e) => openPage(e, loaded.about!.url, `${loaded.about!.title} – Wikipedia`)} className="text-[#1a0dab] hover:underline">Wikipedia</a>
+                    </p>
+                  </section>
+                )}
+                <ol className="space-y-7">
+                  {loaded.results.filter((r) => r.url !== loaded.about?.url).map((result) => (
+                    <li key={result.url} className="flex min-w-0 gap-4">
+                      <div className="min-w-0 flex-1">
+                        <a href={result.url} onClick={(e) => openPage(e, result.url, result.title)} className="group block">
+                          <span className="flex items-center gap-3">
+                            <span className="grid size-[26px] shrink-0 place-items-center rounded-full border border-[#dadce0] bg-[#f1f3f4]">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={`https://www.google.com/s2/favicons?domain=${result.site}&sz=32`} alt="" className="size-[18px] rounded-full" />
+                            </span>
+                            <span className="min-w-0 leading-tight">
+                              <span className="block truncate text-sm text-[#202124]">{siteLabel(result)}</span>
+                              <span className="block truncate text-xs text-[#4d5156]">{breadcrumb(result.url)}</span>
+                            </span>
+                          </span>
+                          <span className="mt-1.5 block text-xl leading-[26px] text-[#1a0dab] group-hover:underline">{result.title}</span>
+                        </a>
+                        {result.snippet && <p className="mt-1 line-clamp-3 text-sm leading-[22px] text-[#4d5156]">{result.snippet}</p>}
+                      </div>
+                      {result.image && (
+                        <a href={result.url} onClick={(e) => openPage(e, result.url, result.title)} className="mt-8 shrink-0">
+                          <SearchImage src={result.image} className="size-[92px] rounded-lg" />
+                        </a>
+                      )}
+                    </li>
+                  ))}
+                </ol>
+              </>
+            )}
+          </div>
+          )}
+          <iframe title={`Map of ${name}`} src={`https://www.google.com/maps?q=${q}&output=embed`} className="h-64 w-full shrink-0 border-0 md:h-auto md:w-[45%]" loading="lazy" referrerPolicy="no-referrer-when-downgrade" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Third-party picture that removes itself if its host refuses to serve it. */
+function SearchImage({ src, className }: { src: string; className: string }) {
+  const [failed, setFailed] = useState(false);
+  if (failed) return null;
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src={src} alt="" loading="lazy" referrerPolicy="no-referrer" onError={() => setFailed(true)} className={`bg-stone-100 object-cover ${className}`} />;
+}
+
+/** Google-style photo mosaic: one large picture and up to four small ones, each linking to its page. */
+function SearchImageStrip({ results, about, onOpen }: { results: WebResult[]; about?: AboutPanel; onOpen: (event: MouseEvent<HTMLAnchorElement>, url: string, title: string) => void }) {
+  const seen = new Set<string>();
+  const pictures = [
+    ...(about?.image ? [{ src: about.image, href: about.url, title: `${about.title} – Wikipedia` }] : []),
+    ...results.filter((r) => r.image).map((r) => ({ src: r.image!, href: r.url, title: r.title })),
+  ].filter((p) => !seen.has(p.src) && seen.add(p.src)).slice(0, 5);
+  if (!pictures.length) return null;
+  return (
+    <div className={`mb-6 grid h-44 gap-1 overflow-hidden rounded-2xl ${pictures.length === 1 ? "grid-cols-1" : pictures.length === 2 ? "grid-cols-2" : "grid-cols-4 grid-rows-2"}`}>
+      {pictures.map((picture, index) => (
+        <a
+          key={picture.src}
+          href={picture.href}
+          onClick={(e) => onOpen(e, picture.href, picture.title)}
+          className={`min-h-0 overflow-hidden bg-stone-100 ${pictures.length > 2 && index === 0 ? "col-span-2 row-span-2" : ""} ${pictures.length === 3 && index > 0 ? "col-span-2" : ""} ${pictures.length === 4 && index === 3 ? "col-span-2" : ""}`}
+        >
+          <SearchImage src={picture.src} className="h-full w-full transition-transform duration-300 hover:scale-105" />
+        </a>
+      ))}
+    </div>
+  );
+}
+
+function siteLabel(result: WebResult) {
+  const fromTitle = /\s[|–—-]\s([^|–—-]{2,40})$/.exec(result.title)?.[1]?.trim();
+  return fromTitle || result.site;
+}
+
+function breadcrumb(url: string) {
+  try {
+    const { protocol, hostname, pathname } = new URL(url);
+    const parts = pathname.split("/").filter(Boolean).slice(0, 3).map((p) => decodeURIComponent(p).replace(/[-_]+/g, " ").replace(/\.\w+$/, ""));
+    return [`${protocol}//${hostname}`, ...parts].join(" › ");
+  } catch {
+    return url;
+  }
 }
 
 function GenderSwitch({ value, onChange }: { value: GenderFilter; onChange: (value: GenderFilter) => void }) {
@@ -1262,7 +1482,15 @@ function fieldTitle(key: string) {
 }
 
 const snakeCase = (key: string) => key.replace(/([a-z0-9])([A-Z])/g, "$1_$2").toLowerCase();
-const HIDDEN_DATA_KEYS = new Set(["source", "source_id"]);
+const HIDDEN_DATA_KEYS = new Set(["source", "source_id", "referenceFromTeam", "referenceName"]);
+
+/** "Yes · Name", "No", or "" for applications sent before the form asked. */
+function maineReferenceOf(s: HiringSubmission) {
+  const answer = String(s.data?.referenceFromTeam ?? "").trim();
+  const name = String(s.data?.referenceName ?? "").trim();
+  if (answer === "Yes") return name ? `Yes · ${name}` : "Yes";
+  return answer;
+}
 
 /** Splits the stored "City, Country" address back into its two form fields. */
 function addressPart(address: string | null, part: "city" | "country") {

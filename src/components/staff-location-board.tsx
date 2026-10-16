@@ -28,7 +28,7 @@ import { useStaffDirectory } from "@/components/use-staff-directory";
 import { useEventPlacements } from "@/components/use-staff-placements";
 import { countryFlag } from "@/lib/countries";
 import { normalizeName, type DirectoryLookups } from "@/lib/directory-lookups";
-import { normalizeEventName, sameEventName, type EventDefinition } from "@/lib/events";
+import { formatEventDates, normalizeEventName, sameEventName, type EventDefinition } from "@/lib/events";
 import { type HiringRole } from "@/lib/hiring";
 import {
   pendingPromotion,
@@ -86,6 +86,7 @@ type DialogMode =
   | "label"
   | "cardLabel"
   | "cardTag"
+  | "eventDates"
   | "editStaff"
   | "hiring"
   | "editHiring"
@@ -416,6 +417,8 @@ function PlacementBoard({
   const [cardLabelStaffId, setCardLabelStaffId] = useState<string | null>(null);
   const [cardLabelText, setCardLabelText] = useState("");
   const [cardTagStaffId, setCardTagStaffId] = useState<string | null>(null);
+  const [eventDatesId, setEventDatesId] = useState<string | null>(null);
+  const [eventDatesDraft, setEventDatesDraft] = useState<string[]>([]);
   const [cardTagText, setCardTagText] = useState("");
   const [editForm, setEditForm] = useState<StaffEditForm | null>(null);
   const [hiringLocationId, setHiringLocationId] = useState("");
@@ -1646,10 +1649,49 @@ function PlacementBoard({
 
   function removeCardTag(staffId: string) {
     const current = cardTags.find((item) => item.staffId === staffId);
-    updateCardTags(cardTags.filter((item) => item.staffId !== staffId));
+    updateCardTags(
+      cardTags.flatMap((item) =>
+        item.staffId !== staffId ? [item] : item.events ? [{ ...item, text: "" }] : [],
+      ),
+    );
     if (current) {
       setStatus(`Removed the tag from ${cardItemName(staffId)}.`);
     }
+  }
+
+  function openEventDates(eventId: string) {
+    setEventDatesId(eventId);
+    setEventDatesDraft(catalog.find((item) => item.id === eventId)?.dates ?? []);
+    setFormError("");
+    setDialog("eventDates");
+  }
+
+  function saveEventDates(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!eventDatesId || !updateCatalog) return;
+    const dates = [...new Set(eventDatesDraft)].sort();
+    updateCatalog(
+      catalog.map((item) =>
+        item.id !== eventDatesId
+          ? item
+          : dates.length
+          ? { ...item, dates }
+          : { id: item.id, name: item.name, color: item.color },
+      ),
+    );
+    const name = catalog.find((item) => item.id === eventDatesId)?.name ?? "the event";
+    setEventDatesId(null);
+    setDialog(null);
+    setStatus(dates.length ? `Set the dates for ${name}: ${formatEventDates(dates)}.` : `Cleared the dates for ${name}.`);
+  }
+
+  function toggleEventsTag(staffId: string) {
+    const current = cardTags.find((item) => item.staffId === staffId);
+    const on = !current?.events;
+    const others = cardTags.filter((item) => item.staffId !== staffId);
+    const text = current?.text ?? "";
+    updateCardTags(on ? [...others, { staffId, text, events: true }] : text ? [...others, { staffId, text }] : others);
+    setStatus(on ? `Marked ${cardItemName(staffId)} as on events.` : `${cardItemName(staffId)} is no longer marked as on events.`);
   }
 
   function saveCardTag(event: React.FormEvent<HTMLFormElement>) {
@@ -1664,10 +1706,11 @@ function PlacementBoard({
       return;
     }
 
-    const existing = cardTags.some((item) => item.staffId === cardTagStaffId);
+    const current = cardTags.find((item) => item.staffId === cardTagStaffId);
+    const existing = Boolean(current?.text);
     updateCardTags([
       ...cardTags.filter((item) => item.staffId !== cardTagStaffId),
-      { staffId: cardTagStaffId, text },
+      current?.events ? { staffId: cardTagStaffId, text, events: true } : { staffId: cardTagStaffId, text },
     ]);
     const name = cardItemName(cardTagStaffId);
     setCardTagStaffId(null);
@@ -2257,6 +2300,7 @@ function PlacementBoard({
                   cardTag={
                     cardTags.find((item) => item.staffId === row.person.id)?.text ?? ""
                   }
+                  eventsTag={eventsTaggedStaff.has(row.person.id)}
                   outsourcedCompany={outsourced?.company ?? ""}
                   onOpenProfile={() => openProfile(employeeId)}
                   promotion={
@@ -2338,7 +2382,8 @@ function PlacementBoard({
       ? hiringRoles.find((role) => role.id === drag.staffId)
       : null;
   const cardLabelByStaff = new Map(cardLabels.map((item) => [item.staffId, item.text]));
-  const cardTagByStaff = new Map(cardTags.map((item) => [item.staffId, item.text]));
+  const cardTagByStaff = new Map(cardTags.filter((item) => item.text).map((item) => [item.staffId, item.text]));
+  const eventsTaggedStaff = new Set(kind === "venue" ? cardTags.filter((item) => item.events).map((item) => item.staffId) : []);
   const outsourcedIds = new Set(outsourcedPeople.filter((person) => !person.archived).map((person) => person.id));
   const deployedPeople = placements.filter(
     (person) => resolvedLocationId(person, knownIds) != null,
@@ -2781,6 +2826,8 @@ function PlacementBoard({
             taggedStaff={cardTagByStaff}
             onAddCardTag={openCardTagDialog}
             onRemoveCardTag={removeCardTag}
+            eventsTaggedStaff={kind === "venue" ? eventsTaggedStaff : undefined}
+            onToggleEventsTag={toggleEventsTag}
             onRestartPositions={() => restartPositions(location.id)}
             onAddHiring={() => openAddHiring(location.id)}
             onEditHiring={(roleId) => openEditHiring(location.id, roleId)}
@@ -2790,6 +2837,8 @@ function PlacementBoard({
             }
             searching={searching}
             compactHeading={kind === "event"}
+            eventDates={kind === "event" ? formatEventDates(catalog.find((item) => item.id === location.id)?.dates) : undefined}
+            onEditEventDates={kind === "event" && updateCatalog ? () => openEventDates(location.id) : undefined}
             removeLabel={kind === "event" ? "Remove event" : "Remove venue"}
             onRemove={() => removeVenue(location.id)}
             emptyLabel={unassignedPeople ? "No staff" : undefined}
@@ -3234,6 +3283,32 @@ function PlacementBoard({
           </form>
         ) : null}
 
+        {dialog === "eventDates" ? (
+          <form onSubmit={saveEventDates}>
+            <DialogHeader
+              titleId={titleId}
+              title={`${catalog.find((item) => item.id === eventDatesId)?.name ?? "Event"} dates`}
+              description="Click each day of the event. Shift-click to select a run of days."
+              icon={<CalendarIcon />}
+              onClose={dismissDialog}
+            />
+            <div className="space-y-3 px-5 py-4">
+              <EventDatesPicker value={eventDatesDraft} onChange={setEventDatesDraft} />
+              <div className="flex min-h-9 items-center justify-between gap-3 rounded-lg bg-stone-100 px-3 py-2 text-sm">
+                <span className={eventDatesDraft.length ? "font-semibold tracking-wide text-stone-900" : "text-stone-500"}>
+                  {eventDatesDraft.length ? formatEventDates(eventDatesDraft) : "No days selected"}
+                </span>
+                {eventDatesDraft.length ? (
+                  <button type="button" className="text-xs font-medium text-stone-500 hover:text-stone-900" onClick={() => setEventDatesDraft([])}>
+                    Clear
+                  </button>
+                ) : null}
+              </div>
+            </div>
+            <DialogFooter onClose={dismissDialog} submitLabel="Save dates" />
+          </form>
+        ) : null}
+
       </dialog>
       </ModalPortal>
       {dialog === "profile" && profileStaffId ? (
@@ -3533,6 +3608,8 @@ function LocationColumn({
   taggedStaff,
   onAddCardTag,
   onRemoveCardTag,
+  eventsTaggedStaff,
+  onToggleEventsTag,
   onRestartPositions,
   onAddHiring,
   onEditHiring,
@@ -3541,6 +3618,8 @@ function LocationColumn({
   onRemove,
   searching = false,
   compactHeading = false,
+  eventDates,
+  onEditEventDates,
   removeLabel = "Remove venue",
   onColumnDragStart,
   onColumnDragEnd,
@@ -3576,6 +3655,9 @@ function LocationColumn({
   taggedStaff: Map<string, string>;
   onAddCardTag: (staffId: string) => void;
   onRemoveCardTag: (staffId: string) => void;
+  /** Staff carrying the Events tag; undefined hides the menu item (Events Manning board). */
+  eventsTaggedStaff?: Set<string>;
+  onToggleEventsTag: (staffId: string) => void;
   onRestartPositions: () => void;
   onAddHiring?: () => void;
   onEditHiring?: (roleId: string | null) => void;
@@ -3584,6 +3666,9 @@ function LocationColumn({
   onRemove?: () => void;
   searching?: boolean;
   compactHeading?: boolean;
+  /** Formatted event days; shown with onEditEventDates on Events Manning columns. */
+  eventDates?: string;
+  onEditEventDates?: () => void;
   removeLabel?: string;
   onColumnDragStart?: (event: React.DragEvent<HTMLElement>) => void;
   onColumnDragEnd?: () => void;
@@ -3912,6 +3997,28 @@ function LocationColumn({
             {count}
           </span> : null}
         </div>
+        {!collapsed && onEditEventDates ? (
+          <button
+            type="button"
+            draggable={false}
+            onPointerDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation();
+              onEditEventDates();
+            }}
+            title={eventDates ? "Change event dates" : "Set event dates"}
+            className={`mx-auto mt-1 flex max-w-full items-center gap-1.5 rounded-md px-2 py-0.5 text-xs transition-colors ${
+              eventDates ? "font-semibold tracking-wide" : "font-medium"
+            } ${
+              ink === "light"
+                ? `hover:bg-white/15 ${eventDates ? "text-white/90" : "text-white/65"}`
+                : `hover:bg-stone-950/5 ${eventDates ? "text-stone-700" : "text-stone-400"}`
+            }`}
+          >
+            <CalendarIcon size={12} />
+            <span className="truncate">{eventDates || "Add dates"}</span>
+          </button>
+        ) : null}
         {!collapsed && subtitle ? (
           <p
             className={`mt-1 truncate text-xs ${ink === "light" ? "text-white/75" : "text-stone-500"}`}
@@ -4249,6 +4356,27 @@ function LocationColumn({
               </button>
             )
           ) : null}
+          {menu.staffId && eventsTaggedStaff ? (
+            <button
+              type="button"
+              role="menuitem"
+              className={`flex h-8 items-center gap-2 rounded-md px-2 text-left text-sm text-stone-700 hover:text-stone-950 ${
+                eventsTaggedStaff.has(menu.staffId) ? "hover:bg-stone-100" : "bg-violet-50 hover:bg-violet-100"
+              }`}
+              onClick={() => {
+                const staffId = menu.staffId;
+                setMenu(null);
+                if (staffId) {
+                  onToggleEventsTag(staffId);
+                }
+              }}
+            >
+              <MenuGlyph className="text-violet-700">
+                {eventsTaggedStaff.has(menu.staffId) ? <TrashIcon /> : <PlusIcon />}
+              </MenuGlyph>
+              {eventsTaggedStaff.has(menu.staffId) ? "Remove \u201cOn events\u201d stamp" : "Mark as on events"}
+            </button>
+          ) : null}
           <button
             type="button"
             role="menuitem"
@@ -4470,6 +4598,7 @@ function StaffCard({
   color = "",
   cardLabel = "",
   cardTag = "",
+  eventsTag = false,
   outsourcedCompany = "",
   terminated = false,
   promotion = null,
@@ -4495,6 +4624,7 @@ function StaffCard({
   color?: string;
   cardLabel?: string;
   cardTag?: string;
+  eventsTag?: boolean;
   outsourcedCompany?: string;
   terminated?: boolean;
   promotion?: StaffPromotion | null;
@@ -4534,6 +4664,7 @@ function StaffCard({
       onDragEnd={onHtmlDragEnd}
     >
       {tagged ? <CardStamp text={cardTag} /> : null}
+      {eventsTag ? <EventsStamp /> : null}
       <span
         className={`flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border shadow-sm ${
           terminated
@@ -4622,6 +4753,14 @@ function CardStamp({ text }: { text: string }) {
       className="pointer-events-none absolute top-0 right-1.5 z-10 max-w-[calc(100%-1.75rem)] -translate-y-1/2 rotate-[-8deg] truncate rounded-sm border-2 border-rose-800 bg-rose-50 px-1.5 py-px text-[10px] leading-4 font-bold tracking-wide text-rose-900 uppercase shadow-[1px_1px_0_0_rgb(159_18_57)]"
     >
       {text}
+    </span>
+  );
+}
+
+function EventsStamp() {
+  return (
+    <span className="pointer-events-none absolute top-0 left-12 z-10 -translate-y-1/2 rotate-[6deg] rounded-sm border-2 border-violet-800 bg-violet-50 px-1.5 py-px text-[10px] leading-4 font-bold tracking-wide text-violet-900 uppercase shadow-[1px_1px_0_0_rgb(91_33_182)]">
+      Events
     </span>
   );
 }
@@ -6367,5 +6506,83 @@ function CloseIcon() {
     <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
       <path d="M3 3l8 8M11 3 3 11" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
     </svg>
+  );
+}
+
+function CalendarIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="3" y="5" width="18" height="16" rx="2" />
+      <path d="M16 3v4M8 3v4M3 10h18" />
+    </svg>
+  );
+}
+
+const PICKER_WEEKDAYS = ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"];
+
+function isoDay(year: number, month: number, date: number) {
+  return new Date(Date.UTC(year, month, date)).toISOString().slice(0, 10);
+}
+
+/** Month calendar where any set of days can be picked; shift-click fills the run from the last clicked day. */
+function EventDatesPicker({ value, onChange }: { value: string[]; onChange: (next: string[]) => void }) {
+  const start = value[0] ?? new Date().toISOString().slice(0, 10);
+  const [view, setView] = useState(() => ({ year: Number(start.slice(0, 4)), month: Number(start.slice(5, 7)) - 1 }));
+  const [anchor, setAnchor] = useState<string | null>(null);
+  const selected = new Set(value);
+  const today = new Date().toISOString().slice(0, 10);
+  const firstWeekday = (new Date(Date.UTC(view.year, view.month, 1)).getUTCDay() + 6) % 7;
+  const daysInMonth = new Date(Date.UTC(view.year, view.month + 1, 0)).getUTCDate();
+  const cells = [...Array.from({ length: firstWeekday }, () => null), ...Array.from({ length: daysInMonth }, (_, i) => isoDay(view.year, view.month, i + 1))];
+  const shift = (delta: number) => setView((current) => {
+    const next = new Date(Date.UTC(current.year, current.month + delta, 1));
+    return { year: next.getUTCFullYear(), month: next.getUTCMonth() };
+  });
+
+  function pick(day: string, extend: boolean) {
+    if (extend && anchor && anchor !== day) {
+      const [from, to] = anchor < day ? [anchor, day] : [day, anchor];
+      const run: string[] = [];
+      for (let cursor = from; cursor <= to; cursor = new Date(Date.parse(`${cursor}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10)) run.push(cursor);
+      onChange([...new Set([...value, ...run])].sort());
+    } else {
+      onChange(selected.has(day) ? value.filter((item) => item !== day) : [...value, day].sort());
+    }
+    setAnchor(day);
+  }
+
+  return (
+    <div className="select-none">
+      <div className="mb-2 flex items-center justify-between">
+        <button type="button" onClick={() => shift(-1)} aria-label="Previous month" className="grid size-8 place-items-center rounded-lg text-stone-500 hover:bg-stone-100 hover:text-stone-900">‹</button>
+        <span className="text-sm font-semibold text-stone-900">
+          {new Date(Date.UTC(view.year, view.month, 1)).toLocaleDateString("en-GB", { month: "long", year: "numeric", timeZone: "UTC" })}
+        </span>
+        <button type="button" onClick={() => shift(1)} aria-label="Next month" className="grid size-8 place-items-center rounded-lg text-stone-500 hover:bg-stone-100 hover:text-stone-900">›</button>
+      </div>
+      <div className="grid grid-cols-7 gap-1 text-center">
+        {PICKER_WEEKDAYS.map((day) => <span key={day} className="py-1 text-[11px] font-medium text-stone-400">{day}</span>)}
+        {cells.map((day, index) =>
+          day ? (
+            <button
+              key={day}
+              type="button"
+              aria-pressed={selected.has(day)}
+              aria-label={day}
+              onClick={(event) => pick(day, event.shiftKey)}
+              className={`h-9 rounded-lg text-sm tabular-nums transition-colors ${
+                selected.has(day)
+                  ? "bg-stone-900 font-semibold text-white hover:bg-stone-800"
+                  : `text-stone-700 hover:bg-stone-100 ${day === today ? "ring-1 ring-stone-300 ring-inset" : ""}`
+              }`}
+            >
+              {Number(day.slice(8))}
+            </button>
+          ) : (
+            <span key={`blank-${index}`} />
+          ),
+        )}
+      </div>
+    </div>
   );
 }

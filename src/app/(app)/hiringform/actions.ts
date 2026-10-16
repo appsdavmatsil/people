@@ -6,6 +6,7 @@ import { saveHiringConfig } from "@/lib/hiring-config";
 import type { FormConfig } from "@/lib/form-config";
 import { updateHiringStatuses } from "@/lib/hiring-records";
 import { setHiringShareToken } from "@/lib/hiring-share";
+import { runWorkplaceSearch, type WorkplaceSearchResult } from "@/lib/workplace-search";
 
 /**
  * Saves the hiring form configuration. Requires an authenticated app session.
@@ -43,6 +44,16 @@ export async function updateHiringStatusAction(
   const result = await updateHiringStatuses(ids, status);
   if (result.ok) revalidatePath("/hiringform");
   return result;
+}
+
+/** Web results for a candidate's workplace. Requires an app session. */
+export async function searchWorkplaceAction(query: string): Promise<WorkplaceSearchResult> {
+  const supabase = await createClient();
+  const { data } = await supabase.auth.getClaims();
+  if (typeof data?.claims?.sub !== "string") {
+    return { ok: false, error: "Not authorized." };
+  }
+  return runWorkplaceSearch(query);
 }
 
 /** Creates a new team link to Form Responses (replacing any old one), or turns it off. */

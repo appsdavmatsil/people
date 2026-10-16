@@ -8,7 +8,9 @@ export const eventCardTagsEvent = "people-event-card-tags";
 
 export type CardTag = {
   staffId: string;
+  /** Free-text stamp; empty when the card only carries the Events tag. */
   text: string;
+  events?: boolean;
 };
 
 export function emptyCardTags() {
@@ -143,12 +145,13 @@ function normalizeCardTags(value: unknown): CardTag[] {
 
     const staffId = item.staffId.trim();
     const text = normalizePlacementName(item.text);
-    if (!staffId || !text || ids.has(staffId)) {
+    const events = item.events === true;
+    if (!staffId || (!text && !events) || ids.has(staffId)) {
       continue;
     }
 
     ids.add(staffId);
-    tags.push({ staffId, text });
+    tags.push(events ? { staffId, text, events } : { staffId, text });
   }
 
   return tags;
