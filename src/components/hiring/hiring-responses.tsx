@@ -135,12 +135,12 @@ export function HiringResponses({
       groups.get(k)!.push(r);
     }
     // id -> { count, others[] } only for keys with >1 application
-    const map = new Map<string, { count: number; others: HiringSubmission[] }>();
+    const map = new Map<string, { count: number; all: HiringSubmission[]; others: HiringSubmission[] }>();
     for (const [, list] of groups) {
       if (list.length < 2) continue;
       const sorted = [...list].sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
       for (const r of list) {
-        map.set(r.id, { count: list.length, others: sorted.filter((x) => x.id !== r.id) });
+        map.set(r.id, { count: list.length, all: sorted, others: sorted.filter((x) => x.id !== r.id) });
       }
     }
     return { map, keyOf: key };
@@ -161,6 +161,9 @@ export function HiringResponses({
 
   async function changeStatus(ids: string | string[], status: string) {
     const targets = new Set(Array.isArray(ids) ? ids : [ids]);
+    for (const id of [...targets]) {
+      for (const other of dupInfo.map.get(id)?.others ?? []) targets.add(other.id);
+    }
     const previous = new Map(records.filter((r) => targets.has(r.id)).map((r) => [r.id, r.status]));
     setRecords((prev) => prev.map((r) => (targets.has(r.id) ? { ...r, status: status as HiringStatus } : r)));
     setDetail((current) => (current && targets.has(current.id) ? { ...current, status: status as HiringStatus } : current));
@@ -602,11 +605,22 @@ export function HiringResponses({
                   </button>
                 ) : <div className="grid h-20 w-20 place-items-center rounded-xl bg-stone-100 text-stone-300">—</div>}
                 <div>
-                  <h2 className="text-lg font-semibold text-stone-900">{detail.full_name}</h2>
+                  <h2 className="text-lg font-semibold text-stone-900">
+                    {detail.full_name}
+                    {ageOf(detail.date_of_birth) !== null ? (
+                      <span className="ml-2 text-sm font-medium text-stone-500">{ageOf(detail.date_of_birth)} y/o</span>
+                    ) : null}
+                  </h2>
                   <p className="text-sm text-stone-500">{detail.position_applied}</p>
                   <p className="mt-0.5 flex items-center gap-1 text-xs text-stone-400">
                     <span>{flagFor(detail.nationality)}</span>{detail.nationality}
                     {detail.created_at && <span className="ml-1">· Applied {new Date(detail.created_at).toLocaleDateString("en-GB")}</span>}
+                  </p>
+                  <p className="mt-1 text-xs text-stone-500">
+                    Salary expectation{" "}
+                    <span className={`font-semibold ${detail.salary_expectation ? "text-stone-900" : "text-stone-300"}`}>
+                      {detail.salary_expectation ? `AED ${detail.salary_expectation}` : "—"}
+                    </span>
                   </p>
                 </div>
               </div>
@@ -649,20 +663,28 @@ export function HiringResponses({
                 <p className="text-xs font-semibold text-orange-800">
                   ⚑ This person applied {dupInfo.map.get(detail.id)!.count} times
                 </p>
-                <p className="mt-0.5 text-[11px] text-orange-700">Matched by email/phone. Other applications:</p>
+                <p className="mt-0.5 text-[11px] text-orange-700">Matched by email/phone. Newest first. A status change applies to all of them.</p>
                 <div className="mt-2 space-y-1">
-                  {dupInfo.map.get(detail.id)!.others.map((o) => (
-                    <button
-                      key={o.id}
-                      onClick={() => setDetail(o)}
-                      className="flex w-full items-center justify-between rounded-lg border border-orange-200 bg-white px-2.5 py-1.5 text-left text-xs hover:border-orange-400"
-                    >
-                      <span className="truncate text-stone-700">
-                        {o.position_applied || "—"} <span className="text-stone-400">· {o.created_at ? new Date(o.created_at).toLocaleDateString("en-GB") : "—"}</span>
-                      </span>
-                      <span className={`ml-2 shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-medium ${STATUS_STYLE[o.status]}`}>{HIRING_STATUS_LABEL[o.status]}</span>
-                    </button>
-                  ))}
+                  {dupInfo.map.get(detail.id)!.all.map((o) => {
+                    const viewing = o.id === detail.id;
+                    return (
+                      <button
+                        key={o.id}
+                        onClick={() => setDetail(o)}
+                        disabled={viewing}
+                        aria-current={viewing ? "true" : undefined}
+                        className={`flex w-full items-center justify-between rounded-lg border px-2.5 py-1.5 text-left text-xs ${
+                          viewing ? "border-orange-400 bg-orange-100" : "border-orange-200 bg-white hover:border-orange-400"
+                        }`}
+                      >
+                        <span className="truncate text-stone-700">
+                          {o.position_applied || "—"} <span className="text-stone-400">· {o.created_at ? new Date(o.created_at).toLocaleDateString("en-GB") : "—"}</span>
+                          {viewing ? <span className="ml-1.5 font-medium text-orange-800">· Viewing</span> : null}
+                        </span>
+                        <span className={`ml-2 shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-medium ${STATUS_STYLE[o.status]}`}>{HIRING_STATUS_LABEL[o.status]}</span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -871,7 +893,8 @@ function StatusMenu({ x, y, current, name, onPick, onClose }: { x: number; y: nu
             role="menuitemradio"
             aria-checked={current === status}
             autoFocus={index === 0}
-            onClick={() => onPick(status)}
+            onClick={() => onPick(current === status ? "new" : status)}
+            title={current === status ? "Click again to set back to Pending" : undefined}
             className={`flex h-8 w-full items-center gap-2 rounded-lg px-2.5 text-left text-sm font-medium outline-none ${HIRING_STATUS_MENU_STYLE[status].row}`}
           >
             <span className={`size-2.5 shrink-0 rounded-full ${HIRING_STATUS_MENU_STYLE[status].dot}`} />
@@ -1236,17 +1259,89 @@ function WhatsAppIcon() {
   );
 }
 
+const RESIDENCE_FIELDS = new Set(["currentCountry", "currentCity", "currentAddress"]);
+const isResidence = (f: ConfigTextField) => RESIDENCE_FIELDS.has(f.name) || /\bresiden|^current (country|city|address)\b/i.test(f.label);
+
 function AnswerSection({ section, submission, showTitle }: { section: DetailSection; submission: HiringSubmission; showTitle: boolean }) {
-  const short = section.fields.filter((f) => f.type !== "textarea");
-  const long = section.fields.filter((f) => f.type === "textarea");
+  const isScale = (f: ConfigTextField) => /^english\b/i.test(f.label.trim()) && (f.options?.length ?? 0) > 1;
+  const fields = section.fields.filter((f) => f.name !== "salaryExpectation" && !/^salary expectation/i.test(f.label.trim()));
+  if (fields.length === 0) return null;
+  const scales = fields.filter(isScale);
+  const short = fields.filter((f) => f.type !== "textarea" && !isScale(f));
+  const long = fields.filter((f) => f.type === "textarea");
   return (
     <div className="space-y-3">
       {showTitle && <h4 className="text-[11px] font-semibold uppercase tracking-wide text-stone-500">{section.title}</h4>}
+      {scales.length > 0 && (
+        <div className="space-y-2.5">
+          {scales.map((f) => {
+            const answer = answerOf(submission, f.name)?.trim() ?? "";
+            const value = answer.toLowerCase();
+            const options = f.options!;
+            const shown = answer && !options.some((option) => option.trim().toLowerCase() === value) ? [...options, answer] : options;
+            return (
+              <div key={f.name} role="radiogroup" aria-label={f.label}>
+                <p className="text-xs text-stone-400">{f.label}</p>
+                <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1.5">
+                  {shown.map((option) => {
+                    const checked = option.trim().toLowerCase() === value;
+                    return (
+                      <span key={option} role="radio" aria-checked={checked} className={`inline-flex items-center gap-1.5 text-sm ${checked ? "font-medium text-stone-900" : "text-stone-400"}`}>
+                        <span className={`flex size-4 items-center justify-center rounded-full border ${checked ? "border-[#063f3b]" : "border-stone-300"}`}>
+                          {checked ? <span className="size-2 rounded-full bg-[#063f3b]" /> : null}
+                        </span>
+                        {option}
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
       {short.length > 0 && (
         <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm sm:grid-cols-3">
-          {short.map((f) => {
+          {short.map((f, index) => {
+            if (isResidence(f)) {
+              if (short.findIndex((item) => isResidence(item)) !== index) return null;
+              const residence = short.filter((item) => isResidence(item));
+              return (
+                <div key="residence" className="col-span-full grid grid-cols-2 gap-x-4 gap-y-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2.5 sm:grid-cols-3">
+                  {residence.map((item) => {
+                    const value = answerOf(submission, item.name);
+                    return (
+                      <div key={item.name} className="min-w-0">
+                        <dt className="text-xs font-medium text-emerald-800">{item.label}</dt>
+                        <dd className={`break-words ${value ? "font-medium text-stone-900" : "text-stone-300"}`}>{value ?? "—"}</dd>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            }
             const value = answerOf(submission, f.name);
             const whatsapp = f.name === "phone" ? whatsappLink(value) : null;
+            if (f.name === "nationality") {
+              const flag = value ? flagFor(value) : "";
+              return (
+                <div key={f.name} className="flex min-w-0 items-center gap-2.5">
+                  {flag ? <span className="text-3xl leading-none" aria-hidden="true">{flag}</span> : null}
+                  <div className="min-w-0">
+                    <dt className="text-xs text-stone-400">{f.label}</dt>
+                    <dd className={`break-words ${value ? "text-stone-800" : "text-stone-300"}`}>{value ?? "—"}</dd>
+                  </div>
+                </div>
+              );
+            }
+            if (/workplace/i.test(f.label)) {
+              return (
+                <div key={f.name} className="min-w-0 rounded-xl border border-violet-200 bg-violet-50 px-3 py-2.5">
+                  <dt className="text-xs font-medium text-violet-800">{f.label}</dt>
+                  <dd className={`break-words ${value ? "font-medium text-stone-900" : "text-stone-300"}`}>{value ?? "—"}</dd>
+                </div>
+              );
+            }
             return (
               <div key={f.name} className="min-w-0">
                 <dt className="text-xs text-stone-400">{f.label}</dt>
