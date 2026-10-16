@@ -5,6 +5,7 @@ import type { HiringSubmission } from "@/lib/hiring-records";
 import type { ConfigTextField } from "@/lib/form-config";
 import { positionRank } from "@/lib/position-rank";
 import { continentFor, continents, flagFor, normalizeNationality } from "@/lib/hiring-nationality";
+import { countryFlag, countryNames } from "@/lib/countries";
 import { HIRING_STATUSES, HIRING_STATUS_ACTIVE_STYLE, HIRING_STATUS_LABEL, HIRING_STATUS_MENU_STYLE, HIRING_STATUS_STYLE, normalizeHiringStatus, type HiringStatus } from "@/lib/hiring-status";
 import { updateHiringStatusAction, deleteHiringSubmissionAction } from "@/app/(app)/hiringform/actions";
 import { updateHiringStatusSharedAction } from "@/app/hiring-team/[token]/actions";
@@ -31,7 +32,7 @@ export function HiringResponses({
   shareToken?: string;
 }) {
   const pages = useMemo(() => detailPages(fields), [fields]);
-  const [records, setRecords] = useState(() => submissions.map((s) => ({ ...s, status: normalizeHiringStatus(s.status) })));
+  const [records, setRecords] = useState(() => submissions.map((s) => ({ ...s, status: normalizeHiringStatus(s.status), position_applied: displayPosition(s.position_applied) })));
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("new");
   const [nationalityFilter, setNationalityFilter] = useState<string>("all");
@@ -40,8 +41,8 @@ export function HiringResponses({
   const [cardSize, setCardSize] = useState(2);
   const [dupsOnly, setDupsOnly] = useState(false);
   const [ageRange, setAgeRange] = useState<[number, number] | null>(null);
-  const [experienceFilter, setExperienceFilter] = useState("all");
-  const [salaryFilter, setSalaryFilter] = useState("all");
+  const [genderFilter, setGenderFilter] = useState<GenderFilter>("all");
+  const [ageSort, setAgeSort] = useState<AgeSort>(null);
   const [visaFilter, setVisaFilter] = useState("all");
   const [outsideOnly, setOutsideOnly] = useState(false);
   const [immediateOnly, setImmediateOnly] = useState(false);
@@ -55,12 +56,11 @@ export function HiringResponses({
   const matchesExtra = useCallback(
     (r: HiringSubmission) =>
       withinAge(ageRange, ageOf(r.date_of_birth)) &&
-      inRange(EXPERIENCE_RANGES, experienceFilter, experienceOf(r.experience_years)) &&
-      inRange(SALARY_RANGES, salaryFilter, numberOf(r.salary_expectation)) &&
+      (genderFilter === "all" || genderOf(r) === genderFilter) &&
       (visaFilter === "all" || visaOf(r) === visaFilter) &&
       (!outsideOnly || isOutsideUae(r)) &&
       (!immediateOnly || joinsImmediately(r)),
-    [ageRange, experienceFilter, salaryFilter, visaFilter, outsideOnly, immediateOnly],
+    [ageRange, genderFilter, visaFilter, outsideOnly, immediateOnly],
   );
   const ageBounds = useMemo<[number, number]>(() => {
     const ages = records.map((r) => ageOf(r.date_of_birth)).filter((age): age is number => age !== null && age >= 14 && age <= 80);
@@ -148,7 +148,7 @@ export function HiringResponses({
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return records.filter((r) => {
+    const matches = records.filter((r) => {
       const matchStatus = statusFilter === "all" || r.status === statusFilter;
       const matchNat = nationalityFilter === "all" || normalizeNationality(r.nationality) === nationalityFilter;
       const matchPos = positionFilter === "all" || r.position_applied === positionFilter;
@@ -157,7 +157,16 @@ export function HiringResponses({
       const matchDup = !dupsOnly || dupInfo.map.has(r.id);
       return matchStatus && matchNat && matchPos && matchSearch && matchDup && matchesExtra(r);
     });
-  }, [records, searchIndex, search, statusFilter, nationalityFilter, positionFilter, dupsOnly, dupInfo, matchesExtra]);
+    if (!ageSort) return matches;
+    const sign = ageSort === "asc" ? 1 : -1;
+    return matches
+      .map((r) => {
+        const age = ageOf(r.date_of_birth);
+        return { r, age: age !== null && age >= 14 && age <= 80 ? age : null };
+      })
+      .sort((a, b) => (a.age === null ? (b.age === null ? 0 : 1) : b.age === null ? -1 : (a.age - b.age) * sign))
+      .map(({ r }) => r);
+  }, [records, searchIndex, search, statusFilter, nationalityFilter, positionFilter, dupsOnly, dupInfo, matchesExtra, ageSort]);
 
   async function changeStatus(ids: string | string[], status: string) {
     const targets = new Set(Array.isArray(ids) ? ids : [ids]);
@@ -322,8 +331,8 @@ export function HiringResponses({
     if (cv) window.open(cv.web_view_link ?? cv.file_id, "_blank");
   }
 
-  const activeFilters = [statusFilter !== "new", nationalityFilter !== "all", positionFilter !== "all", search !== "", ageRange !== null, experienceFilter !== "all", salaryFilter !== "all", visaFilter !== "all", outsideOnly, immediateOnly].filter(Boolean).length;
-  const clearAll = () => { setSearch(""); setStatusFilter("new"); setNationalityFilter("all"); setPositionFilter("all"); setAgeRange(null); setExperienceFilter("all"); setSalaryFilter("all"); setVisaFilter("all"); setOutsideOnly(false); setImmediateOnly(false); };
+  const activeFilters = [statusFilter !== "new", nationalityFilter !== "all", positionFilter !== "all", search !== "", ageRange !== null, genderFilter !== "all", visaFilter !== "all", outsideOnly, immediateOnly].filter(Boolean).length;
+  const clearAll = () => { setSearch(""); setStatusFilter("new"); setNationalityFilter("all"); setPositionFilter("all"); setAgeRange(null); setGenderFilter("all"); setVisaFilter("all"); setOutsideOnly(false); setImmediateOnly(false); };
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -427,8 +436,8 @@ export function HiringResponses({
       )}
 
       {/* Search + view toggle + filters */}
-      <div className="mt-1.5 flex flex-wrap items-center gap-1.5 sm:mt-4 sm:gap-2">
-        <div className="relative min-w-[200px] flex-1">
+      <div className="mt-1.5 flex flex-wrap items-center gap-1.5 sm:mt-4 sm:flex-nowrap sm:gap-2">
+        <div className="relative min-w-[200px] flex-1 sm:min-w-[140px]">
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -448,12 +457,11 @@ export function HiringResponses({
           ) : null}
         </div>
 
-        <AgeRangeSlider bounds={ageBounds} value={ageRange} onChange={setAgeRange} />
-        <FilterSelect label="Experience" value={experienceFilter} onChange={setExperienceFilter} options={EXPERIENCE_RANGES.map((r) => r.label)} />
-        <FilterSelect label="Salary" value={salaryFilter} onChange={setSalaryFilter} options={SALARY_RANGES.map((r) => r.label)} width="w-48" />
-        <FilterSelect label="UAE visa" value={visaFilter} onChange={setVisaFilter} options={visaOptions} width="w-56" />
+        <AgeRangeSlider bounds={ageBounds} value={ageRange} onChange={setAgeRange} sort={ageSort} onSortChange={setAgeSort} />
+        <GenderSwitch value={genderFilter} onChange={setGenderFilter} />
+        <FilterSelect label="UAE visa" value={visaFilter} onChange={setVisaFilter} options={visaOptions} width="w-48" />
 
-        <div className="ml-auto flex items-center gap-2">
+        <div className="ml-auto flex shrink-0 items-center gap-2">
           <div className={`hidden items-center gap-0.5 rounded-lg border border-stone-200 bg-white p-0.5 sm:flex ${view === "grid" ? "" : "pointer-events-none opacity-40"}`}>
             <button onClick={() => setCardSize((size) => Math.max(0, size - 1))} disabled={cardSize === 0} className="grid size-8 place-items-center rounded-md text-stone-500 hover:bg-stone-100 disabled:opacity-30 disabled:hover:bg-transparent" aria-label="Smaller thumbnails" title="Smaller thumbnails">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4M8 11h6"/></svg>
@@ -529,7 +537,7 @@ export function HiringResponses({
                     </span>
                   )}
                 </div>
-                <div className="space-y-0.5 px-2 py-1.5">
+                <div className={`space-y-0.5 px-2 py-1.5 ${s.status === "not_selected" ? "bg-red-50" : s.status === "new" ? "" : "bg-emerald-50"}`}>
                   <p className="truncate text-xs font-semibold text-stone-950">{s.full_name}</p>
                   <p className="truncate text-[11px] text-stone-700">{s.position_applied || "—"}</p>
                   <p className="flex items-center gap-1 truncate text-[11px] text-stone-400">{ageOf(s.date_of_birth) !== null && <span className="shrink-0 rounded-full bg-stone-100 px-1.5 text-[10px] font-medium tabular-nums text-stone-700">{ageOf(s.date_of_birth)} y/o</span>}<span>{flagFor(s.nationality)}</span><span className="truncate">{s.nationality || "Unknown"}</span></p>
@@ -543,6 +551,12 @@ export function HiringResponses({
                   {s.created_at && (
                     <p className="truncate text-[10px] text-stone-400">
                       Applied {new Date(s.created_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short" })}
+                    </p>
+                  )}
+                  {(workplaceOf(s) || livingCountryOf(s)) && (
+                    <p className="flex items-center gap-1 rounded bg-stone-100 px-1.5 py-0.5 text-[10px] text-stone-600">
+                      <span className="min-w-0 flex-1 truncate" title={workplaceOf(s) ? `Current / Last Workplace: ${workplaceOf(s)}` : undefined}>{workplaceOf(s)}</span>
+                      {livingCountryOf(s) && <span className="shrink-0" title={`Lives in ${livingCountryOf(s)}`}>{countryFlag(livingCountryOf(s)!)}</span>}
                     </p>
                   )}
                 </div>
@@ -794,38 +808,8 @@ export function HiringResponses({
 
 // Compact donut + full scrollable legend. Clicking a segment or legend row filters.
 // Shows EVERY nationality (no "Other" grouping).
-type Range = { label: string; min: number; max: number };
-const EXPERIENCE_RANGES: Range[] = [
-  { label: "0–2 yrs", min: 0, max: 2 },
-  { label: "3–5 yrs", min: 3, max: 5 },
-  { label: "6–9 yrs", min: 6, max: 9 },
-  { label: "10+ yrs", min: 10, max: 60 },
-];
-const SALARY_RANGES: Range[] = [
-  { label: "Under AED 3,000", min: 0, max: 2999 },
-  { label: "AED 3,000–4,999", min: 3000, max: 4999 },
-  { label: "AED 5,000–7,999", min: 5000, max: 7999 },
-  { label: "AED 8,000+", min: 8000, max: Number.POSITIVE_INFINITY },
-];
-
-function inRange(ranges: Range[], selected: string, value: number | null) {
-  if (selected === "all") return true;
-  const range = ranges.find((r) => r.label === selected);
-  return !!range && value !== null && value >= range.min && value <= range.max;
-}
-
 function withinAge(range: [number, number] | null, age: number | null) {
   return !range || (age !== null && age >= range[0] && age <= range[1]);
-}
-
-function numberOf(raw: string | null) {
-  const value = Number((raw ?? "").replace(/[^\d.]/g, ""));
-  return raw && Number.isFinite(value) && value > 0 ? value : null;
-}
-
-function experienceOf(raw: string | null) {
-  const value = Number((raw ?? "").trim());
-  return raw && Number.isFinite(value) && value <= 60 ? value : null;
 }
 
 function ageOf(dob: string | null) {
@@ -849,8 +833,40 @@ function joinsImmediately(r: HiringSubmission) {
 
 const UAE_NAMES = /^(uae|u\.a\.e\.?|united arab emirates|emirates|dubai|abu dhabi|sharjah|ajman|ras al khaimah|fujairah|umm al quwain|al ain)$/i;
 
-/** Said they are outside the UAE, or gave a current country that is not the UAE. */
+const UAE_PLACE = /\b(uae|u\.a\.e|united arab emirates|dubai|abu ?dhabi|sharjah|ajman|ras al ?khaimah|rak|fujairah|umm al ?quwain|al ain|jebel ali|deira|bur dubai|satwa|karama|jumeirah|al barsha|al quoz|al nahda|al qusais|mussafah|khalifa city|dubai marina|jlt|jvc|business bay|international city|silicon oasis|discovery gardens)\b/i;
+
+/** City from the address, or the separate city answer that older applications stored on their own. */
+function cityOf(r: HiringSubmission) {
+  const stored = r.data?.currentCity ?? r.data?.current_city;
+  return [typeof stored === "string" ? stored : "", addressPart(r.current_address, "city") ?? ""].join(" ").trim();
+}
+
+/** Country the candidate lives in now, read from their free-text address; null when it can't be told. */
+function livingCountryOf(r: HiringSubmission): string | null {
+  const address = r.current_address ?? "";
+  const place = `${cityOf(r)} ${address}`;
+  if (UAE_PLACE.test(place) || UAE_AREA.test(place)) return "United Arab Emirates";
+  for (const part of address.split(/[,\n]/).map((p) => p.trim()).filter(Boolean).reverse()) {
+    const name = normalizeNationality(part);
+    if (countryFlag(name)) return name;
+  }
+  const lower = address.toLowerCase();
+  return COUNTRY_WORDS.find(({ pattern }) => pattern.test(lower))?.name ?? null;
+}
+
+/** Dubai and Abu Dhabi areas and spellings that applicants type without naming the emirate. */
+const UAE_AREA = /(duba[iï]|abudabi|\brigga\b|al khail|al khile|musaffah|discovery garden|bus+iness bay|jabel ali|tourist club|burjuman|al safa|trade cent(er|re)|al wasa?l|al quoz)/i;
+
+const COUNTRY_WORDS = [...countryNames]
+  .sort((a, b) => b.length - a.length)
+  .map((name) => ({ name, pattern: new RegExp(`\\b${name.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`) }));
+
+/**
+ * Said they are outside the UAE, or gave a current country that is not the UAE.
+ * A UAE city always wins: the country question was added after many people applied.
+ */
 function isOutsideUae(r: HiringSubmission) {
+  if (UAE_PLACE.test(cityOf(r))) return false;
   if (/outside uae/i.test(visaOf(r))) return true;
   const country = addressPart(r.current_address, "country");
   return Boolean(country && !UAE_NAMES.test(country.trim()));
@@ -907,7 +923,48 @@ function StatusMenu({ x, y, current, name, onPick, onClose }: { x: number; y: nu
   );
 }
 
-function AgeRangeSlider({ bounds, value, onChange }: { bounds: [number, number]; value: [number, number] | null; onChange: (value: [number, number] | null) => void }) {
+type GenderFilter = "all" | "Male" | "Female";
+type AgeSort = "asc" | "desc" | null;
+
+function genderOf(s: HiringSubmission): string | null {
+  const value = s.data?.gender;
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function displayPosition(position: string | null): string | null {
+  return position && /^(jnr|junior) sous( chef)?$/i.test(position.trim()) ? "Jnr Sous" : position;
+}
+
+function workplaceOf(s: HiringSubmission): string | null {
+  const value = s.data?.currentWorkplace ?? s.data?.current_workplace;
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function GenderSwitch({ value, onChange }: { value: GenderFilter; onChange: (value: GenderFilter) => void }) {
+  const options: { id: GenderFilter; label: string }[] = [
+    { id: "all", label: "All" },
+    { id: "Male", label: "Male" },
+    { id: "Female", label: "Female" },
+  ];
+  return (
+    <div role="radiogroup" aria-label="Gender" className={`flex h-8 items-center gap-0.5 rounded-lg border bg-white p-0.5 text-xs sm:h-9 ${value === "all" ? "border-stone-200" : "border-stone-900"}`}>
+      {options.map((option) => (
+        <button
+          key={option.id}
+          type="button"
+          role="radio"
+          aria-checked={value === option.id}
+          onClick={() => onChange(option.id)}
+          className={`h-full rounded-md px-2.5 font-medium transition-colors ${value === option.id ? "bg-stone-900 text-white" : "text-stone-600 hover:bg-stone-100"}`}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function AgeRangeSlider({ bounds, value, onChange, sort, onSortChange }: { bounds: [number, number]; value: [number, number] | null; onChange: (value: [number, number] | null) => void; sort: AgeSort; onSortChange: (sort: AgeSort) => void }) {
   const [min, max] = bounds;
   const [low, high] = value ?? bounds;
   const span = Math.max(1, max - min);
@@ -977,6 +1034,23 @@ function AgeRangeSlider({ bounds, value, onChange }: { bounds: [number, number];
       >
         ×
       </button>
+      <div className="-mr-1.5 flex items-center gap-0.5 border-l border-stone-200 pl-1.5">
+        {(["asc", "desc"] as const).map((direction) => (
+          <button
+            key={direction}
+            type="button"
+            onClick={() => onSortChange(sort === direction ? null : direction)}
+            aria-pressed={sort === direction}
+            aria-label={direction === "asc" ? "Sort youngest first" : "Sort oldest first"}
+            title={direction === "asc" ? "Youngest first" : "Oldest first"}
+            className={`grid size-6 place-items-center rounded-md transition-colors ${sort === direction ? "bg-stone-900 text-white" : "text-stone-500 hover:bg-stone-100 hover:text-stone-900"}`}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              {direction === "asc" ? <path d="M12 19V5M5 12l7-7 7 7" /> : <path d="M12 5v14M5 12l7 7 7-7" />}
+            </svg>
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

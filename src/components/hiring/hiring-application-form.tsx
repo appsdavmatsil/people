@@ -428,6 +428,22 @@ export function HiringApplicationForm({
           <option value="">Select…</option>
           {(f.options ?? []).map((o) => <option key={o} value={o}>{o}</option>)}
         </select>
+      ) : f.type === "radio" ? (
+        <div role="radiogroup" aria-label={f.label} className="mt-2 flex flex-wrap gap-x-6 gap-y-2">
+          {(f.options ?? []).map((o) => (
+            <label key={o} className="inline-flex cursor-pointer items-center gap-2 text-sm text-stone-800">
+              <input
+                type="radio"
+                name={f.name}
+                value={o}
+                checked={values[f.name] === o}
+                onChange={() => setVal(f.name, o)}
+                className="size-4 cursor-pointer accent-stone-900"
+              />
+              {o}
+            </label>
+          ))}
+        </div>
       ) : f.type === "country" ? (
         <div className="mt-1.5">
           <CountrySelect value={values[f.name] ?? ""} onChange={(v) => setVal(f.name, v)} />
@@ -500,7 +516,7 @@ export function HiringApplicationForm({
           {sec.name && (
             <h2 className="border-b border-stone-200 pb-1.5 text-sm font-semibold uppercase tracking-wide text-stone-500">{sec.name}</h2>
           )}
-          {groupRadios(sec.fields).map((item) => (Array.isArray(item) ? renderRadioGrid(item) : renderField(item)))}
+          {groupRadios(sec.fields).map((item) => (!Array.isArray(item) ? renderField(item) : item.length === 1 ? renderField(item[0]) : renderRadioGrid(item)))}
         </section>
       ))}
 

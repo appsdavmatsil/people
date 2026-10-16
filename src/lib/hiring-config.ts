@@ -33,6 +33,7 @@ export const DEFAULT_HIRING_CONFIG: FormConfig = {
     { name: "phone", label: "Phone Number", type: "phone", required: true },
     { name: "email", label: "Email Address", type: "email", required: true, autoComplete: "email" },
     { name: "dateOfBirth", label: "Date of Birth", type: "date", required: true },
+    { name: "gender", label: "Gender", type: "radio", required: true, options: ["Male", "Female"] },
     { name: "nationality", label: "Nationality", type: "country", required: true },
     { name: "currentCountry", label: "Current Country", type: "country", required: true },
     { name: "currentCity", label: "Current City", type: "text", required: true, autoComplete: "address-level2" },
