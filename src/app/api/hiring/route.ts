@@ -1,5 +1,6 @@
 import { createServiceClient } from "@/lib/supabase/service";
 import { loadHiringConfig } from "@/lib/hiring-config";
+import { isValidEmail } from "@/lib/email";
 import { splitFullName } from "@/lib/staff";
 import { NextResponse } from "next/server";
 
@@ -54,6 +55,10 @@ export async function POST(req: Request): Promise<NextResponse> {
   for (const f of config.textFields) {
     if (f.required && !String(fields[f.name] ?? "").trim()) {
       return json({ ok: false, error: `Missing required field: ${f.label}` }, 400);
+    }
+    const value = String(fields[f.name] ?? "").trim();
+    if (f.type === "email" && value && !isValidEmail(value)) {
+      return json({ ok: false, error: `Please enter a valid email address for ${f.label}.` }, 400);
     }
   }
 

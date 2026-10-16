@@ -2,8 +2,16 @@
 
 import { useRef, useState } from "react";
 import type { ConfigDocument, ConfigTextField, LandingConfig } from "@/lib/form-config";
+import { isValidEmail } from "@/lib/email";
 import { CountrySelect } from "@/components/country-select";
 import { PhoneNumberInput } from "@/components/phone-number-input";
+
+const NAME_FIELDS = new Set(["fullName", "firstName", "lastName"]);
+
+/** Capitalizes the first letter of each word; leaves the rest as typed (e.g. McDonald). */
+function capitalizeWords(value: string) {
+  return value.replace(/(^|[\s\-'])(\p{Ll})/gu, (_, lead: string, letter: string) => lead + letter.toUpperCase());
+}
 
 const fieldClass =
   "mt-1.5 w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-950 outline-none focus:border-stone-950";
@@ -124,6 +132,7 @@ export function HiringApplicationForm({
   const [stage, setStage] = useState<"welcome" | "disclaimer">("welcome");
   const [showMissing, setShowMissing] = useState(false);
   const [referenceError, setReferenceError] = useState("");
+  const [leftFields, setLeftFields] = useState<Set<string>>(() => new Set());
   const formTop = useRef<HTMLDivElement>(null);
 
   const pages: ConfigTextField[][] = [];
@@ -138,11 +147,13 @@ export function HiringApplicationForm({
   const currentStep = Math.min(step, lastStep);
 
   const isEmpty = (f: ConfigTextField) => f.required && !values[f.name]?.trim();
+  const badEmail = (f: ConfigTextField) => f.type === "email" && !!values[f.name]?.trim() && !isValidEmail(values[f.name]);
   const missingByStep = pages
     .map((page, index) => ({
       step: index,
       labels: [
         ...page.filter(isEmpty).map((f) => f.label),
+        ...page.filter(badEmail).map((f) => `${f.label} (not a valid email)`),
         ...(index === lastStep ? documents.filter((d) => d.required && !files[d.field]).map((d) => d.label) : []),
       ],
     }))
@@ -163,6 +174,11 @@ export function HiringApplicationForm({
     setError("");
 
     if (currentStep < lastStep) {
+      const invalid = pages[currentStep].filter(badEmail);
+      if (invalid.length > 0) {
+        setLeftFields((cur) => new Set([...cur, ...invalid.map((f) => f.name)]));
+        return;
+      }
       goTo(currentStep + 1);
       return;
     }
@@ -513,11 +529,17 @@ export function HiringApplicationForm({
       ) : (
         <input
           type={f.type}
-          className={fieldClass}
+          className={(showMissing || leftFields.has(f.name)) && badEmail(f) ? fieldClass.replace("border-stone-300", "border-red-400").replace("focus:border-stone-950", "focus:border-red-600") : fieldClass}
           autoComplete={f.autoComplete}
           value={values[f.name] ?? ""}
-          onChange={(e) => setVal(f.name, e.target.value)}
+          onChange={(e) => setVal(f.name, NAME_FIELDS.has(f.name) ? capitalizeWords(e.target.value) : e.target.value)}
+          autoCapitalize={NAME_FIELDS.has(f.name) ? "words" : undefined}
+          onBlur={f.type === "email" ? () => setLeftFields((cur) => (cur.has(f.name) ? cur : new Set([...cur, f.name]))) : undefined}
+          aria-invalid={badEmail(f) || undefined}
         />
+      )}
+      {(showMissing || leftFields.has(f.name)) && badEmail(f) && (
+        <p className="mt-1 text-xs font-medium text-red-600">Please enter a valid email address, e.g. name@example.com</p>
       )}
     </div>
   );
