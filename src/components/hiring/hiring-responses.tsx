@@ -209,6 +209,18 @@ export function HiringResponses({
     }
   }
 
+  const filterKey = JSON.stringify([search, statusFilter, nationalityFilter, positionFilter, dupsOnly, ageRange, genderFilter, visaFilter, outsideOnly, immediateOnly, ageSort]);
+  const [paging, setPaging] = useState({ key: filterKey, page: 1 });
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const page = Math.min(paging.key === filterKey ? paging.page : 1, pageCount);
+  const pageStart = (page - 1) * PAGE_SIZE;
+  const pageItems = filtered.slice(pageStart, pageStart + PAGE_SIZE);
+  const resultsRef = useRef<HTMLDivElement>(null);
+  const goToPage = (next: number) => {
+    setPaging({ key: filterKey, page: next });
+    resultsRef.current?.scrollTo({ top: 0 });
+  };
+
   const visibleSelected = filtered.filter((r) => selected.has(r.id)).map((r) => r.id);
 
   const hasSelection = selected.size > 0;
@@ -559,7 +571,10 @@ export function HiringResponses({
       </div>
 
       <div className="mt-2 flex h-5 items-center gap-3 text-xs text-stone-500">
-        <p>{filtered.length} of {records.length} applications</p>
+        <p>
+          {filtered.length} of {records.length} applications
+          {pageCount > 1 ? <span className="text-stone-400"> · showing {pageStart + 1}–{pageStart + pageItems.length}</span> : null}
+        </p>
         {visibleSelected.length > 0 && (
           <span className="inline-flex items-center gap-2 rounded-full bg-stone-900 py-0.5 pr-1.5 pl-2.5 font-medium text-white">
             {visibleSelected.length} selected · right-click to set status
@@ -573,8 +588,8 @@ export function HiringResponses({
 
       {/* Results */}
       {view === "grid" ? (
-        <div className={`mt-3 grid min-h-0 flex-1 auto-rows-max content-start items-start gap-3 overflow-y-auto pb-4 ${GRID_SIZES[cardSize]}`}>
-          {filtered.map((s) => {
+        <div ref={resultsRef} className={`mt-3 grid min-h-0 flex-1 auto-rows-max content-start items-start gap-3 overflow-y-auto pb-4 ${GRID_SIZES[cardSize]}`}>
+          {pageItems.map((s) => {
             const photo = photoOf(s);
             return (
               <button key={s.id} onClick={(event) => openCard(event, s)} onContextMenu={(event) => openMenu(event, s.id)} {...longPressProps(s.id)} className={`group relative flex flex-col overflow-hidden rounded-xl border bg-white text-left transition-all select-none [-webkit-touch-callout:none] hover:-translate-y-0.5 hover:shadow-md ${selected.has(s.id) ? "border-red-600" : "border-stone-200"}`}>
@@ -653,10 +668,11 @@ export function HiringResponses({
             );
           })}
           {filtered.length === 0 && <p className="col-span-full py-16 text-center text-sm text-stone-400">No applications match.</p>}
+          <Pager page={page} pageCount={pageCount} onPage={goToPage} className="col-span-full" />
         </div>
       ) : (
-        <div className="mt-3 min-h-0 flex-1 space-y-1.5 overflow-y-auto pb-4">
-          {filtered.map((s) => {
+        <div ref={resultsRef} className="mt-3 min-h-0 flex-1 space-y-1.5 overflow-y-auto pb-4">
+          {pageItems.map((s) => {
             const photo = photoOf(s);
             return (
               <button key={s.id} onClick={(event) => openCard(event, s)} onContextMenu={(event) => openMenu(event, s.id)} {...longPressProps(s.id)} className={`relative flex w-full items-center gap-3 rounded-xl border bg-white px-4 py-2.5 text-left select-none [-webkit-touch-callout:none] ${selected.has(s.id) ? "border-red-600" : "border-stone-200 hover:border-stone-400"}`}>
@@ -682,6 +698,7 @@ export function HiringResponses({
             );
           })}
           {filtered.length === 0 && <p className="py-16 text-center text-sm text-stone-400">No applications match.</p>}
+          <Pager page={page} pageCount={pageCount} onPage={goToPage} />
         </div>
       )}
 
@@ -1009,6 +1026,30 @@ function isOutsideUae(r: HiringSubmission) {
 }
 
 /** Phones always get 3 per row; the size buttons only show from the sm breakpoint. */
+const PAGE_SIZE = 50;
+
+function Pager({ page, pageCount, onPage, className = "" }: { page: number; pageCount: number; onPage: (page: number) => void; className?: string }) {
+  if (pageCount <= 1) return null;
+  const step = "h-8 rounded-lg border border-stone-200 bg-white px-3 text-xs font-medium text-stone-700 hover:border-stone-400 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-stone-200";
+  return (
+    <nav aria-label="Result pages" className={`flex flex-wrap items-center justify-center gap-1.5 pt-3 ${className}`}>
+      <button type="button" onClick={() => onPage(page - 1)} disabled={page === 1} className={step}>‹ Previous</button>
+      {Array.from({ length: pageCount }, (_, index) => index + 1).map((n) => (
+        <button
+          key={n}
+          type="button"
+          onClick={() => onPage(n)}
+          aria-current={n === page ? "page" : undefined}
+          className={`h-8 min-w-8 rounded-lg px-2 text-xs font-semibold tabular-nums ${n === page ? "bg-[#063f3b] text-white" : "border border-stone-200 bg-white text-stone-700 hover:border-stone-400"}`}
+        >
+          {n}
+        </button>
+      ))}
+      <button type="button" onClick={() => onPage(page + 1)} disabled={page === pageCount} className={step}>Next page ›</button>
+    </nav>
+  );
+}
+
 const GRID_SIZES = [
   "grid-cols-3 sm:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10",
   "grid-cols-3 sm:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8",
