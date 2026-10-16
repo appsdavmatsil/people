@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type TouchEvent } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type TouchEvent } from "react";
 import type { HiringSubmission } from "@/lib/hiring-records";
 import type { ConfigTextField } from "@/lib/form-config";
 import { positionRank } from "@/lib/position-rank";
@@ -43,6 +43,8 @@ export function HiringResponses({
   const [experienceFilter, setExperienceFilter] = useState("all");
   const [salaryFilter, setSalaryFilter] = useState("all");
   const [visaFilter, setVisaFilter] = useState("all");
+  const [outsideOnly, setOutsideOnly] = useState(false);
+  const [immediateOnly, setImmediateOnly] = useState(false);
   const [detail, setDetail] = useState<HiringSubmission | null>(null);
   const [pendingDelete, setPendingDelete] = useState<HiringSubmission | null>(null);
   const [viewer, setViewer] = useState<{ url: string; label: string } | null>(null);
@@ -55,8 +57,10 @@ export function HiringResponses({
       withinAge(ageRange, ageOf(r.date_of_birth)) &&
       inRange(EXPERIENCE_RANGES, experienceFilter, experienceOf(r.experience_years)) &&
       inRange(SALARY_RANGES, salaryFilter, numberOf(r.salary_expectation)) &&
-      (visaFilter === "all" || visaOf(r) === visaFilter),
-    [ageRange, experienceFilter, salaryFilter, visaFilter],
+      (visaFilter === "all" || visaOf(r) === visaFilter) &&
+      (!outsideOnly || isOutsideUae(r)) &&
+      (!immediateOnly || joinsImmediately(r)),
+    [ageRange, experienceFilter, salaryFilter, visaFilter, outsideOnly, immediateOnly],
   );
   const ageBounds = useMemo<[number, number]>(() => {
     const ages = records.map((r) => ageOf(r.date_of_birth)).filter((age): age is number => age !== null && age >= 14 && age <= 80);
@@ -70,8 +74,11 @@ export function HiringResponses({
   const counts = useMemo(() => {
     const c: Record<string, number> = { all: records.length, ...Object.fromEntries(HIRING_STATUSES.map((status) => [status, 0])) };
     for (const r of records) c[r.status] = (c[r.status] ?? 0) + 1;
+    const inStatus = records.filter((r) => statusFilter === "all" || r.status === statusFilter);
+    c.outside = inStatus.filter(isOutsideUae).length;
+    c.immediate = inStatus.filter(joinsImmediately).length;
     return c;
-  }, [records]);
+  }, [records, statusFilter]);
 
   const searchIndex = useMemo(() => new Map(records.map((r) => [r.id, searchTextOf(r)])), [records]);
 
@@ -312,8 +319,8 @@ export function HiringResponses({
     if (cv) window.open(cv.web_view_link ?? cv.file_id, "_blank");
   }
 
-  const activeFilters = [statusFilter !== "new", nationalityFilter !== "all", positionFilter !== "all", search !== "", ageRange !== null, experienceFilter !== "all", salaryFilter !== "all", visaFilter !== "all"].filter(Boolean).length;
-  const clearAll = () => { setSearch(""); setStatusFilter("new"); setNationalityFilter("all"); setPositionFilter("all"); setAgeRange(null); setExperienceFilter("all"); setSalaryFilter("all"); setVisaFilter("all"); };
+  const activeFilters = [statusFilter !== "new", nationalityFilter !== "all", positionFilter !== "all", search !== "", ageRange !== null, experienceFilter !== "all", salaryFilter !== "all", visaFilter !== "all", outsideOnly, immediateOnly].filter(Boolean).length;
+  const clearAll = () => { setSearch(""); setStatusFilter("new"); setNationalityFilter("all"); setPositionFilter("all"); setAgeRange(null); setExperienceFilter("all"); setSalaryFilter("all"); setVisaFilter("all"); setOutsideOnly(false); setImmediateOnly(false); };
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -333,17 +340,42 @@ export function HiringResponses({
       {/* Status pills */}
       <div className="flex flex-wrap items-center justify-center gap-1.5 sm:justify-start sm:gap-2">
         {(["all", ...STATUS_OPTIONS] as const).map((s) => (
-          <button
-            key={s}
-            onClick={() => setStatusFilter(s)}
-            className={`rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors sm:px-3 sm:py-1 sm:text-xs ${
-              s === "all"
-                ? statusFilter === s ? "border-stone-900 bg-stone-900 text-white" : "border-stone-200 bg-white text-stone-600 hover:border-stone-400"
-                : statusFilter === s ? HIRING_STATUS_ACTIVE_STYLE[s] : `${STATUS_STYLE[s]} hover:brightness-95`
-            }`}
-          >
-            {s === "all" ? "All" : HIRING_STATUS_LABEL[s]} <span className="opacity-60">({counts[s] ?? 0})</span>
-          </button>
+          <Fragment key={s}>
+            <button
+              onClick={() => setStatusFilter(s)}
+              className={`rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors sm:px-3 sm:py-1 sm:text-xs ${
+                s === "all"
+                  ? statusFilter === s ? "border-stone-900 bg-stone-900 text-white" : "border-stone-200 bg-white text-stone-600 hover:border-stone-400"
+                  : statusFilter === s ? HIRING_STATUS_ACTIVE_STYLE[s] : `${STATUS_STYLE[s]} hover:brightness-95`
+              }`}
+            >
+              {s === "all" ? "All" : HIRING_STATUS_LABEL[s]} <span className="opacity-60">({counts[s] ?? 0})</span>
+            </button>
+            {s === "new" ? (
+              <button
+                onClick={() => setOutsideOnly((v) => !v)}
+                aria-pressed={outsideOnly}
+                title="Applicants who are currently outside the UAE (from their visa answer or current country)"
+                className={`flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors sm:px-3 sm:py-1 sm:text-xs ${
+                  outsideOnly ? "border-sky-600 bg-sky-600 text-white" : "border-sky-200 bg-sky-50 text-sky-700 hover:border-sky-400"
+                }`}
+              >
+                ✈ Outside UAE <span className="opacity-70">({counts.outside ?? 0})</span>
+              </button>
+            ) : null}
+            {s === "new" ? (
+              <button
+                onClick={() => setImmediateOnly((v) => !v)}
+                aria-pressed={immediateOnly}
+                title="Applicants who answered Immediately to Joining Availability"
+                className={`flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors sm:px-3 sm:py-1 sm:text-xs ${
+                  immediateOnly ? "border-emerald-600 bg-emerald-600 text-white" : "border-emerald-200 bg-emerald-50 text-emerald-700 hover:border-emerald-400"
+                }`}
+              >
+                ⚡ Join immediately <span className="opacity-70">({counts.immediate ?? 0})</span>
+              </button>
+            ) : null}
+          </Fragment>
         ))}
         {dupInfo.map.size > 0 && (
           <button
@@ -788,6 +820,20 @@ function visaOf(r: HiringSubmission) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function joinsImmediately(r: HiringSubmission) {
+  const value = r.data?.joiningAvailability ?? r.data?.joining_availability;
+  return typeof value === "string" && /^\s*immediate(ly)?\b/i.test(value);
+}
+
+const UAE_NAMES = /^(uae|u\.a\.e\.?|united arab emirates|emirates|dubai|abu dhabi|sharjah|ajman|ras al khaimah|fujairah|umm al quwain|al ain)$/i;
+
+/** Said they are outside the UAE, or gave a current country that is not the UAE. */
+function isOutsideUae(r: HiringSubmission) {
+  if (/outside uae/i.test(visaOf(r))) return true;
+  const country = addressPart(r.current_address, "country");
+  return Boolean(country && !UAE_NAMES.test(country.trim()));
+}
+
 /** Phones always get 3 per row; the size buttons only show from the sm breakpoint. */
 const GRID_SIZES = [
   "grid-cols-3 sm:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10",
@@ -1173,6 +1219,23 @@ function otherAnswers(s: HiringSubmission, fields: ConfigTextField[]) {
   return Object.entries(s.data || {}).filter(([k, v]) => !HIDDEN_DATA_KEYS.has(k) && !known.has(k) && v != null && v !== "");
 }
 
+/** wa.me needs the number in international form with digits only. */
+function whatsappLink(phone: string | null) {
+  if (!phone) return null;
+  let digits = phone.replace(/\D/g, "");
+  if (phone.trim().startsWith("00")) digits = digits.slice(2);
+  else if (digits.startsWith("0") && digits.length === 10) digits = `971${digits.slice(1)}`;
+  return digits.length >= 8 ? `https://wa.me/${digits}` : null;
+}
+
+function WhatsAppIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="size-4" fill="currentColor" aria-hidden="true">
+      <path d="M17.47 14.38c-.3-.15-1.75-.86-2.02-.96-.27-.1-.47-.15-.67.15-.2.3-.77.96-.94 1.16-.17.2-.35.22-.64.07-.3-.15-1.25-.46-2.38-1.47-.88-.78-1.47-1.75-1.64-2.05-.17-.3-.02-.46.13-.6.13-.14.3-.35.44-.52.15-.18.2-.3.3-.5.1-.2.05-.37-.03-.52-.07-.15-.67-1.6-.92-2.2-.24-.58-.49-.5-.67-.5h-.57c-.2 0-.52.07-.79.37-.27.3-1.04 1.02-1.04 2.48s1.07 2.88 1.21 3.08c.15.2 2.1 3.2 5.08 4.49.71.3 1.26.49 1.7.63.71.22 1.36.19 1.87.12.57-.09 1.75-.72 2-1.41.25-.7.25-1.29.17-1.41-.07-.13-.27-.2-.57-.35M12.05 21.5h-.01a9.4 9.4 0 0 1-4.8-1.31l-.34-.2-3.57.93.95-3.48-.22-.36a9.4 9.4 0 0 1-1.44-5.02c0-5.2 4.24-9.44 9.45-9.44a9.4 9.4 0 0 1 6.68 2.77 9.38 9.38 0 0 1 2.76 6.68c0 5.2-4.24 9.43-9.45 9.43M20.08 3.9A11.3 11.3 0 0 0 12.05.58C5.79.58.7 5.67.7 11.92c0 2 .52 3.95 1.52 5.67L.6 23.42l5.95-1.56a11.3 11.3 0 0 0 5.49 1.4h.01c6.25 0 11.34-5.09 11.35-11.34 0-3.03-1.18-5.88-3.32-8.02" />
+    </svg>
+  );
+}
+
 function AnswerSection({ section, submission, showTitle }: { section: DetailSection; submission: HiringSubmission; showTitle: boolean }) {
   const short = section.fields.filter((f) => f.type !== "textarea");
   const long = section.fields.filter((f) => f.type === "textarea");
@@ -1181,12 +1244,30 @@ function AnswerSection({ section, submission, showTitle }: { section: DetailSect
       {showTitle && <h4 className="text-[11px] font-semibold uppercase tracking-wide text-stone-500">{section.title}</h4>}
       {short.length > 0 && (
         <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm sm:grid-cols-3">
-          {short.map((f) => (
-            <div key={f.name} className="min-w-0">
-              <dt className="text-xs text-stone-400">{f.label}</dt>
-              <dd className={`break-words ${answerOf(submission, f.name) ? "text-stone-800" : "text-stone-300"}`}>{answerOf(submission, f.name) ?? "—"}</dd>
-            </div>
-          ))}
+          {short.map((f) => {
+            const value = answerOf(submission, f.name);
+            const whatsapp = f.name === "phone" ? whatsappLink(value) : null;
+            return (
+              <div key={f.name} className="min-w-0">
+                <dt className="text-xs text-stone-400">{f.label}</dt>
+                <dd className={`flex items-center gap-1.5 break-words ${value ? "text-stone-800" : "text-stone-300"}`}>
+                  <span className="min-w-0 break-words">{value ?? "—"}</span>
+                  {whatsapp ? (
+                    <a
+                      href={whatsapp}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      aria-label={`Message ${submission.full_name ?? "candidate"} on WhatsApp`}
+                      title="Message on WhatsApp"
+                      className="inline-flex size-6 shrink-0 items-center justify-center rounded-full text-[#25D366] hover:bg-[#25D366]/10"
+                    >
+                      <WhatsAppIcon />
+                    </a>
+                  ) : null}
+                </dd>
+              </div>
+            );
+          })}
         </dl>
       )}
       {long.map((f) => (
